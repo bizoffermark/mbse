@@ -5,6 +5,7 @@ from flax import struct
 
 EPS = 1e-6
 
+
 @struct.dataclass
 class Transition:
     obs: jnp.ndarray

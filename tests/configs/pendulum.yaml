@@ -4,7 +4,7 @@ project_name: "Pendulum-test"
 time_limit: 200
 agent:
   discount: 0.99
-  initial_log_alpha: -10
+  initial_log_alpha: 1.0
   lr_actor: 0.0005
   weight_decay_actor: 1e-5
   lr_critic: 0.0005

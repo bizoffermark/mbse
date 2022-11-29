@@ -14,6 +14,14 @@ class Transition:
     reward: jnp.ndarray
     done: jnp.ndarray
 
+    @property
+    def shape(self):
+        return self.obs.shape[:-1]
+
+    @property
+    def shape(self):
+        return self.obs.shape[:-1]
+
 
 class Normalizer(object):
     def __init__(self, input_shape):
@@ -48,16 +56,19 @@ class ReplayBuffer(object):
         self.reward_normalizer = Normalizer((1, ))
 
     def add(self, transition: Transition):
-        self.obs = self.obs.at[self.current_ptr].set(transition.obs)
-        self.action = self.action.at[self.current_ptr].set(transition.action)
-        self.next_obs = self.next_obs.at[self.current_ptr].set(transition.next_obs)
-        self.reward = self.reward.at[self.current_ptr].set(transition.reward)
-        self.done = self.done.at[self.current_ptr].set(transition.done)
-        self.size = min(self.size + 1, self.max_size)
+        size = transition.shape[0]
+        start = self.current_ptr
+        end = self.current_ptr + size
+        self.obs = self.obs.at[start:end].set(transition.obs)
+        self.action = self.action.at[start:end].set(transition.action)
+        self.next_obs = self.next_obs.at[start:end].set(transition.next_obs)
+        self.reward = self.reward.at[start:end].set(transition.reward.reshape(-1, 1))
+        self.done = self.done.at[start:end].set(transition.done.reshape(-1, 1))
+        self.size = min(self.size + size, self.max_size)
         self.state_normalizer.update(self.obs[:self.size])
         # self.action_normalizer.update(self.action[:self.size])
         self.reward_normalizer.update(self.reward[:self.size])
-        self.current_ptr = (self.current_ptr + 1) % self.max_size
+        self.current_ptr = end % self.max_size
 
     def sample(self, batch_size: int = 256, rng: Optional[jnp.ndarray] = None):
         ind = jax.random.randint(rng if rng is not None else 0, (batch_size,), 0, self.size)

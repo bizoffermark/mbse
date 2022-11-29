@@ -259,6 +259,7 @@ class SACAgent(object):
             )
         )
         for u in range(self.q_update_frequency):
+            td_rng, target_q_rng = random.split(td_rng, 2)
             target_q = jax.lax.stop_gradient(
                 self.get_soft_td_target(
                     next_obs=tran.next_obs,
@@ -267,7 +268,7 @@ class SACAgent(object):
                     actor_params=self.actor_params,
                     critic_target_params=self.target_critic_params,
                     alpha=alpha,
-                    rng=td_rng,
+                    rng=target_q_rng,
                 )
             )
 

@@ -59,8 +59,10 @@ if __name__ == "__main__":
         batch_size=kwargs['trainer']['batch_size'],
         use_wandb=USE_WANDB,
         eval_episodes=kwargs['trainer']['eval_episodes'],
+        eval_freq=kwargs['trainer']['eval_freq'],
         train_freq=kwargs['trainer']['train_freq'],
         train_steps=kwargs['trainer']['train_steps'],
+        rollout_steps=kwargs['trainer']['rollout_steps'],
     )
     if USE_WANDB:
         wandb.init(

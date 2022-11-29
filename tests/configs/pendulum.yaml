@@ -16,10 +16,10 @@ agent:
   scale_reward: 1
 trainer:
   batch_size: 512
-  eval_freq: 1000
+  eval_freq: 10
   max_train_steps: 70000
   buffer_size: 200000
   exploration_steps: 1000
   eval_episodes: 1
   train_freq: 1
-  train_steps: 1
+  train_steps: 200

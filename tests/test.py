@@ -34,7 +34,6 @@ if __name__ == "__main__":
     env = gym.make(kwargs['env_id'])
     env = TimeLimit(env, max_episode_steps=kwargs['time_limit'])
     env = RescaleAction(env, min_action=-1, max_action=1)
-    #key = random.PRNGKey(args.seed)
     agent = SACAgent(
         action_dim=env.action_space.shape[0],
         sample_act=env.action_space.sample(),

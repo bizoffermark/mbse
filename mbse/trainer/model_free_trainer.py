@@ -102,7 +102,7 @@ class ModelFreeTrainer(object):
             if step % self.train_freq == 0:
                 for _ in range(self.train_steps):
                     train_rng, agent_rng, buffer_rng = random.split(train_rng, 3)
-                    batch = self.buffer.sample(self.batch_size, buffer_rng)
+                    batch = self.buffer.sample(buffer_rng, self.batch_size)
                     summary = self.agent.train_step(
                         agent_rng,
                         batch,
@@ -116,6 +116,9 @@ class ModelFreeTrainer(object):
                         'critic_loss': summary.critic_loss,
                         'alpha_loss': summary.alpha_loss,
                         'log_alpha': summary.log_alpha,
+                        'critic_grad_norm': summary.critic_grad_norm,
+                        'actor_grad_norm': summary.actor_grad_norm,
+                        'alpha_grad_norm': summary.alpha_grad_norm,
                     }
                     if self.use_wandb:
                         wandb.log(train_log)

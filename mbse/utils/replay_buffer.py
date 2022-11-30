@@ -70,8 +70,8 @@ class ReplayBuffer(object):
         self.reward_normalizer.update(self.reward[:self.size])
         self.current_ptr = end % self.max_size
 
-    def sample(self, batch_size: int = 256, rng: Optional[jnp.ndarray] = None):
-        ind = jax.random.randint(rng if rng is not None else 0, (batch_size,), 0, self.size)
+    def sample(self, rng, batch_size: int = 256):
+        ind = jax.random.randint(rng, (batch_size,), 0, self.size)
         return Transition(
             self.state_normalizer.normalize(self.obs[ind]),
             self.action_normalizer.normalize(self.action[ind]),

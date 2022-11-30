@@ -35,11 +35,9 @@ if __name__ == "__main__":
     env = TimeLimit(env, max_episode_steps=kwargs['time_limit'])
     env = RescaleAction(env, min_action=-1, max_action=1)
     agent = SACAgent(
-        action_dim=env.action_space.shape[0],
-        sample_act=env.action_space.sample(),
-        sample_obs=env.observation_space.sample(),
+        action_space=env.action_space,
+        observation_space=env.observation_space,
         discount=kwargs['agent']['discount'],
-        initial_log_alpha=kwargs['agent']['initial_log_alpha'],
         lr_actor=kwargs['agent']['lr_actor'],
         lr_critic=kwargs['agent']['lr_critic'],
         lr_alpha=kwargs['agent']['lr_alpha'],

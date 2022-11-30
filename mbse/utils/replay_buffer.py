@@ -3,7 +3,7 @@ import jax
 from typing import Optional
 from flax import struct
 
-EPS = 1e-6
+EPS = 1e-8
 
 
 @struct.dataclass
@@ -40,7 +40,7 @@ class Normalizer(object):
 
 
 class ReplayBuffer(object):
-    def __init__(self, obs_shape, action_shape, max_size: int = 1e6):
+    def __init__(self, obs_shape, action_shape, max_size: int = 1e6, normalize=True):
         self.max_size = max_size
         self.current_ptr = 0
         self.size = 0
@@ -54,6 +54,7 @@ class ReplayBuffer(object):
         self.state_normalizer = Normalizer(obs_shape)
         self.action_normalizer = Normalizer(action_shape)
         self.reward_normalizer = Normalizer((1, ))
+        self.normalize = normalize
 
     def add(self, transition: Transition):
         size = transition.shape[0]
@@ -65,9 +66,10 @@ class ReplayBuffer(object):
         self.reward = self.reward.at[start:end].set(transition.reward.reshape(-1, 1))
         self.done = self.done.at[start:end].set(transition.done.reshape(-1, 1))
         self.size = min(self.size + size, self.max_size)
-        self.state_normalizer.update(self.obs[:self.size])
-        # self.action_normalizer.update(self.action[:self.size])
-        self.reward_normalizer.update(self.reward[:self.size])
+        if self.normalize:
+            self.state_normalizer.update(self.obs[:self.size])
+            # self.action_normalizer.update(self.action[:self.size])
+            self.reward_normalizer.update(self.reward[:self.size])
         self.current_ptr = end % self.max_size
 
     def sample(self, rng, batch_size: int = 256):

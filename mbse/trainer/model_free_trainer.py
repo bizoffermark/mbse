@@ -64,7 +64,6 @@ class ModelFreeTrainer(object):
         return tran
 
     def train(self):
-        # obs, _ = self.env.reset()
         if self.use_wandb:
             wandb.define_metric('env_steps')
             wandb.define_metric('train_steps')
@@ -81,15 +80,6 @@ class ModelFreeTrainer(object):
         policy = lambda x, y: self.env.action_space.sample()
         transitions = self.rollout_policy(self.exploration_steps, policy, self.rng)
         self.buffer.add(transition=transitions)
-        #for i in range(self.exploration_steps):
-        #    action = self.env.action_space.sample()
-        #    tran = self.step_env(self.env, obs, action)
-        #    self.buffer.add(tran)
-        #    obs = tran.next_obs
-        #    if tran.done:
-        #        obs, _ = self.env.reset()
-
-        obs, _ = self.env.reset()
         rng_keys = random.split(self.rng, self.max_train_steps+1)
         self.rng = rng_keys[0]
         rng_keys = rng_keys[1:]
@@ -167,16 +157,15 @@ class ModelFreeTrainer(object):
         for step in range(num_steps):
             next_rng, actor_rng = jax.random.split(next_rng, 2)
             action = policy(obs, actor_rng)
-            tran = self.step_env(self.env, obs, action)
-            #transitions.append(tran)
-            obs_vec = obs_vec.at[step].set(tran.obs)
-            action_vec = action_vec.at[step].set(tran.action)
-            reward_vec = reward_vec.at[step].set(tran.reward)
-            next_obs_vec = next_obs_vec.at[step].set(tran.next_obs)
-            done_vec = done_vec.at[step].set(tran.done)
-            # self.buffer.add(tran)
-            obs = tran.next_obs
-            if tran.done:
+            next_obs, reward, terminate, truncate, info = self.env.step(action)
+            done = terminate or truncate
+            obs_vec = obs_vec.at[step].set(obs)
+            action_vec = action_vec.at[step].set(action)
+            reward_vec = reward_vec.at[step].set(reward)
+            next_obs_vec = next_obs_vec.at[step].set(next_obs)
+            done_vec = done_vec.at[step].set(done)
+            obs = next_obs
+            if done:
                 obs, _ = self.env.reset()
 
         transitions = Transition(
@@ -190,17 +179,24 @@ class ModelFreeTrainer(object):
 
     def eval_policy(self) -> float:
         avg_reward = 0.0
-        for _ in range(self.eval_episodes):
-            obs, _ = self.env.reset()
+        # self.agent.test_update()
+        for e in range(self.eval_episodes):
+            obs, _ = self.env.reset(seed=e)
+            # print("state:", obs)
+            # mu, _ = self.agent.actor.apply(self.agent.actor_params, obs)
+            # print("mu:", mu)
+            # act = jnp.tanh(mu)
+            # print("action:", act)
+            # print("agent_act:", self.agent.act(obs))
             done = False
             while not done:
                 action = self.agent.act(obs)
-                tran = self.step_env(self.env, obs, action)
-                avg_reward += tran.reward
-                done = tran.done
-                obs = tran.next_obs
-                if tran.done:
-                    obs, _ = self.env.reset()
+                next_obs, reward, terminate, truncate, info = self.env.step(action)
+                done = terminate or truncate
+                avg_reward += reward
+                obs = next_obs
+                if done:
+                    obs, _ = self.env.reset(seed=e)
         avg_reward /= self.eval_episodes
         return avg_reward
 

@@ -54,7 +54,7 @@ def get_squashed_log_prob(actor_fn, params, obs, rng):
     log_l = gaussian_log_likelihood(u, mu, sig)
     a = squash_action(u)
     log_l -= jnp.sum(
-        jnp.log((1 - a ** 2) + EPS), axis=-1
+        jnp.log((1 - jnp.square(a)) + EPS), axis=-1
     )
     return a, log_l.reshape(-1, 1)
 
@@ -106,7 +106,7 @@ def update_actor(
         actor_fn,
         critic_fn,
         actor_params,
-        actor_optimizer,
+        actor_update_fn,
         actor_opt_state,
         critic_params,
         alpha,
@@ -121,18 +121,18 @@ def update_actor(
         return jnp.mean(actor_loss), log_l
 
     (loss, log_a), grads = value_and_grad(loss, has_aux=True)(actor_params)
-    updates, new_actor_opt_state = actor_optimizer.update(grads, actor_opt_state, params=actor_params)
+    updates, new_actor_opt_state = actor_update_fn(grads, actor_opt_state, params=actor_params)
     new_actor_params = optax.apply_updates(actor_params, updates)
     grad_norm = optax.global_norm(grads)
     return new_actor_params, new_actor_opt_state, loss, log_a, grad_norm
 
 
-@partial(jit, static_argnums=(0, 3))
+@partial(jit, static_argnums=(0, 1))
 def update_critic(
         critic_fn,
+        critic_update_fn,
         critic_params,
         critic_opt_state,
-        critic_optimizer,
         obs,
         action,
         target_q
@@ -142,25 +142,25 @@ def update_critic(
         critic_loss = 0.5 * (mse(q1, target_q) + mse(q2, target_q))
         return jnp.mean(critic_loss)
     loss, grads = value_and_grad(loss)(critic_params)
-    updates, new_critic_opt_state = critic_optimizer.update(grads, critic_opt_state, params=critic_params)
+    updates, new_critic_opt_state = critic_update_fn(grads, critic_opt_state, params=critic_params)
     new_critic_params = optax.apply_updates(critic_params, updates)
     grad_norm = optax.global_norm(grads)
     return new_critic_params, new_critic_opt_state, loss, grad_norm
 
 
 @partial(jit, static_argnums=(0, 3))
-def update_alpha(log_alpha_fn, alpha_params, alpha_opt_state, alpha_optimizer, log_a, target_entropy):
-    log_a = jax.lax.stop_gradient(log_a)
+def update_alpha(log_alpha_fn, alpha_params, alpha_opt_state, alpha_update_fn, log_a, target_entropy):
+    log_a = jax.lax.stop_gradient(log_a + target_entropy)
 
     def loss(params):
-        @vmap
+        # @vmap
         def alpha_loss_fn(lp):
             return -(
-                    log_alpha_fn(params) * (lp + target_entropy)
+                    log_alpha_fn(params) * lp
             ).mean()
-        return jnp.mean(alpha_loss_fn(log_a))
+        return alpha_loss_fn(log_a)
     loss, grads = value_and_grad(loss)(alpha_params)
-    updates, new_alpha_opt_state = alpha_optimizer.update(grads, alpha_opt_state, params=alpha_params)
+    updates, new_alpha_opt_state = alpha_update_fn(grads, alpha_opt_state, params=alpha_params)
     new_alpha_params = optax.apply_updates(alpha_params, updates)
     grad_norm = optax.global_norm(grads)
     return new_alpha_params, new_alpha_opt_state, loss, grad_norm
@@ -173,6 +173,7 @@ class SACModelSummary:
     critic_loss: jnp.ndarray
     alpha_loss: jnp.ndarray
     log_alpha: jnp.ndarray
+    actor_std: jnp.ndarray
     critic_grad_norm: jnp.ndarray
     actor_grad_norm: jnp.ndarray
     alpha_grad_norm: jnp.ndarray
@@ -183,7 +184,7 @@ class Actor(nn.Module):
     features: Sequence[int]
     action_dim: int
     non_linearity: Callable = nn.relu
-    sig_min: float = 1e-5
+    sig_min: float = 1e-3
     sig_max: float = 1e8
 
     @nn.compact
@@ -302,7 +303,6 @@ class SACAgent(object):
     ):
         rng, actor_rng, td_rng = random.split(rng, 3)
 
-
         alpha = jax.lax.stop_gradient(
             jnp.exp(
                 self.log_alpha.apply(self.alpha_params)
@@ -328,7 +328,7 @@ class SACAgent(object):
                 critic_fn=self.critic.apply,
                 critic_params=self.critic_params,
                 critic_opt_state=self.critic_opt_state,
-                critic_optimizer=self.critic_optimizer,
+                critic_update_fn=self.critic_optimizer.update,
                 obs=tran.obs,
                 action=tran.action,
                 target_q=target_q,
@@ -342,7 +342,7 @@ class SACAgent(object):
             actor_fn=self.actor.apply,
             critic_fn=self.critic.apply,
             actor_params=self.actor_params,
-            actor_optimizer=self.actor_optimizer,
+            actor_update_fn=self.actor_optimizer.update,
             critic_params=self.critic_params,
             alpha=alpha,
             actor_opt_state=self.actor_opt_state,
@@ -354,7 +354,7 @@ class SACAgent(object):
             log_alpha_fn=self.log_alpha.apply,
             alpha_params=self.alpha_params,
             alpha_opt_state=self.alpha_opt_state,
-            alpha_optimizer=self.alpha_optimizer,
+            alpha_update_fn=self.alpha_optimizer.update,
             log_a=log_a,
             target_entropy=self.target_entropy
         )
@@ -365,9 +365,12 @@ class SACAgent(object):
         self.alpha_opt_state = alpha_opt_state
 
         log_alpha = self.log_alpha.apply(self.alpha_params)
+        _, std = self.actor.apply(self.actor_params, tran.obs)
+
         summary = SACModelSummary(
             actor_loss=actor_loss,
             entropy=-log_a.mean(),
+            actor_std=std.mean(),
             critic_loss=critic_loss,
             alpha_loss=alpha_loss,
             log_alpha=log_alpha,

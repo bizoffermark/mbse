@@ -40,7 +40,7 @@ class Normalizer(object):
 
 
 class ReplayBuffer(object):
-    def __init__(self, obs_shape, action_shape, max_size: int = 1e6, normalize=True):
+    def __init__(self, obs_shape, action_shape, max_size: int = 1e6, normalize=False):
         self.max_size = max_size
         self.current_ptr = 0
         self.size = 0

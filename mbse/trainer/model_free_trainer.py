@@ -103,6 +103,7 @@ class ModelFreeTrainer(object):
                         'env_steps': step,
                         'actor_loss': summary.actor_loss,
                         'entropy': summary.entropy,
+                        'actor_std': summary.actor_std,
                         'critic_loss': summary.critic_loss,
                         'alpha_loss': summary.alpha_loss,
                         'log_alpha': summary.log_alpha,

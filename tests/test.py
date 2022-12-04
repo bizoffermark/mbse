@@ -44,6 +44,7 @@ if __name__ == "__main__":
         actor_features=kwargs['agent']['actor_features'],
         critic_features=kwargs['agent']['critic_features'],
         scale_reward=kwargs['agent']['scale_reward'],
+        tau=kwargs['agent']['tau'],
     )
 
     USE_WANDB = True

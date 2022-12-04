@@ -248,6 +248,7 @@ class SACAgent(object):
             rng: jax.Array = random.PRNGKey(0),
             q_update_frequency: int = 1,
             scale_reward: float = 1,
+            tau: float = 0.05,
     ):
         action_dim = np.prod(action_space.shape)
         sample_obs = observation_space.sample()
@@ -292,6 +293,7 @@ class SACAgent(object):
         self.alpha_opt_state = alpha_opt_state
         self.q_update_frequency = q_update_frequency
         self.scale_reward = scale_reward
+        self.tau = tau
 
     def act(self, obs, rng=None):
         return get_action(self.actor.apply, self.actor_params, obs, rng)
@@ -334,7 +336,7 @@ class SACAgent(object):
                 target_q=target_q,
             )
 
-            self.target_critic_params = soft_update(self.target_critic_params, critic_params)
+            self.target_critic_params = soft_update(self.target_critic_params, critic_params, self.tau)
             self.critic_params = critic_params
             self.critic_opt_state = critic_opt_state
 

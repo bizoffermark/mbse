@@ -12,21 +12,9 @@ from mbse.utils.replay_buffer import Transition
 from flax import struct
 from copy import deepcopy
 import gym
+from mbse.utils.utils import gaussian_log_likelihood, sample_normal_dist
 
 EPS = 1e-6
-
-
-@jit
-def sample_normal_dist(mu, sig, rng):
-    return mu + jax.random.normal(rng, mu.shape)*sig
-
-
-@jit
-def gaussian_log_likelihood(x, mu, sig):
-    log_sig = jnp.log(sig)
-    log_l = -0.5 * (2 * log_sig + jnp.log(2*jnp.pi)
-                     + jnp.square((x - mu)/(sig + EPS)))
-    return jnp.sum(log_l, axis=-1)
 
 
 # Perform Polyak averaging provided two network parameters and the averaging value tau.
@@ -185,7 +173,7 @@ class Actor(nn.Module):
     action_dim: int
     non_linearity: Callable = nn.relu
     sig_min: float = 1e-3
-    sig_max: float = 1e8
+    sig_max: float = 1e3
 
     @nn.compact
     def __call__(self, obs):

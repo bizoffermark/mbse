@@ -3,8 +3,10 @@ Implementation of basic RL optimizers for MPC with Safe/and or Optimistic Explor
 
 Currently implemented:
 1. SAC
+2. CEM optimizer
+3. BNNs for model learning with SVGD.
 
 
 Next Steps:
-1. Implement CEM MPC
-2. Implement BNNs for model learning with SVGD.
+1. Implement HUCRL
+

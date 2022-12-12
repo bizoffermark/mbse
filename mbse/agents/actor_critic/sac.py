@@ -284,7 +284,7 @@ class SACAgent(object):
         self.tau = tau
 
     def act(self, obs, rng=None):
-        return get_action(self.actor.apply, self.actor_params, obs, rng)
+        return np.asarray(get_action(self.actor.apply, self.actor_params, obs, rng))
 
     def train_step(
             self,

@@ -160,11 +160,11 @@ class ModelFreeTrainer(object):
             action = policy(obs, actor_rng)
             next_obs, reward, terminate, truncate, info = self.env.step(action)
             done = terminate or truncate
-            obs_vec = obs_vec.at[step].set(obs)
-            action_vec = action_vec.at[step].set(action)
-            reward_vec = reward_vec.at[step].set(reward)
-            next_obs_vec = next_obs_vec.at[step].set(next_obs)
-            done_vec = done_vec.at[step].set(done)
+            obs_vec = obs_vec.at[step].set(jnp.asarray(obs))
+            action_vec = action_vec.at[step].set(jnp.asarray(action))
+            reward_vec = reward_vec.at[step].set(jnp.asarray(reward))
+            next_obs_vec = next_obs_vec.at[step].set(jnp.asarray(next_obs))
+            done_vec = done_vec.at[step].set(jnp.asarray(done))
             obs = next_obs
             if done:
                 obs, _ = self.env.reset()

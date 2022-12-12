@@ -17,6 +17,8 @@ required = [
     'gym>=0.26.0',
     'mujoco>=2.2.2',
     'argparse-dataclass>=0.2.1',
+    'tqdm',
+    'seaborn'
 ]
 
 extras = {'dev': ['seaborn', 'control>=0.9.2']}

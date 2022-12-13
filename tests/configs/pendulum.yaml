@@ -17,7 +17,7 @@ agent:
 trainer:
   batch_size: 128
   eval_freq: 200
-  max_train_steps: 10000
+  max_train_steps: 100000
   buffer_size: 1000000
   exploration_steps: 1000
   eval_episodes: 1

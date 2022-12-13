@@ -14,7 +14,7 @@ agent:
   actor_features: [400, 300]
   critic_features: [256, 256]
   scale_reward: 1
-  tau: 0.02
+  tau: 0.002
 trainer:
   batch_size: 512
   eval_freq: 1000

@@ -138,7 +138,7 @@ def update_critic(
 
 @partial(jit, static_argnums=(0, 3))
 def update_alpha(log_alpha_fn, alpha_params, alpha_opt_state, alpha_update_fn, log_a, target_entropy):
-    log_a = jax.lax.stop_gradient(log_a + target_entropy)
+    diff_entropy = jax.lax.stop_gradient(log_a + target_entropy)
 
     def loss(params):
         # @vmap
@@ -146,7 +146,7 @@ def update_alpha(log_alpha_fn, alpha_params, alpha_opt_state, alpha_update_fn, l
             return -(
                     log_alpha_fn(params) * lp
             ).mean()
-        return alpha_loss_fn(log_a)
+        return alpha_loss_fn(diff_entropy)
     loss, grads = value_and_grad(loss)(alpha_params)
     updates, new_alpha_opt_state = alpha_update_fn(grads, alpha_opt_state, params=alpha_params)
     new_alpha_params = optax.apply_updates(alpha_params, updates)
@@ -209,12 +209,15 @@ class Critic(nn.Module):
 
 
 class ConstantModule(nn.Module):
+    ent_coef_init: float = 1.0
 
     def setup(self):
-        self.const = self.param("log_alpha", nn.ones, (1, ))
+        self.log_ent_coef = self.param("log_ent_coef",
+                                       init_fn=lambda key: jnp.full((),
+                                                                    jnp.log(self.ent_coef_init)))
 
     def __call__(self):
-        return self.const
+        return self.log_ent_coef
 
 
 class SACAgent(object):
@@ -236,11 +239,14 @@ class SACAgent(object):
             rng: jax.Array = random.PRNGKey(0),
             q_update_frequency: int = 1,
             scale_reward: float = 1,
-            tau: float = 0.05,
+            tau: float = 0.005,
+            init_ent_coef: float = 1.0,
+            tune_entropy_coef: bool = True,
     ):
         action_dim = np.prod(action_space.shape)
         sample_obs = observation_space.sample()
         sample_act = action_space.sample()
+        self.tune_entropy_coef = tune_entropy_coef
         self.obs_sample = sample_obs
         self.act_sample = sample_act
         self.action_dim = action_dim
@@ -248,13 +254,14 @@ class SACAgent(object):
         self.lr_critic = lr_critic
         self.lr_alpha = lr_alpha
         self.discount = discount
-        self.target_entropy = float(-action_dim) if target_entropy is None else target_entropy
+        self.target_entropy = -action_dim.astype(np.float32) if target_entropy is None else \
+            target_entropy
         self.actor_optimizer = optax.adamw(learning_rate=lr_actor, weight_decay=weight_decay_actor)
         self.critic_optimizer = optax.adamw(learning_rate=lr_critic, weight_decay=weight_decay_critic)
         self.alpha_optimizer = optax.adamw(learning_rate=lr_alpha, weight_decay=weight_decay_alpha)
         self.actor = Actor(features=actor_features, action_dim=action_dim)
         self.critic = Critic(features=critic_features)
-        self.log_alpha = ConstantModule()
+        self.log_alpha = ConstantModule(init_ent_coef)
         self.critic_features = critic_features
 
         rng, actor_rng, critic_rng, alpha_rng = random.split(rng, 4)
@@ -298,6 +305,7 @@ class SACAgent(object):
                 self.log_alpha.apply(self.alpha_params)
             )
         )
+
         for u in range(self.q_update_frequency):
             td_rng, target_q_rng = random.split(td_rng, 2)
             target_q = jax.lax.stop_gradient(
@@ -340,19 +348,23 @@ class SACAgent(object):
             rng=actor_rng,
         )
 
-        alpha_params, alpha_opt_state, alpha_loss, alpha_grad_norm = update_alpha(
-            log_alpha_fn=self.log_alpha.apply,
-            alpha_params=self.alpha_params,
-            alpha_opt_state=self.alpha_opt_state,
-            alpha_update_fn=self.alpha_optimizer.update,
-            log_a=log_a,
-            target_entropy=self.target_entropy
-        )
-
+        if self.tune_entropy_coef:
+            alpha_params, alpha_opt_state, alpha_loss, alpha_grad_norm = update_alpha(
+                log_alpha_fn=self.log_alpha.apply,
+                alpha_params=self.alpha_params,
+                alpha_opt_state=self.alpha_opt_state,
+                alpha_update_fn=self.alpha_optimizer.update,
+                log_a=log_a,
+                target_entropy=self.target_entropy
+            )
+            self.alpha_params = alpha_params
+            self.alpha_opt_state = alpha_opt_state
+        else:
+            alpha_loss = 0.0
+            alpha_grad_norm = 0.0
         self.actor_params = actor_params
         self.actor_opt_state = actor_opt_state
-        self.alpha_params = alpha_params
-        self.alpha_opt_state = alpha_opt_state
+
 
         log_alpha = self.log_alpha.apply(self.alpha_params)
         _, std = self.actor.apply(self.actor_params, tran.obs)

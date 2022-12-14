@@ -136,8 +136,6 @@ class fSVGDEnsemble(ProbabilisticEnsembleModel):
 
         def fsvgdloss(model_params):
             predictions, pred_vjp = jax.vjp(lambda p: self._predict(p, x), model_params)
-            # k_pred, k_pred_vjp = jax.vjp(
-        # lambda x: vmap(kernel, in_axes=-1, out_axes=-1)(x), predictions)
             k_pred, k_pred_vjp = jax.vjp(
                 lambda x: k_rbf(x, predictions), predictions)
             grad_k = k_pred_vjp(-jnp.ones(k_pred.shape))[0]
@@ -181,7 +179,7 @@ class fSVGDEnsemble(ProbabilisticEnsembleModel):
 
     def train_step(self, x, y):
         self.rng, train_rng = jax.random.split(self.rng)
-        new_params, new_opt_state, loss, grad_norm = self._train_step(
+        new_params, new_opt_state, log_post, grad_norm = self._train_step(
             params=self.particles,
             opt_state=self.opt_state,
             x=x,
@@ -191,7 +189,7 @@ class fSVGDEnsemble(ProbabilisticEnsembleModel):
         )
         self.particles = new_params
         self.opt_state = new_opt_state
-        return loss, grad_norm
+        return log_post, grad_norm
 
 
 

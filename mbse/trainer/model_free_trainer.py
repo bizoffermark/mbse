@@ -10,7 +10,6 @@ import wandb
 import copy
 import cloudpickle
 from tqdm import tqdm
-# from flax.training import train_state, checkpoints
 
 
 class ModelFreeTrainer(object):

@@ -8,7 +8,7 @@ agent:
   weight_decay_actor: 1e-5
   lr_critic: 0.001
   weight_decay_critic: 1e-5
-  lr_alpha: 0.0005
+  lr_alpha: 0.001
   weight_decay_alpha: 0.0
   actor_features: [ 64, 64]
   critic_features: [ 256, 256]

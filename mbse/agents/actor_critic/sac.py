@@ -141,7 +141,7 @@ def update_alpha(log_alpha_fn, alpha_params, alpha_opt_state, alpha_update_fn, l
     diff_entropy = jax.lax.stop_gradient(log_a + target_entropy)
 
     def loss(params):
-        # @vmap
+        @vmap
         def alpha_loss_fn(lp):
             return -(
                     log_alpha_fn(params) * lp
@@ -171,7 +171,7 @@ class Actor(nn.Module):
 
     features: Sequence[int]
     action_dim: int
-    non_linearity: Callable = nn.relu
+    non_linearity: Callable = nn.swish
     sig_min: float = 1e-3
     sig_max: float = 1e3
 
@@ -191,7 +191,7 @@ class Actor(nn.Module):
 class Critic(nn.Module):
 
     features: Sequence[int]
-    non_linearity: Callable = nn.relu
+    non_linearity: Callable = nn.swish
 
     @nn.compact
     def __call__(self, obs, action, train=False):
@@ -216,6 +216,7 @@ class ConstantModule(nn.Module):
                                        init_fn=lambda key: jnp.full((),
                                                                     jnp.log(self.ent_coef_init)))
 
+    @nn.compact
     def __call__(self):
         return self.log_ent_coef
 
@@ -256,6 +257,7 @@ class SACAgent(object):
         self.discount = discount
         self.target_entropy = -action_dim.astype(np.float32) if target_entropy is None else \
             target_entropy
+        action_dim = int(action_dim)
         self.actor_optimizer = optax.adamw(learning_rate=lr_actor, weight_decay=weight_decay_actor)
         self.critic_optimizer = optax.adamw(learning_rate=lr_critic, weight_decay=weight_decay_critic)
         self.alpha_optimizer = optax.adamw(learning_rate=lr_alpha, weight_decay=weight_decay_alpha)

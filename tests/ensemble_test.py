@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from mbse.utils.models import ProbabilisticEnsembleModel, fSVGDEnsemble
+from mbse.utils.models import ProbabilisticEnsembleModel, fSVGDEnsemble, KDEfWGDEnsemble
 import seaborn as sns
 sns.reset_defaults()
 sns.set_context(context='talk', font_scale=1.0)
@@ -79,10 +79,11 @@ x_range_train = [-10, 30]
 batch_size = 256
 y, x, x_tst, y_true = load_dataset(x_range, x_range_train, b0, w0, n=1000, n_tst=500)
 data = iter(dataset(x, y, batch_size))
-num_train_steps = 20000
-probabilistic_ensemble_ = False
+num_train_steps = 5000
+ModelName = "kde"
+
 NUM_ENSEMBLES = 5
-if probabilistic_ensemble_:
+if ModelName == "ProbabilisticEnsemble":
     model = ProbabilisticEnsembleModel(
         example_input=x[:batch_size],
         features=[64, 64],
@@ -90,7 +91,7 @@ if probabilistic_ensemble_:
         lr=0.001,
     )
     NAME = 'probabilistic_ensemble_'
-else:
+elif ModelName == "fSVGD":
     model = fSVGDEnsemble(
         example_input=x[:batch_size],
         features=[64, 64],
@@ -99,14 +100,19 @@ else:
     )
     NAME = 'fsvgd_ensemble_'
 
+else:
+    model = KDEfWGDEnsemble(
+        example_input=x[:batch_size],
+        features=[64, 64],
+        num_ensemble=NUM_ENSEMBLES,
+        lr=0.005,
+        prior_bandwidth=100,
+    )
+    NAME = 'kde_ensemble_'
+
 name_init = NAME + 'init.png'
 name_end = NAME + 'trained.png'
 
-# model = fSVGDEnsemble(
-#    example_input=x[:batch_size],
-#    num_ensemble=20,
-#    n_prior_particles=20,
-#)
 predictions = model.predict(x_tst)
 yhats_ensemble_mean, yhats_ensemble_std = predictions[..., 0], predictions[..., 1]
 plot(x, y, x_tst, y_true, yhats_ensemble_mean, yhats_ensemble_std, name=name_init)

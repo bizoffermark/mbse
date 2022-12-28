@@ -192,9 +192,62 @@ class fSVGDEnsemble(ProbabilisticEnsembleModel):
         return log_post, grad_norm
 
 
+class KDEfWGDEnsemble(fSVGDEnsemble):
+    def __init__(self, *args, **kwargs):
+        super(KDEfWGDEnsemble, self).__init__(*args, **kwargs)
 
+    @partial(jit, static_argnums=0)
+    def _train_step(self, params, opt_state, x, y, prior_particles, rng):
+        # mean_prior, k_prior = self._prior(prior_particles, x)
+        rbf = lambda z,v: rbf_kernel(z, v, bandwidth=self.prior_bandwidth)
+        kernel = lambda x: rbf(x, x) #K(x, x)
+        k_prior = kernel(x)
+        k_prior = jnp.stack([k_prior, k_prior], axis=-1)
 
+        k_rbf = lambda z, v: rbf_kernel(z, v, bandwidth=self.k_bandwidth)
 
+        def kdeloss(model_params):
+            predictions, pred_vjp = jax.vjp(lambda p: self._predict(p, x), model_params)
+            k_pred, k_pred_vjp = jax.vjp(
+                lambda x: k_rbf(x, predictions), predictions)
+            grad_k = k_pred_vjp(-jnp.ones(k_pred.shape))[0]
 
+            def neg_log_post(predictions):
+                mean_pred, std_pred = jnp.split(predictions, 2, axis=-1)
+                log_post = gaussian_log_likelihood(y, mean_pred, std_pred)
+                return -log_post.mean()
 
+            likelihood = lambda x, cov_x: \
+                jax.scipy.stats.multivariate_normal.logpdf(x,
+                                                           mean=jnp.zeros(x.shape[0]),
+                                                           cov=cov_x + 1e-4*jnp.eye(x.shape[0]))
+            likelihood = jax.vmap(likelihood, in_axes=-1, out_axes=-1)
+
+            def neg_log_prior(predictions):
+                mean_pred, std_pred = jnp.split(predictions, 2, axis=-1)
+                log_sigma = jnp.log(std_pred + EPS)
+                altered_predictions = jnp.stack([mean_pred, log_sigma], axis=-1)
+                log_prior = likelihood(altered_predictions, k_prior)
+                return -log_prior.mean()/mean_pred.shape[-2]
+
+            def neg_total_likelihood(predictions):
+                log_post = neg_log_post(predictions)
+                log_pior = neg_log_prior(predictions)
+                return log_post + log_pior
+
+            log_post, log_posterior_grad = jax.vmap(value_and_grad(neg_total_likelihood, 0))(predictions)
+            k_i = jnp.sum(k_pred, axis=1)
+            stein_grad = log_posterior_grad + jax.vmap(lambda x, y: x/y)(grad_k, k_i)
+            #stein_grad = (jnp.einsum('ij,jkm', k_pred, log_posterior_grad)
+            #              + grad_k)
+            grad = pred_vjp(stein_grad)[0]
+            return log_post.mean(), grad
+
+        loss, grads = kdeloss(params)
+        updates, new_opt_state = self.optimizer.update(grads,
+                                                       opt_state,
+                                                       params=params)
+        new_params = optax.apply_updates(params, updates)
+        grad_norm = optax.global_norm(grads)
+        return new_params, new_opt_state, loss, grad_norm
 

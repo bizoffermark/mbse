@@ -1,9 +1,23 @@
 import jax.numpy as jnp
 import jax
-from typing import Optional
 from flax import struct
 
 EPS = 1e-8
+
+
+def merge_transitions(tran_a, tran_b):
+    obs = jnp.concatenate([tran_a.obs, tran_b.obs], axis=0)
+    action = jnp.concatenate([tran_a.action, tran_b.action], axis=0)
+    next_obs = jnp.concatenate([tran_a.next_obs, tran_b.next_obs], axis=0)
+    reward = jnp.concatenate([tran_a.reward, tran_b.reward], axis=0)
+    done = jnp.concatenate([tran_a.done, tran_b.done], axis=0)
+    return Transition(
+        obs,
+        action,
+        next_obs,
+        reward,
+        done,
+    )
 
 
 @struct.dataclass
@@ -44,17 +58,12 @@ class ReplayBuffer(object):
         self.max_size = max_size
         self.current_ptr = 0
         self.size = 0
-
-        self.obs = jnp.zeros((max_size, *obs_shape))
-        self.action = jnp.zeros((max_size, *action_shape))
-        self.next_obs = jnp.zeros((max_size, *obs_shape))
-        self.reward = jnp.zeros((max_size, 1))
-        self.done = jnp.zeros((max_size, 1))
-
-        self.state_normalizer = Normalizer(obs_shape)
-        self.action_normalizer = Normalizer(action_shape)
-        self.reward_normalizer = Normalizer((1, ))
+        self.obs_shape = obs_shape
+        self.action_shape = action_shape
         self.normalize = normalize
+        self.obs, self.action, self.next_obs, self.reward, self.done = None, None, None, None, None
+        self.state_normalizer, self.action_normalizer, self.reward_normalizer = None, None, None
+        self.reset()
 
     def add(self, transition: Transition):
         size = transition.shape[0]
@@ -81,3 +90,16 @@ class ReplayBuffer(object):
             self.reward_normalizer.normalize(self.reward[ind]),
             self.done[ind],
         )
+
+    def reset(self):
+        self.current_ptr = 0
+        self.size = 0
+        self.obs = jnp.zeros((self.max_size, *self.obs_shape))
+        self.action = jnp.zeros((self.max_size, *self.action_shape))
+        self.next_obs = jnp.zeros((self.max_size, *self.obs_shape))
+        self.reward = jnp.zeros((self.max_size, 1))
+        self.done = jnp.zeros((self.max_size, 1))
+
+        self.state_normalizer = Normalizer(self.obs_shape)
+        self.action_normalizer = Normalizer(self.action_shape)
+        self.reward_normalizer = Normalizer((1,))

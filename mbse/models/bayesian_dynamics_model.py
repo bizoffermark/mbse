@@ -10,10 +10,17 @@ from flax import struct
 from mbse.utils.replay_buffer import Transition
 from mbse.models.dynamics_model import DynamicsModel
 
+
 @struct.dataclass
 class BayesianDynamicsModelSummary:
     model_likelihood: jnp.ndarray
     grad_norm: jnp.ndarray
+
+    def dict(self):
+        return {
+            'model_likelihood': self.model_likelihood,
+            'grad_norm': self.grad_norm,
+        }
 
 
 class BayesianDynamicsModel(DynamicsModel):
@@ -83,4 +90,4 @@ class BayesianDynamicsModel(DynamicsModel):
             model_likelihood=likelihood,
             grad_norm=grad_norm,
         )
-        return summary
+        return summary.dict()

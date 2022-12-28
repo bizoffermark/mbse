@@ -6,20 +6,20 @@ EPS = 5e-2
 
 
 def loss_function(x, bias):
-    return -jnp.sum(jnp.square(x-bias), axis=-1)
+    return -jnp.sum(jnp.square(x-bias))
 
 
-opt_cls = CrossEntropyOptimizer
-num_steps = 50
-action_dim = 10
+opt_cls = GradientBasedOptimizer
+num_steps = 25
+action_dim = (10, 2)
 for bias in jnp.linspace(-5, 5, 10):
     optimizer = opt_cls(
-        func=lambda x: loss_function(x, bias),
-        action_dim=(action_dim,),
+        action_dim=action_dim,
         num_steps=num_steps,
-        lr=1e-1,
+        lr=0.1,
     )
-    sequence = optimizer.optimize()
+    func = lambda x: loss_function(x, bias)
+    sequence = optimizer.optimize(func)
     if jnp.max(jnp.abs(sequence-bias)) > EPS:
         print("Optimizer needs to be fixed")
         print("bias: ", bias)

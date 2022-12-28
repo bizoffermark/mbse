@@ -13,6 +13,7 @@ from flax import struct
 from copy import deepcopy
 import gym
 from mbse.utils.utils import gaussian_log_likelihood, sample_normal_dist
+from mbse.agents.dummy_agent import DummyAgent
 
 EPS = 1e-6
 
@@ -141,7 +142,6 @@ def update_alpha(log_alpha_fn, alpha_params, alpha_opt_state, alpha_update_fn, l
     diff_entropy = jax.lax.stop_gradient(log_a + target_entropy)
 
     def loss(params):
-        @vmap
         def alpha_loss_fn(lp):
             return -(
                     log_alpha_fn(params) * lp
@@ -165,6 +165,19 @@ class SACModelSummary:
     critic_grad_norm: jnp.ndarray
     actor_grad_norm: jnp.ndarray
     alpha_grad_norm: jnp.ndarray
+
+    def dict(self):
+        return {
+                        'actor_loss': self.actor_loss,
+                        'entropy': self.entropy,
+                        'actor_std': self.actor_std,
+                        'critic_loss': self.critic_loss,
+                        'alpha_loss': self.alpha_loss,
+                        'log_alpha': self.log_alpha,
+                        'critic_grad_norm': self.critic_grad_norm,
+                        'actor_grad_norm': self.actor_grad_norm,
+                        'alpha_grad_norm': self.alpha_grad_norm,
+                    }
 
 
 class Actor(nn.Module):
@@ -221,7 +234,7 @@ class ConstantModule(nn.Module):
         return self.log_ent_coef
 
 
-class SACAgent(object):
+class SACAgent(DummyAgent):
 
     def __init__(
             self,
@@ -244,6 +257,7 @@ class SACAgent(object):
             init_ent_coef: float = 1.0,
             tune_entropy_coef: bool = True,
     ):
+        super(SACAgent, self).__init__()
         action_dim = np.prod(action_space.shape)
         sample_obs = observation_space.sample()
         sample_act = action_space.sample()
@@ -367,7 +381,6 @@ class SACAgent(object):
         self.actor_params = actor_params
         self.actor_opt_state = actor_opt_state
 
-
         log_alpha = self.log_alpha.apply(self.alpha_params)
         _, std = self.actor.apply(self.actor_params, tran.obs)
 
@@ -383,7 +396,7 @@ class SACAgent(object):
             alpha_grad_norm=alpha_grad_norm,
         )
 
-        return summary
+        return summary.dict()
 
 
 

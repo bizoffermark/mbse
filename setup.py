@@ -18,7 +18,8 @@ required = [
     'mujoco>=2.2.2',
     'argparse-dataclass>=0.2.1',
     'tqdm',
-    'seaborn'
+    'seaborn',
+    'cloudpickle',
 ]
 
 extras = {'dev': ['seaborn', 'control>=0.9.2']}

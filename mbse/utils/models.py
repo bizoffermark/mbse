@@ -19,7 +19,7 @@ class ProbabilisticEnsembleModel(object):
             num_ensemble: int = 10,
             features: Sequence[int] = [256, 256],
             output_dim: int = 1,
-            non_linearity: Callable = nn.swish,
+            non_linearity: Callable = nn.relu,
             lr: float = 1e-3,
             weight_decay: float = 1e-4,
             seed: int = 0,

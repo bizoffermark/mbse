@@ -2,13 +2,11 @@ import os
 
 import jax
 import jax.numpy as jnp
-from jax import random
 from mbse.utils.replay_buffer import Transition, ReplayBuffer
 from mbse.agents.dummy_agent import DummyAgent
 from gym import Env
 import wandb
 import cloudpickle
-from tqdm import tqdm
 
 
 class DummyTrainer(object):
@@ -34,7 +32,7 @@ class DummyTrainer(object):
             action_shape=env.action_space.shape,
             max_size=buffer_size
         )
-
+        self.buffer_size = buffer_size
         self.agent = agent
         self.eval_episodes = eval_episodes
         self.agent_name = agent_name
@@ -122,7 +120,6 @@ class DummyTrainer(object):
                 obs = next_obs
                 if done:
                     obs, _ = self.env.reset(seed=e)
-                print(i)
                 i+=1
         avg_reward /= self.eval_episodes
         return avg_reward

@@ -9,4 +9,4 @@ class DynamicsModel(object):
         pass
 
     def train_step(self, tran: Transition):
-        pass
+        return {}

@@ -2,15 +2,12 @@
     Credits: https://github.com/sfujim/TD3
 """
 from argparse_dataclass import ArgumentParser
-from pathlib import Path
 from typing import Any
 import yaml
 import gym
 from mbse.trainer.model_free_trainer import ModelFreeTrainer as Trainer
 from mbse.agents.actor_critic.sac import SACAgent
-from jax import random
 from dataclasses import dataclass, field
-from typing import Optional
 import wandb
 from gym.wrappers.time_limit import TimeLimit
 from gym.wrappers.rescale_action import RescaleAction

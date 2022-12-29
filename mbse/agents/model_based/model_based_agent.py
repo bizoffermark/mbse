@@ -44,6 +44,6 @@ class ModelBasedAgent(DummyAgent):
                    rng,
                    tran: Transition,
                    ):
-        model_training_summary = self.dynamics_model.train_step(self, tran)
+        model_training_summary = self.dynamics_model.train_step(tran)
         return model_training_summary
 

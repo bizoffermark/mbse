@@ -184,7 +184,7 @@ class Actor(nn.Module):
 
     features: Sequence[int]
     action_dim: int
-    non_linearity: Callable = nn.swish
+    non_linearity: Callable = nn.relu
     sig_min: float = 1e-3
     sig_max: float = 1e3
 
@@ -204,7 +204,7 @@ class Actor(nn.Module):
 class Critic(nn.Module):
 
     features: Sequence[int]
-    non_linearity: Callable = nn.swish
+    non_linearity: Callable = nn.relu
 
     @nn.compact
     def __call__(self, obs, action, train=False):
@@ -306,8 +306,8 @@ class SACAgent(DummyAgent):
         self.scale_reward = scale_reward
         self.tau = tau
 
-    def act(self, obs, rng=None):
-        return np.asarray(get_action(self.actor.apply, self.actor_params, obs, rng))
+    def act_in_jax(self, obs, rng=None):
+        return get_action(self.actor.apply, self.actor_params, obs, rng)
 
     def train_step(
             self,

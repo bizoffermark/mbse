@@ -87,7 +87,7 @@ class ModelBasedTrainer(DummyTrainer):
                     init_state = batch.obs
                     agent_rng, rollout_rng = random.split(agent_rng, 2)
                     model_transitions = rollout_policy(
-                        policy=self.agent.act,
+                        policy=self.agent.act_in_jax,
                         initial_state=init_state,
                         dynamics_model=self.model_based_agent.dynamics_model,
                         reward_model=self.model_based_agent.reward_model,

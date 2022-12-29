@@ -4,7 +4,7 @@ from typing import Optional
 
 class DummyOptimizer(object):
     def __init__(self,
-                 action_dim,
+                 action_dim=(1, ),
                  upper_bound: Optional[jnp.ndarray] = None,
                  num_steps: int = 20,
                  lower_bound: Optional[jnp.ndarray] = None,

@@ -54,12 +54,12 @@ def rollout_actions(action_sequence, initial_state, dynamics_model, reward_model
     return states, rewards
 
 
-@partial(jit, static_argnums=(0, 2, 3))
+@partial(jit, static_argnums=(0, 2, 3, 5))
 def rollout_policy(policy, initial_state, dynamics_model, reward_model, rng, num_steps=10):
     state = initial_state
     state_shape = (num_steps + 1, ) + initial_state.shape
     states = jnp.zeros(state_shape)
-    states[0, ...] = initial_state
+    states = states.at[0].set(initial_state)
     reward_shape = (num_steps, ) + (initial_state.shape[0], )
     rewards = jnp.zeros(reward_shape)
     dones = jnp.zeros(reward_shape, dtype=jnp.int8)
@@ -70,14 +70,14 @@ def rollout_policy(policy, initial_state, dynamics_model, reward_model, rng, num
         rng_seq = jax.random.split(rng, num_steps + 1)
     else:
         rng_seq = [None] * (num_steps + 1)
-    for i in enumerate(num_steps):
+    for i in range(num_steps):
         act_rng, obs_rng = jax.random.split(rng_seq[i], 2)
         act = policy(state, act_rng)
         next_state = dynamics_model.predict(state, act, rng=obs_rng)
         reward = reward_model.predict(state, act, next_state)
-        states[i + 1, ...] = next_state
-        actions[i, ...] = act
-        rewards[i, ...] = reward
+        states = states.at[i+1].set(next_state)
+        actions = actions.at[i].set(act)
+        rewards = rewards.at[i].set(reward)
         state = next_state
     next_states = states[1:, ...]
     states = states[:-1, ...]

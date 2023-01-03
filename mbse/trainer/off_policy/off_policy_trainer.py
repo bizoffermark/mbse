@@ -3,7 +3,7 @@ import wandb
 from tqdm import tqdm
 from mbse.trainer.dummy_trainer import DummyTrainer
 from mbse.agents.actor_critic.sac import SACAgent
-
+import numpy as np
 
 class OffPolicyTrainer(DummyTrainer):
     def __init__(self,
@@ -29,13 +29,14 @@ class OffPolicyTrainer(DummyTrainer):
         self.save_agent(0)
         if self.use_wandb:
             wandb.log(reward_log)
-        policy = lambda x, y: self.env.action_space.sample()
+        policy = lambda x, y: np.concatenate([self.env.action_space.sample().reshape(1, -1)
+                                              for s in range(self.num_envs)], axis=0)
         transitions = self.rollout_policy(self.exploration_steps, policy, self.rng)
         self.buffer.add(transition=transitions)
         rng_keys = random.split(self.rng, self.max_train_steps + 1)
         self.rng = rng_keys[0]
         rng_keys = rng_keys[1:]
-        learning_steps = int(self.max_train_steps/self.rollout_steps)
+        learning_steps = int(self.max_train_steps/(self.rollout_steps*self.num_envs))
         rng_key, reset_rng = random.split(rng_keys[0], 2)
         rng_keys = rng_keys.at[0].set(rng_key)
         reset_seed = random.randint(
@@ -49,14 +50,13 @@ class OffPolicyTrainer(DummyTrainer):
             policy = self.agent.act
             transitions, obs, done = self.step_env(obs, policy, self.rollout_steps, actor_rng)
             self.buffer.add(transitions)
-            if done:
-                reset_rng, next_reset_rng = random.split(reset_rng, 2)
-                reset_seed = random.randint(
-                    next_reset_rng,
-                    (1,),
-                    minval=0,
-                    maxval=int(learning_steps * self.rollout_steps)).item()
-                obs, _ = self.env.reset(seed=reset_seed)
+            #    reset_rng, next_reset_rng = random.split(reset_rng, 2)
+            #    reset_seed = random.randint(
+            #        next_reset_rng,
+            #        (1,),
+            #        minval=0,
+            #        maxval=int(learning_steps * self.rollout_steps)).item()
+            #    obs, _ = self.env.reset(seed=reset_seed)
             # transitions = self.rollout_policy(self.rollout_steps, policy, actor_rng)
             if step % self.train_freq == 0:
                 for _ in range(self.train_steps):

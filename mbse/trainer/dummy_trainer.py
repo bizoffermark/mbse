@@ -30,6 +30,7 @@ class DummyTrainer(object):
                  use_wandb: bool = True,
                  ):
         self.env = env
+        self.num_envs = max(env.num_envs, 1)
         self.buffer = ReplayBuffer(
             obs_shape=env.observation_space.shape,
             action_shape=env.action_space.shape,
@@ -45,7 +46,7 @@ class DummyTrainer(object):
         self.max_train_steps = max_train_steps
         self.batch_size = batch_size
         self.train_freq = train_freq
-        self.train_steps = train_steps
+        self.train_steps = int(train_steps*self.num_envs)
         self.eval_freq = eval_freq
         self.exploration_steps = exploration_steps
         self.rollout_steps = rollout_steps
@@ -65,13 +66,14 @@ class DummyTrainer(object):
 
     def step_env(self, obs, policy, num_steps, rng):
         rng, reset_rng = jax.random.split(rng, 2)
-        obs_shape = (num_steps,) + self.env.observation_space.shape
-        action_space = (num_steps,) + self.env.action_space.shape
+        num_points = int(num_steps*self.num_envs)
+        obs_shape = (num_points,) + self.env.observation_space.shape
+        action_space = (num_points,) + self.env.action_space.shape
         obs_vec = np.zeros(obs_shape)
         action_vec = np.zeros(action_space)
-        reward_vec = np.zeros((num_steps,))
+        reward_vec = np.zeros((num_points,))
         next_obs_vec = np.zeros(obs_shape)
-        done_vec = np.zeros((num_steps,))
+        done_vec = np.zeros((num_points,))
         next_rng = rng
         last_obs = obs
         last_done = False
@@ -79,30 +81,32 @@ class DummyTrainer(object):
             next_rng, actor_rng = jax.random.split(next_rng, 2)
             action = policy(obs, actor_rng)
             next_obs, reward, terminate, truncate, info = self.env.step(action)
-            done = terminate or truncate
 
-            obs_vec[step] = obs
-            action_vec[step] = action
-            reward_vec[step] = reward
-            next_obs_vec[step] = next_obs
-            done_vec[step] = terminate
+            obs_vec[step*self.num_envs: (step+1)*self.num_envs] = obs
+            action_vec[step*self.num_envs: (step+1)*self.num_envs] = action
+            reward_vec[step*self.num_envs: (step+1)*self.num_envs] = reward
+            next_obs_vec[step*self.num_envs: (step+1)*self.num_envs] = next_obs
+            done_vec[step*self.num_envs: (step+1)*self.num_envs] = terminate
             # obs_vec = obs_vec.at[step].set(jnp.asarray(obs))
             # action_vec = action_vec.at[step].set(jnp.asarray(action))
             # reward_vec = reward_vec.at[step].set(jnp.asarray(reward))
             # next_obs_vec = next_obs_vec.at[step].set(jnp.asarray(next_obs))
             # done_vec = done_vec.at[step].set(jnp.asarray(terminate))
 
-            obs = next_obs
-            if done:
-                reset_rng, next_reset_rng = jax.random.split(reset_rng, 2)
-                reset_seed = jax.random.randint(
-                    reset_rng,
-                    (1,),
-                    minval=0,
-                    maxval=num_steps).item()
-                obs, _ = self.env.reset(seed=reset_seed)
+            # for idx, done in enumerate(dones):
+            #     if done:
+            #         reset_rng, next_reset_rng = jax.random.split(reset_rng, 2)
+            #         reset_seed = jax.random.randint(
+            #             reset_rng,
+            #             (1,),
+            #             minval=0,
+            #             maxval=num_steps).item()
+            #         obs[idx], _ = self.env.reset(seed=reset_seed)
+            obs = np.concatenate([x['last_observation'].reshape(1, -1) for x in info], axis=0)
+            dones = np.concatenate([x['last_done'].reshape(1, -1) for x in info], axis=0)
+
             last_obs = obs
-            last_done = done
+            last_done = dones
         transitions = Transition(
             obs=obs_vec,
             action=action_vec,
@@ -120,41 +124,40 @@ class DummyTrainer(object):
             minval=0,
             maxval=num_steps).item()
         obs, _ = self.env.reset(seed=reset_seed)
-        obs_shape = (num_steps, ) + self.env.observation_space.shape
-        action_space = (num_steps,) + self.env.action_space.shape
-
+        num_points = int(num_steps * self.num_envs)
+        obs_shape = (num_points,) + self.env.observation_space.shape
+        action_space = (num_points,) + self.env.action_space.shape
         obs_vec = np.zeros(obs_shape)
         action_vec = np.zeros(action_space)
-        reward_vec = np.zeros((num_steps, ))
+        reward_vec = np.zeros((num_points,))
         next_obs_vec = np.zeros(obs_shape)
-        done_vec = np.zeros((num_steps, ))
+        done_vec = np.zeros((num_points,))
         next_rng = rng
         for step in range(num_steps):
             next_rng, actor_rng = jax.random.split(next_rng, 2)
             action = policy(obs, actor_rng)
             next_obs, reward, terminate, truncate, info = self.env.step(action)
-            dones = np.logical_or(terminate, truncate)
 
-            obs_vec[step] = obs
-            action_vec[step] = action
-            reward_vec[step] = reward
-            next_obs_vec[step] = next_obs
-            done_vec[step] = terminate
+            obs_vec[step * self.num_envs: (step + 1) * self.num_envs] = obs
+            action_vec[step * self.num_envs: (step + 1) * self.num_envs] = action
+            reward_vec[step * self.num_envs: (step + 1) * self.num_envs] = reward
+            next_obs_vec[step * self.num_envs: (step + 1) * self.num_envs] = next_obs
+            done_vec[step * self.num_envs: (step + 1) * self.num_envs] = terminate
             # obs_vec = obs_vec.at[step].set(jnp.asarray(obs))
             # action_vec = action_vec.at[step].set(jnp.asarray(action))
             # reward_vec = reward_vec.at[step].set(jnp.asarray(reward))
             # next_obs_vec = next_obs_vec.at[step].set(jnp.asarray(next_obs))
             # done_vec = done_vec.at[step].set(jnp.asarray(terminate))
-            obs = next_obs
-            for idx, done in enumerate(dones):
-                if done:
-                    reset_rng, next_reset_rng = jax.random.split(reset_rng, 2)
-                    reset_seed = jax.random.randint(
-                        reset_rng,
-                        (1,),
-                        minval=0,
-                        maxval=num_steps).item()
-                    obs[idx], _ = self.env.reset(seed=reset_seed)
+            obs = np.concatenate([x['last_observation'].reshape(1, -1) for x in info], axis=0)
+            # for idx, done in enumerate(dones):
+            #    if done:
+            #        reset_rng, next_reset_rng = jax.random.split(reset_rng, 2)
+            #        reset_seed = jax.random.randint(
+            #            reset_rng,
+            #            (1,),
+            #            minval=0,
+            #            maxval=num_steps).item()
+            #        obs[idx], _ = self.env.reset(seed=reset_seed)
 
         transitions = Transition(
             obs=obs_vec,

@@ -5,12 +5,13 @@ from argparse_dataclass import ArgumentParser
 from typing import Any
 import yaml
 import gym
-from mbse.trainer.model_free_trainer import ModelFreeTrainer as Trainer
+from mbse.trainer.off_policy.off_policy_trainer import OffPolicyTrainer as Trainer
 from mbse.agents.actor_critic.sac import SACAgent
 from dataclasses import dataclass, field
 import wandb
 from gym.wrappers.time_limit import TimeLimit
 from gym.wrappers.rescale_action import RescaleAction
+from mbse.utils.vec_env.env_util import make_vec_env
 
 OptState = Any
 
@@ -28,9 +29,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
     with open(args.config, "r") as file:
         kwargs = yaml.safe_load(file)
-    env = gym.make(kwargs['env_id'])
-    env = TimeLimit(env, max_episode_steps=kwargs['time_limit'])
-    env = RescaleAction(env, min_action=-1, max_action=1)
+
+    wrapper_cls = lambda x: RescaleAction(
+        TimeLimit(x, max_episode_steps=kwargs['time_limit']),
+        min_action=-1,
+        max_action=1,
+    )
+    env = make_vec_env(kwargs['env_id'], wrapper_class=wrapper_cls, n_envs=4)
+
     agent = SACAgent(
         action_space=env.action_space,
         observation_space=env.observation_space,
@@ -42,6 +48,8 @@ if __name__ == "__main__":
         critic_features=kwargs['agent']['critic_features'],
         scale_reward=kwargs['agent']['scale_reward'],
         tau=kwargs['agent']['tau'],
+        tune_entropy_coef=kwargs['agent']['tune_entropy_coef'],
+        init_ent_coef=kwargs['agent']['init_ent_coef']
     )
 
     USE_WANDB = True
@@ -63,6 +71,8 @@ if __name__ == "__main__":
         wandb.init(
             project=kwargs['project_name'],
         )
+    #import jax
+    #with jax.disable_jit():
     trainer.train()
 
 

@@ -33,7 +33,7 @@ class ModelFreeTrainer(DummyTrainer):
         rng_keys = random.split(self.rng, self.max_train_steps+1)
         self.rng = rng_keys[0]
         rng_keys = rng_keys[1:]
-        learning_steps = int(self.max_train_steps / self.rollout_steps)
+        learning_steps = int(self.max_train_steps/(self.rollout_steps*self.num_envs))
         for step in tqdm(range(learning_steps)):
             actor_rng, train_rng = random.split(rng_keys[step], 2)
             policy = self.agent.act

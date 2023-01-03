@@ -24,7 +24,7 @@ class PendulumReward(RewardModel):
         return -(theta ** 2 + 0.1 * omega ** 2)
 
     def input_cost(self, u):
-        return self.ctrl_cost_weight * (u ** 2)
+        return self.ctrl_cost_weight * (jnp.sum(jnp.square(u), axis=-1))
 
     @partial(jax.jit, static_argnums=0)
     def state_reward(self, state):
@@ -100,11 +100,11 @@ class PendulumDynamicsModel(DynamicsModel):
         u = jnp.clip(self.rescale_action(action), -self.env.max_torque, self.env.max_torque)[0]
         theta, omega = self._get_reduced_state(obs)
 
-        g = self.g
-        m = self.m
-        l = self.l
-        dt = self.dt
-        th, omega = self.state
+        g = self.env.g
+        m = self.env.m
+        l = self.env.l
+        dt = self.env.dt
+        th, omega = self._get_reduced_state(obs)
 
         omega_dot = (3 * g / (2 * l) * jnp.sin(th) + 3.0 / (m * l ** 2) * u)
 

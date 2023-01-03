@@ -9,7 +9,7 @@ EPS = 1e-6
 
 @jit
 def gaussian_log_likelihood(x, mu, sig):
-    log_sig = jnp.log(sig)
+    log_sig = jnp.log(sig + EPS)
     log_l = -0.5 * (2 * log_sig + jnp.log(2*jnp.pi)
                      + jnp.square((x - mu)/(sig + EPS)))
     log_l = jnp.sum(log_l, axis=-1)

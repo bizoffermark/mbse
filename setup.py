@@ -15,11 +15,11 @@ required = [
     'torch>=1.6.0',
     'distrax~=0.1.2',
     'gym>=0.26.0',
-    'mujoco>=2.2.2',
     'argparse-dataclass>=0.2.1',
     'tqdm',
     'seaborn',
     'cloudpickle',
+    'pandas',
 ]
 
 extras = {'dev': ['seaborn', 'control>=0.9.2']}

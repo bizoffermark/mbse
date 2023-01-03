@@ -33,7 +33,8 @@ class ModelFreeTrainer(DummyTrainer):
         rng_keys = random.split(self.rng, self.max_train_steps+1)
         self.rng = rng_keys[0]
         rng_keys = rng_keys[1:]
-        for step in tqdm(range(self.max_train_steps)):
+        learning_steps = int(self.max_train_steps / self.rollout_steps)
+        for step in tqdm(range(learning_steps)):
             actor_rng, train_rng = random.split(rng_keys[step], 2)
             policy = self.agent.act
             transitions = self.rollout_policy(self.rollout_steps, policy, actor_rng)
@@ -55,10 +56,10 @@ class ModelFreeTrainer(DummyTrainer):
                         wandb.log(train_log)
 
             # Evaluate episode
-            if (step + 1) % self.eval_freq == 0:
+            if train_steps % self.eval_freq == 0:
                 eval_reward = self.eval_policy()
                 reward_log = {
-                    'env_steps': step,
+                    'env_steps': train_steps,
                     'average_reward': eval_reward
                 }
                 if self.use_wandb:

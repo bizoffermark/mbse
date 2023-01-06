@@ -17,7 +17,9 @@ class ModelFreeTrainer(DummyTrainer):
         if self.use_wandb:
             wandb.define_metric('env_steps')
             wandb.define_metric('train_steps')
-        average_reward = self.eval_policy()
+        self.rng, eval_rng = random.split(self.rng, 2)
+        eval_rng, curr_eval = random.split(eval_rng, 2)
+        average_reward = self.eval_policy(rng=curr_eval)
         best_performance = average_reward
         reward_log = {
             'env_steps': 0,
@@ -57,7 +59,8 @@ class ModelFreeTrainer(DummyTrainer):
 
             # Evaluate episode
             if train_steps % self.eval_freq == 0:
-                eval_reward = self.eval_policy()
+                eval_rng, curr_eval = random.split(eval_rng, 2)
+                eval_reward = self.eval_policy(rng=eval_rng)
                 reward_log = {
                     'env_steps': train_steps,
                     'average_reward': eval_reward

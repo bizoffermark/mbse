@@ -1,13 +1,13 @@
 import jax.numpy as jnp
-from typing import Optional
+from typing import Optional, Union
 
 
 class DummyOptimizer(object):
     def __init__(self,
                  action_dim=(1, ),
-                 upper_bound: Optional[jnp.ndarray] = None,
+                 upper_bound: Optional[Union[float, jnp.ndarray]] = None,
                  num_steps: int = 20,
-                 lower_bound: Optional[jnp.ndarray] = None,
+                 lower_bound: Optional[Union[float, jnp.ndarray]] = None,
                  *args,
                  **kwargs):
 
@@ -15,13 +15,16 @@ class DummyOptimizer(object):
         self.action_dim = action_dim
         if upper_bound is None:
             upper_bound = jnp.ones(self.action_dim)*jnp.inf
+        elif isinstance(upper_bound, float):
+            upper_bound = jnp.ones(self.action_dim)*upper_bound
         self.upper_bound = upper_bound
         if lower_bound is None:
-            self.lower_bound = - upper_bound
-        else:
-            self.lower_bound = lower_bound
+            lower_bound = - upper_bound
+        elif isinstance(lower_bound, float):
+            lower_bound = jnp.ones(self.action_dim)*lower_bound
+        self.lower_bound = lower_bound
 
-    def optimize(self, func):
+    def optimize(self, func, rng=None):
         pass
 
     def clip_action(self, action):

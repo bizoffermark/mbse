@@ -98,9 +98,9 @@ def get_soft_td_target(
 
 
 @partial(jit, static_argnums=(0, ))
-def get_action(actor_fn, actor_params, obs, rng=None):
+def get_action(actor_fn, actor_params, obs, rng=None, eval=False):
     mu, sig = actor_fn(actor_params, obs)
-    if rng is None:
+    if rng is None or eval:
         action = mu
     else:
         action = sample_normal_dist(mu, sig, rng)
@@ -347,8 +347,14 @@ class SACAgent(DummyAgent):
         self.scale_reward = scale_reward
         self.tau = tau
 
-    def act_in_jax(self, obs, rng=None):
-        return get_action(self.actor.apply, self.actor_params, obs, rng)
+    def act_in_jax(self, obs, rng=None, eval=False):
+        return get_action(
+            self.actor.apply,
+            self.actor_params,
+            obs,
+            rng,
+            eval
+        )
 
     def train_step(
             self,

@@ -1,7 +1,6 @@
 import os
 
 import jax
-import jax.numpy as jnp
 from mbse.utils.replay_buffer import Transition, ReplayBuffer
 from mbse.agents.dummy_agent import DummyAgent
 import wandb
@@ -9,7 +8,6 @@ import cloudpickle
 from copy import deepcopy
 import numpy as np
 from mbse.utils.vec_env import VecEnv
-from gym import Env
 
 
 class DummyTrainer(object):
@@ -168,17 +166,19 @@ class DummyTrainer(object):
         )
         return transitions
 
-    def eval_policy(self) -> float:
+    def eval_policy(self, rng=None) -> float:
         avg_reward = 0.0
         for e in range(self.eval_episodes):
             obs, _ = self.test_env.reset(seed=e)
             done = False
+            steps = 0
             while not done:
-                action = self.agent.act(obs)
+                action = self.agent.act(obs, rng=rng, eval=True)
                 next_obs, reward, terminate, truncate, info = self.test_env.step(action)
                 done = terminate or truncate
                 avg_reward += reward
                 obs = next_obs
+                steps += 1
                 if done:
                     obs, _ = self.test_env.reset(seed=e)
         avg_reward /= self.eval_episodes

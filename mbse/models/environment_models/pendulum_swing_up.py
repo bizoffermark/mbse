@@ -23,6 +23,7 @@ class PendulumReward(RewardModel):
         theta = angle_normalize(theta)
         return -(theta ** 2 + 0.1 * omega ** 2)
 
+    @partial(jax.jit, static_argnums=0)
     def input_cost(self, u):
         return self.ctrl_cost_weight * (jnp.sum(jnp.square(u), axis=-1))
 
@@ -43,7 +44,7 @@ class PendulumSwingUpEnv(PendulumEnv):
     def __init__(self, reset_noise_scale=0.01, ctrl_cost_weight=0.001, sparse=False):
         self.base_mujoco_name = "Pendulum-v1"
 
-        super().__init__()
+        super(PendulumSwingUpEnv, self).__init__(render_mode='human')
         self.reset_noise_scale = reset_noise_scale
         self.state = np.zeros(2)
         self.last_u = None

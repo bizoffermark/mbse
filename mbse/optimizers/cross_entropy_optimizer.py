@@ -43,29 +43,41 @@ class CrossEntropyOptimizer(DummyOptimizer):
         return elites, elite_values
 
     @partial(jit, static_argnums=(0, 1))
-    def optimize(self, func):
+    def optimize(self, func, rng=None):
         best_value = -jnp.inf
         mean = jnp.zeros(self.action_dim)
         std = jnp.ones(self.action_dim)*self.init_var
         best_sequence = mean
         get_best_action = lambda best_val, best_seq, val, seq: [val[0].squeeze(), seq[0]]
         get_curr_best_action = lambda best_val, best_seq, val, seq: [best_val, best_seq]
-        key = jax.random.PRNGKey(self.seed)
-        for i in range(self.num_steps):
+        if rng is None:
+            rng = jax.random.PRNGKey(self.seed)
+
+        def step(carry, ins):
+            key = carry[0]
+            mu = carry[1]
+            sig = carry[2]
+            best_val = carry[3]
+            best_seq = carry[4]
             key, sample_key = jax.random.split(key, 2)
-            elites, elite_values = self.step(func, mean, std, sample_key)
-            mean = jnp.mean(elites, axis=0)
-            std = jnp.std(elites, axis=0)
+            elites, elite_values = self.step(func, mu, sig, sample_key)
             best_elite = elite_values[0].squeeze()
-            bests = jax.lax.cond(best_value <= best_elite,
+            bests = jax.lax.cond(best_val <= best_elite,
                                  get_best_action,
                                  get_curr_best_action,
-                                 best_value,
-                                 best_sequence,
+                                 best_val,
+                                 best_seq,
                                  elite_values,
                                  elites)
-            best_value = bests[0]
-            best_sequence = bests[-1]
-        return best_sequence
+            best_val = bests[0]
+            best_seq = bests[-1]
+
+            outs = [best_val, best_seq]
+            carry = [key, mu, sig, best_val, best_seq]
+
+            return carry, outs
+        carry = [rng, mean, std, best_value, best_sequence]
+        carry, outs = jax.lax.scan(step, carry, xs=None, length=self.num_steps)
+        return outs[1][-1, ...]
 
 

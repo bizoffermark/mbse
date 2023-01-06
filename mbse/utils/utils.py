@@ -3,6 +3,10 @@ from jax import jit
 import jax
 from functools import partial
 from mbse.utils.replay_buffer import Transition
+from mbse.models.dynamics_model import DynamicsModel
+from mbse.models.reward_model import RewardModel
+from mbse.agents.dummy_agent import DummyAgent
+from typing import Optional, Union, Tuple, Callable
 
 EPS = 1e-6
 
@@ -38,18 +42,20 @@ def rbf_kernel(x, y, bandwidth=None):
 def rollout_actions(action_sequence, initial_state, dynamics_model, reward_model, rng):
     state = initial_state
     states = jnp.zeros_like(initial_state)
-    rewards = jnp.zeros([1, 1])
+    batch_size = initial_state.shape[0]
     num_actions = action_sequence.shape[0]
+    rewards = jnp.zeros([batch_size, num_actions])
     if rng is not None:
         rng_seq = jax.random.split(rng, num_actions + 1)
     else:
         rng_seq = [None] * (num_actions + 1)
     for i, act in enumerate(action_sequence):
-        next_state = dynamics_model.predict(state, act, rng=rng_seq[i])
-        reward = reward_model.predict(state, act, next_state)
+        action = jnp.tile(act, (batch_size, 1))
+        next_state = dynamics_model.predict(state, action, rng=rng_seq[i])
+        reward = reward_model.predict(state, action, next_state)
         states = jnp.concatenate([states, next_state], axis=0)
         # rewards += reward
-        rewards = jnp.concatenate([rewards, reward], axis=0)
+        rewards = rewards.at[:, i].set(reward)
         state = next_state
     return states, rewards
 
@@ -94,3 +100,90 @@ def rollout_policy(policy, initial_state, dynamics_model, reward_model, rng, num
         done=flatten(dones),
     )
     return transitions
+
+
+def sample_trajectories(
+    dynamics_model: DynamicsModel,
+    reward_model: RewardModel,
+    init_state: jnp.ndarray,
+    horizon: int,
+    key: jax.random.PRNGKey,
+    *,
+    policy: Optional[Callable] = None,
+    actions: Optional[jnp.ndarray] = None,
+    observations: Optional[jnp.ndarray] = None
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """
+    TODO (yarden): document this thing.
+    """
+    assert policy is not None or actions is not None, \
+      'Please provide policy or actor'
+    use_observations = observations is not None
+    use_policy = policy is not None
+
+    def step(carry, ins):
+        seed = carry[0]
+        #if use_observations:
+        #  obs = ins[0]
+        #else:
+        #  obs = carry[1]
+        obs = carry[1]
+        if use_policy:
+          seed, actor_seed = jax.random.split(seed, 2) \
+              if seed is not None else seed, None
+          acs = policy(jax.lax.stop_gradient(obs), rng=actor_seed)
+        else:
+          acs = ins[-1]
+
+        model_seed = None
+        reward_seed = None
+        if seed is not None:
+            seed, model_seed = jax.random.split(seed, 2)
+            seed, model_seed = jax.random.split(seed, 2)
+        next_obs = dynamics_model.predict(obs, acs, rng=model_seed)
+        reward = reward_model.predict(obs, acs, rng=reward_seed)
+        # if use_observations:
+        #  carry = seed, obs, hidden
+        #else:
+        carry = [seed, next_obs]
+        outs = [next_obs, reward]
+        return carry, outs
+
+    ins = []
+
+  #if use_observations:
+  #  observations = jnp.concatenate([init_state[0][:, None], observations], 1)
+  #  assert observations.shape[1] == horizon
+  #  ins.append(observations)
+    actions_T = actions.T
+    if not use_policy:
+        assert actions_T.shape[1] == horizon, 'action shape must be the same as horizon'
+        ins.append(actions_T)
+    if ins:
+    # `jax.lax.scan` scans over the first dimension, transpose the inputs.
+        ins = tuple(map(lambda x: x.swapaxes(0, 1), ins))
+    else:
+        ins = None
+    carry = [key, init_state]
+    _, outs = jax.lax.scan(step, carry, ins, length=horizon)
+    # Transpose back such that batch_dim is the leading dimension.
+    next_state = outs[0]
+    state = jnp.zeros_like(next_state)
+    state = state.at[0, ...].set(init_state)
+    state = state.at[1:, ...].set(next_state[:-1, ...])
+    rewards = outs[1].reshape(-1, 1)
+
+    def flatten(arr):
+        new_arr = arr.reshape(-1, arr.shape[-1])
+        return new_arr
+
+    transitions = Transition(
+        obs=flatten(state),
+        action=flatten(actions),
+        reward=rewards,
+        next_obs=flatten(next_state),
+        done=flatten(jnp.zeros_like(rewards)),
+    )
+    return transitions
+    # outs = jax.tree_map(lambda x: x.swapaxes(0, 1), outs)
+    # return tuple(outs)  # noqa

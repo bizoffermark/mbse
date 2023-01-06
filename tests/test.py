@@ -4,7 +4,6 @@
 from argparse_dataclass import ArgumentParser
 from typing import Any
 import yaml
-import gym
 from mbse.trainer.off_policy.off_policy_trainer import OffPolicyTrainer as Trainer
 from mbse.agents.actor_critic.sac import SACAgent
 from dataclasses import dataclass, field

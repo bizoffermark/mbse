@@ -120,7 +120,7 @@ def sample_trajectories(
       'Please provide policy or actor'
     use_observations = observations is not None
     use_policy = policy is not None
-
+    batch_size = init_state.shape[0]
     def step(carry, ins):
         seed = carry[0]
         #if use_observations:
@@ -139,7 +139,7 @@ def sample_trajectories(
         reward_seed = None
         if seed is not None:
             seed, model_seed = jax.random.split(seed, 2)
-            seed, model_seed = jax.random.split(seed, 2)
+            seed, reward_seed = jax.random.split(seed, 2)
         next_obs = dynamics_model.predict(obs, acs, rng=model_seed)
         reward = reward_model.predict(obs, acs, rng=reward_seed)
         # if use_observations:
@@ -155,10 +155,12 @@ def sample_trajectories(
   #  observations = jnp.concatenate([init_state[0][:, None], observations], 1)
   #  assert observations.shape[1] == horizon
   #  ins.append(observations)
-    actions_T = actions.T
     if not use_policy:
-        assert actions_T.shape[1] == horizon, 'action shape must be the same as horizon'
-        ins.append(actions_T)
+        assert actions.shape[-2] == horizon, 'action shape must be the same as horizon'
+        # actions = jnp.repeat(actions, repeats=batch_size, axis=0)
+        # actions_T = jnp.expand_dims(actions_T, 2) \
+        #    if len(actions_T.shape) < 3 else actions_T
+        ins.append(actions)
     if ins:
     # `jax.lax.scan` scans over the first dimension, transpose the inputs.
         ins = tuple(map(lambda x: x.swapaxes(0, 1), ins))

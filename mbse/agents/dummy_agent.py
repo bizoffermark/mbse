@@ -17,5 +17,6 @@ class DummyAgent(object):
     def train_step(self,
                    rng,
                    tran: Transition,
+                   val: Transition = None,
                    ):
         NotImplementedError

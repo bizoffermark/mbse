@@ -10,16 +10,23 @@ from flax import struct
 from mbse.utils.replay_buffer import Transition
 from mbse.models.dynamics_model import DynamicsModel
 from typing import List
+from mbse.utils.utils import gaussian_log_likelihood
+from mbse.utils.network_utils import mse
+
 
 @struct.dataclass
 class BayesianDynamicsModelSummary:
-    model_likelihood: jnp.ndarray
-    grad_norm: jnp.ndarray
+    model_likelihood: float
+    grad_norm: float
+    val_logl: float
+    val_mse: float
 
     def dict(self):
         return {
             'model_likelihood': self.model_likelihood,
             'grad_norm': self.grad_norm,
+            'val_logl': self.val_logl,
+            'val_mse': self.val_mse,
         }
 
 
@@ -176,11 +183,35 @@ class BayesianDynamicsModel(DynamicsModel):
 
         return next_obs
 
-    def train_step(self, tran: Transition):
+    def train_step(self, tran: Transition, val: Transition = None):
         x = jnp.concatenate([tran.obs, tran.action], axis=-1)
-        likelihood, grad_norm = self.model.train_step(x=x, y=tran.next_obs)
+        val_logl = 0
+        val_mse = 0
+        likelihood, grad_norm = self.model.train_step(
+            x=x,
+            y=tran.next_obs,
+        )
+        if val is not None:
+            val_x = jnp.concatenate([val.obs, val.action], axis=-1)
+            val_y = val.next_obs
+            y_pred = self.model.predict(val_x)
+            val_likelihood = jax.vmap(
+                gaussian_log_likelihood,
+                in_axes=(None, 0, 0),
+                out_axes=0
+            )
+            mean, std = jnp.split(y_pred, 2, axis=-1)
+            logl = val_likelihood(val_y, mean, std)
+            val_logl = logl.mean().item()
+            val_mse = jax.vmap(
+                lambda pred: mse(val_y, pred),
+            )(mean)
+            val_mse = val_mse.mean().item()
+
         summary = BayesianDynamicsModelSummary(
-            model_likelihood=likelihood,
-            grad_norm=grad_norm,
+            model_likelihood=likelihood.item(),
+            grad_norm=grad_norm.item(),
+            val_logl=val_logl,
+            val_mse=val_mse,
         )
         return summary.dict()

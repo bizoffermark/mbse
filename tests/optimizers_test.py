@@ -19,7 +19,7 @@ for bias in jnp.linspace(-5, 5, 10):
         lr=0.1,
     )
     func = lambda x: loss_function(x, bias)
-    sequence = optimizer.optimize(func)
+    sequence, value = optimizer.optimize(func)
     if jnp.max(jnp.abs(sequence-bias)) > EPS:
         print("Optimizer needs to be fixed")
         print("bias: ", bias)

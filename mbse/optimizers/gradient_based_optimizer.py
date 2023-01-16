@@ -76,4 +76,4 @@ class GradientBasedOptimizer(DummyOptimizer):
                                  samples)
             best_sequence = bests[-1]
             best_value = bests[0]
-        return best_sequence
+        return best_sequence, best_value

@@ -61,6 +61,8 @@ class CrossEntropyOptimizer(DummyOptimizer):
             best_seq = carry[4]
             key, sample_key = jax.random.split(key, 2)
             elites, elite_values = self.step(func, mu, sig, sample_key)
+            mean = jnp.mean(elites, axis=0)
+            std = jnp.std(elites, axis=0)
             best_elite = elite_values[0].squeeze()
             bests = jax.lax.cond(best_val <= best_elite,
                                  get_best_action,
@@ -73,11 +75,11 @@ class CrossEntropyOptimizer(DummyOptimizer):
             best_seq = bests[-1]
 
             outs = [best_val, best_seq]
-            carry = [key, mu, sig, best_val, best_seq]
+            carry = [key, mean, std, best_val, best_seq]
 
             return carry, outs
         carry = [rng, mean, std, best_value, best_sequence]
         carry, outs = jax.lax.scan(step, carry, xs=None, length=self.num_steps)
-        return outs[1][-1, ...]
+        return outs[1][-1, ...], outs[0][-1, ...]
 
 

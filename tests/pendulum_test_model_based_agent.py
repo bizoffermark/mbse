@@ -35,12 +35,16 @@ if __name__ == "__main__":
         min_action=-1,
         max_action=1,
     )
-    env = make_vec_env(PendulumSwingUpEnv, wrapper_class=wrapper_cls, n_envs=1)
+    n_envs = 4
+    horizon = 30
+    env = make_vec_env(PendulumSwingUpEnv, wrapper_class=wrapper_cls, n_envs=n_envs)
 
     reward_model = env.envs[0].reward_model()
-    dynamics_model = PendulumDynamicsModel(env=env.envs[0])
-    # dynamics_model = BayesianDynamicsModel(action_space=env.action_space,
-    #                                       observation_space=env.observation_space)
+    reward_model.set_bounds(max_action=1.0)
+    #dynamics_model = PendulumDynamicsModel(env=env.envs[0])
+    dynamics_model = BayesianDynamicsModel(action_space=env.action_space,
+                                           observation_space=env.observation_space,
+                                           num_ensemble=5)
 
     model_free_agent = SACAgent(
         action_space=env.action_space,
@@ -65,11 +69,10 @@ if __name__ == "__main__":
             num_samples=500,
             num_elites=50,
             num_steps=5,
-            action_dim=(30, env.action_space.shape[0])),
+            action_dim=(horizon, env.action_space.shape[0])),
     )
 
-    USE_WANDB = False
-
+    USE_WANDB = True
     trainer = Trainer(
         agent=model_based_agent,
         # model_free_agent=model_free_agent,

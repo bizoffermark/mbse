@@ -8,6 +8,7 @@ import cloudpickle
 from copy import deepcopy
 import numpy as np
 from mbse.utils.vec_env import VecEnv
+from tqdm import tqdm
 
 
 class DummyTrainer(object):
@@ -172,6 +173,7 @@ class DummyTrainer(object):
             obs, _ = self.test_env.reset(seed=e)
             done = False
             steps = 0
+            pbar = tqdm(total=1000)
             while not done:
                 action = self.agent.act(obs, rng=rng, eval=True)
                 next_obs, reward, terminate, truncate, info = self.test_env.step(action)
@@ -179,7 +181,10 @@ class DummyTrainer(object):
                 avg_reward += reward
                 obs = next_obs
                 steps += 1
+                pbar.update(1)
+                # print(steps)
                 if done:
                     obs, _ = self.test_env.reset(seed=e)
         avg_reward /= self.eval_episodes
+        pbar.close()
         return avg_reward

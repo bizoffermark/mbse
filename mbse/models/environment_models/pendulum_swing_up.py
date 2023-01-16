@@ -11,10 +11,19 @@ from functools import partial
 class PendulumReward(RewardModel):
     """Get Pendulum Reward."""
 
-    def __init__(self, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
+    def __init__(self, action_space, ctrl_cost_weight=0.001, sparse=False,*args, **kwargs):
         super().__init__(*args, **kwargs)
         self.ctrl_cost_weight = ctrl_cost_weight
         self.sparse = sparse
+        self.min_action = None
+        self.max_action = None
+        self.action_space = action_space
+
+    def set_bounds(self, max_action, min_action=None):
+        self.max_action = max_action
+        if min_action is None:
+            min_action = - max_action
+        self.min_action = min_action
 
     @staticmethod
     @jax.jit
@@ -35,7 +44,27 @@ class PendulumReward(RewardModel):
 
     @partial(jax.jit, static_argnums=0)
     def predict(self, obs, action, next_obs=None, rng=None):
+        action = self.rescale_action(action)
         return self.state_reward(state=obs) - self.input_cost(action)
+
+    @partial(jax.jit, static_argnums=0)
+    def rescale_action(self, action):
+        """
+        Args:
+            action: The action to rescale
+
+        Returns:
+            The rescaled action
+        """
+        if self.min_action is not None and self.max_action is not None:
+            action = jnp.clip(action, self.min_action, self.max_action)
+            low = self.action_space.low
+            high = self.action_space.high
+            action = low + (high - low) * (
+                (action - self.min_action) / (self.max_action - self.min_action)
+            )
+            action = jnp.clip(action, low, high)
+        return action
 
 
 class PendulumSwingUpEnv(PendulumEnv):
@@ -49,7 +78,9 @@ class PendulumSwingUpEnv(PendulumEnv):
         self.state = np.zeros(2)
         self.last_u = None
         self._reward_model = PendulumReward(
-            ctrl_cost_weight=ctrl_cost_weight, sparse=sparse
+            action_space=self.action_space,
+            ctrl_cost_weight=ctrl_cost_weight,
+            sparse=sparse
         )
 
     def reset(self, seed=None):

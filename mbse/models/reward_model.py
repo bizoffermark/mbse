@@ -10,3 +10,6 @@ class RewardModel(object):
 
     def train_step(self, tran: Transition):
         pass
+
+    def set_bounds(self, max_action, min_action=None):
+        pass

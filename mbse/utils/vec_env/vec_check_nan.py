@@ -45,7 +45,7 @@ class VecCheckNan(VecEnvWrapper):
             terminate=terminate,
             truncate=truncate
         )
-        self._observations = infos['last_observation']
+        self._observations = infos['current_env_state']
         return observations, rewards, terminate, truncate, infos
 
     def reset(self, seed: Optional[int] = None) -> VecEnvObs:
@@ -83,7 +83,7 @@ class VecCheckNan(VecEnvWrapper):
             elif event == "step_wait":
                 msg += f"environment, Last given value was: \r\n\taction={self._actions}"
             elif event == "step_async":
-                msg += f"RL model, Last given value was: \r\n\tobservations={self._observations}"
+                msg += f"RL model, Current env state given value was: \r\n\tobservations={self._observations}"
             else:
                 raise ValueError("Internal error.")
 

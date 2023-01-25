@@ -29,11 +29,15 @@ def _worker(
             cmd, data = remote.recv()
             if cmd == "step":
                 observation, reward, terminal, truncate, info = env.step(data)
+                done = False
+                new_observation = np.copy(observation)
                 if terminal or truncate:
                     # save final observation where user can get it, then reset
-                    observation = env.reset()
-                    info["last_observation"] = observation
-                    info['last_done'] = True
+                    new_observation = env.reset()
+                    done = True
+                info["current_env_state"] = new_observation
+                info['last_done'] = done
+
                 remote.send((observation, reward, terminal, truncate, info))
             elif cmd == "seed":
                 remote.send(env.seed(data))

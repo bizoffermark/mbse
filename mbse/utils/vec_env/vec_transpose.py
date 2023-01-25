@@ -98,8 +98,8 @@ class VecTransposeImage(VecEnvWrapper):
         for idx, done in enumerate(dones):
             if not done:
                 continue
-            if "last_observation" in infos[idx]:
-                infos[idx]["last_observation"] = self.transpose_observations(infos[idx]["terminal_observation"])
+            if "current_env_state" in infos[idx]:
+                infos[idx]["current_env_state"] = self.transpose_observations(infos[idx]["current_env_state"])
 
         return self.transpose_observations(observations), rewards, terminate, truncate, infos
 

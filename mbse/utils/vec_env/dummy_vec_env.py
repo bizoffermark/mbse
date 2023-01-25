@@ -63,7 +63,7 @@ class DummyVecEnv(VecEnv):
                 # save final observation after reset.
                 obs, _ = self.envs[env_idx].reset()
 
-            self.buf_infos[env_idx]["last_observation"] = obs
+            self.buf_infos[env_idx]["current_env_state"] = obs
             self.buf_infos[env_idx]["last_done"] = done
 
         return (

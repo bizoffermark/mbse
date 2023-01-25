@@ -246,12 +246,12 @@ class VecNormalize(VecEnvWrapper):
         rewards = self.normalize_reward(rewards)
 
         dones = np.logical_or(terminate, truncate)
-        # Normalize the terminal observations
+        # Normalize the current state observations
         for idx, done in enumerate(dones):
             if not done:
                 continue
-            if "last_observation" in infos[idx]:
-                infos[idx]["last_observation"] = self.normalize_obs(infos[idx]["last_observation"])
+            if "current_env_state" in infos[idx]:
+                infos[idx]["current_env_state"] = self.normalize_obs(infos[idx]["current_env_state"])
 
         self.returns[dones] = 0
         return obs, rewards, terminate, truncate, infos

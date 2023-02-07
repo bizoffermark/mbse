@@ -77,13 +77,14 @@ class DummyTrainer(object):
         pass
 
     def save_agent(self, step=0, agent_name=None):
-        if self.use_wandb:
-            prefix = str(step)
-            name = self.agent_name if agent_name is None else agent_name
-            name = name + "_" + prefix
-            save_dir = os.path.join(wandb.run.dir, name)
-            with open(save_dir, 'wb') as outp:
-                cloudpickle.dump(self.agent, outp)
+        pass
+        # if self.use_wandb:
+        #    prefix = str(step)
+        #    name = self.agent_name if agent_name is None else agent_name
+        #    name = name + "_" + prefix
+        #    save_dir = os.path.join(wandb.run.dir, name)
+        #    with open(save_dir, 'wb') as outp:
+        #        cloudpickle.dump(self.agent, outp)
 
     def step_env(self, obs, policy, num_steps, rng):
         rng, reset_rng = jax.random.split(rng, 2)

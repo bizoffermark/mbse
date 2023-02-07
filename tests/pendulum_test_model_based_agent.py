@@ -44,37 +44,30 @@ if __name__ == "__main__":
     #dynamics_model = PendulumDynamicsModel(env=env.envs[0])
     dynamics_model = BayesianDynamicsModel(action_space=env.action_space,
                                            observation_space=env.observation_space,
-                                           num_ensemble=5)
+                                           num_ensemble=5,
+                                           reward_model=reward_model)
 
-    model_free_agent = SACAgent(
-        action_space=env.action_space,
-        observation_space=env.observation_space,
-        discount=kwargs['agent']['discount'],
-        lr_actor=kwargs['agent']['lr_actor'],
-        lr_critic=kwargs['agent']['lr_critic'],
-        lr_alpha=kwargs['agent']['lr_alpha'],
-        actor_features=kwargs['agent']['actor_features'],
-        critic_features=kwargs['agent']['critic_features'],
-        scale_reward=kwargs['agent']['scale_reward'],
-        tau=kwargs['agent']['tau'],
-    )
-
-    model_based_agent = ModelBasedAgent(
-        action_space=env.action_space,
-        observation_space=env.action_space,
-        dynamics_model=dynamics_model,
-        reward_model=reward_model,
-        policy_optimizer=CrossEntropyOptimizer(
-            upper_bound=1,
-            num_samples=500,
-            num_elites=50,
-            num_steps=5,
-            action_dim=(horizon, env.action_space.shape[0])),
+    model_based_agent_fn = lambda x, y, z, v: \
+        ModelBasedAgent(
+            use_wandb=x,
+            validate=y,
+            train_steps=z,
+            batch_size=v,
+            action_space=env.action_space,
+            observation_space=env.action_space,
+            dynamics_model=dynamics_model,
+            policy_optimizer=CrossEntropyOptimizer(
+                upper_bound=1,
+                num_samples=500,
+                num_elites=50,
+                num_steps=5,
+                action_dim=(horizon, env.action_space.shape[0])),
     )
 
     USE_WANDB = True
+
     trainer = Trainer(
-        agent=model_based_agent,
+        agent_fn=model_based_agent_fn,
         # model_free_agent=model_free_agent,
         env=env,
         buffer_size=kwargs['trainer']['buffer_size'],
@@ -87,6 +80,11 @@ if __name__ == "__main__":
         train_freq=kwargs['trainer']['train_freq'],
         train_steps=kwargs['trainer']['train_steps'],
         rollout_steps=kwargs['trainer']['rollout_steps'],
+        normalize=True,
+        action_normalize=True,
+        learn_deltas=True,
+        validate=True,
+        record_test_video=True,
     )
     if USE_WANDB:
         wandb.init(

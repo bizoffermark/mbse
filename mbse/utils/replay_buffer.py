@@ -6,6 +6,15 @@ from typing import Union
 EPS = 1e-8
 
 
+def identity_transform(obs, action=None, next_state=None):
+    return obs, action, next_state
+
+
+def inverse_identitiy_transform(transformed_obs, transformed_action=None, transformed_next_state=None):
+    return identity_transform(transformed_obs, transformed_action, transformed_next_state)
+
+
+
 def merge_transitions(tran_a, tran_b):
     obs = np.concatenate([tran_a.obs, tran_b.obs], axis=0)
     action = np.concatenate([tran_a.action, tran_b.action], axis=0)
@@ -19,6 +28,7 @@ def merge_transitions(tran_a, tran_b):
         reward,
         done,
     )
+
 
 def transition_to_jax(tran):
     return Transition(
@@ -51,10 +61,19 @@ class Normalizer(object):
     def __init__(self, input_shape):
         self.mean = np.zeros(*input_shape)
         self.std = np.ones(*input_shape)
+        self.size = 0
 
     def update(self, x):
-        self.mean = np.mean(x, axis=0)
-        self.std = np.std(x, axis=0)
+        new_size = x.shape[0]
+        total_size = new_size + self.size
+        new_mean = (self.mean*self.size + np.mean(x, axis=0))/total_size
+        new_var = (np.square(self.std)+np.square(self.mean))*self.size + \
+                  np.sum(np.square(x), axis=0)
+        new_var = new_var/total_size - np.square(new_mean)
+        new_std = np.sqrt(new_var)
+        self.mean = new_mean
+        self.std = new_std
+        self.size = total_size
 
     def normalize(self, x):
         return (x-self.mean)/(self.std+EPS)
@@ -64,15 +83,25 @@ class Normalizer(object):
 
 
 class ReplayBuffer(object):
-    def __init__(self, obs_shape, action_shape, max_size: int = 1e6, normalize=False):
+    def __init__(self,
+                 obs_shape,
+                 action_shape,
+                 max_size: int = 1e6,
+                 normalize=False,
+                 action_normalize=False,
+                 learn_deltas=False
+                 ):
         self.max_size = max_size
         self.current_ptr = 0
         self.size = 0
         self.obs_shape = obs_shape
         self.action_shape = action_shape
         self.normalize = normalize
+        self.learn_deltas = learn_deltas
         self.obs, self.action, self.next_obs, self.reward, self.done = None, None, None, None, None
         self.state_normalizer, self.action_normalizer, self.reward_normalizer = None, None, None
+        self.next_state_normalizer = None
+        self.action_normalize = action_normalize
         self.reset()
 
     def add(self, transition: Transition):
@@ -91,22 +120,65 @@ class ReplayBuffer(object):
         # self.done = self.done.at[start:end].set(transition.done.reshape(-1, 1))
         self.size = min(self.size + size, self.max_size)
         if self.normalize:
-            self.state_normalizer.update(self.obs[:self.size])
-            # self.action_normalizer.update(self.action[:self.size])
-            self.reward_normalizer.update(self.reward[:self.size])
+            self.state_normalizer.update(self.obs[start:end])
+            if self.action_normalize:
+                self.action_normalizer.update(self.action[start:end])
+            if self.learn_deltas:
+                self.next_state_normalizer.update(self.next_obs[start:end] - self.obs[start:end])
+            self.reward_normalizer.update(self.reward[start:end])
         self.current_ptr = end % self.max_size
 
     def sample(self, rng, batch_size: int = 256):
         ind = jax.random.randint(rng, (batch_size,), 0, self.size)
-        return transition_to_jax(
-            Transition(
-                self.state_normalizer.normalize(self.obs[ind]),
-                self.action_normalizer.normalize(self.action[ind]),
-                self.state_normalizer.normalize(self.next_obs[ind]),
-                self.reward_normalizer.normalize(self.reward[ind]),
-                self.done[ind],
+        obs = jnp.asarray(self.obs)[ind]
+        next_state = jnp.asarray(self.next_obs)[ind]
+        if self.learn_deltas:
+            next_state = self.next_state_normalizer.normalize(next_state - obs)
+        else:
+            next_state = self.state_normalizer.normalize(next_state)
+
+        return Transition(
+                self.state_normalizer.normalize(obs),
+                self.action_normalizer.normalize(jnp.asarray(self.action)[ind]),
+                next_state,
+                self.reward_normalizer.normalize(jnp.asarray(self.reward)[ind]),
+                jnp.asarray(self.done)[ind],
             )
-        )
+
+    def transform(self, obs, action=None, next_state=None):
+        if next_state is not None:
+            if self.learn_deltas:
+                transformed_next_state = \
+                    self.next_state_normalizer.normalize(next_state - obs)
+            else:
+                transformed_next_state = self.state_normalizer.normalize(next_state)
+        else:
+            transformed_next_state = None
+
+        transformed_action = None
+        if action is not None:
+            transformed_action = self.action_normalizer.normalize(action)
+
+        transformed_state = self.state_normalizer.normalize(obs)
+        return transformed_state, transformed_action, transformed_next_state
+
+    def inverse_transform(self, transformed_obs, transformed_action=None, transformed_next_state=None):
+        obs = self.state_normalizer.inverse(transformed_obs)
+        if transformed_next_state is not None:
+            if self.learn_deltas:
+                next_state = self.next_state_normalizer.inverse(
+                    transformed_next_state
+                ) + obs
+            else:
+                next_state = self.state_normalizer.inverse(
+                    transformed_next_state
+                )
+        else:
+            next_state = None
+        action = None
+        if transformed_action is not None:
+            action = self.action_normalizer.inverse(transformed_action)
+        return obs, action, next_state
 
     def reset(self):
         self.current_ptr = 0
@@ -120,3 +192,4 @@ class ReplayBuffer(object):
         self.state_normalizer = Normalizer(self.obs_shape)
         self.action_normalizer = Normalizer(self.action_shape)
         self.reward_normalizer = Normalizer((1,))
+        self.next_state_normalizer = Normalizer(self.obs_shape)

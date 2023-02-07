@@ -11,7 +11,7 @@ from functools import partial
 class PendulumReward(RewardModel):
     """Get Pendulum Reward."""
 
-    def __init__(self, action_space, ctrl_cost_weight=0.001, sparse=False,*args, **kwargs):
+    def __init__(self, action_space, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.ctrl_cost_weight = ctrl_cost_weight
         self.sparse = sparse
@@ -70,10 +70,10 @@ class PendulumReward(RewardModel):
 class PendulumSwingUpEnv(PendulumEnv):
     """Pendulum Swing-up Environment."""
 
-    def __init__(self, reset_noise_scale=0.01, ctrl_cost_weight=0.001, sparse=False):
+    def __init__(self, reset_noise_scale=0.01, ctrl_cost_weight=0.001, sparse=False, render_model='rgb_array'):
         self.base_mujoco_name = "Pendulum-v1"
 
-        super(PendulumSwingUpEnv, self).__init__(render_mode='human')
+        super(PendulumSwingUpEnv, self).__init__(render_mode=render_model)
         self.reset_noise_scale = reset_noise_scale
         self.state = np.zeros(2)
         self.last_u = None
@@ -124,8 +124,14 @@ class PendulumSwingUpEnv(PendulumEnv):
 
 
 class PendulumDynamicsModel(DynamicsModel):
-    def __init__(self, env: PendulumEnv):
+    def __init__(self, env: PendulumEnv, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
         self.env = env
+        reward_model = PendulumReward(
+            action_space=self.env.action_space,
+            ctrl_cost_weight=ctrl_cost_weight,
+            sparse=sparse
+        )
+        super(PendulumDynamicsModel).__init__(reward_model, *args, **kwargs)
 
     @partial(jax.jit, static_argnums=0)
     def predict(self, obs, action, rng=None):
@@ -148,6 +154,11 @@ class PendulumDynamicsModel(DynamicsModel):
         new_state = jnp.asarray([new_theta, new_omega]).T
         next_obs = self._get_obs(new_state)
         return next_obs.T
+
+    def evaluate(self, obs, action, rng=None):
+        next_obs = self.predict(obs, action, rng)
+        reward = self.reward_model.predict(obs, action, next_obs)
+        return next_obs, reward
 
     @staticmethod
     @jax.jit

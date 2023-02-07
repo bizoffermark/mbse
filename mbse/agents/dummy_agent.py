@@ -1,11 +1,16 @@
 import jax.numpy as jnp
-from mbse.utils.replay_buffer import Transition
+from mbse.utils.replay_buffer import ReplayBuffer
 import numpy as np
+from typing import Callable
 
 
 class DummyAgent(object):
 
-    def __init__(self):
+    def __init__(self, use_wandb=True, validate=False, train_steps=1, batch_size=256):
+        self.use_wandb = use_wandb
+        self.validate = validate
+        self.train_steps = train_steps
+        self.batch_size = batch_size
         pass
 
     def act(self, obs: np.ndarray, rng=None, eval=False):
@@ -16,7 +21,6 @@ class DummyAgent(object):
 
     def train_step(self,
                    rng,
-                   tran: Transition,
-                   val: Transition = None,
+                   buffer: ReplayBuffer,
                    ):
         NotImplementedError

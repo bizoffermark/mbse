@@ -9,24 +9,26 @@ from mbse.utils.utils import sample_normal_dist
 from flax import struct
 from mbse.utils.replay_buffer import Transition
 from mbse.models.dynamics_model import DynamicsModel
+from mbse.models.reward_model import RewardModel
 from typing import List
 from mbse.utils.utils import gaussian_log_likelihood
 from mbse.utils.network_utils import mse
+from functools import partial
 
 
 @struct.dataclass
 class BayesianDynamicsModelSummary:
-    model_likelihood: float
-    grad_norm: float
-    val_logl: float
-    val_mse: float
+    model_likelihood: jnp.array = 0.0
+    grad_norm: jnp.array = 0.0
+    val_logl: jnp.array = 0.0
+    val_mse: jnp.array = 0.0
 
     def dict(self):
         return {
-            'model_likelihood': self.model_likelihood,
-            'grad_norm': self.grad_norm,
-            'val_logl': self.val_logl,
-            'val_mse': self.val_mse,
+            'model_likelihood': self.model_likelihood.item(),
+            'grad_norm': self.grad_norm.item(),
+            'val_logl': self.val_logl.item(),
+            'val_mse': self.val_mse.item(),
         }
 
 
@@ -47,6 +49,7 @@ class BayesianDynamicsModel(DynamicsModel):
     def __init__(self,
                  action_space: gym.spaces.box,
                  observation_space: gym.spaces.box,
+                 reward_model: RewardModel,
                  model_class: str = "ProbabilisticEnsembleModel",
                  num_ensemble: int = 10,
                  features: Sequence[int] = [256, 256],
@@ -60,7 +63,8 @@ class BayesianDynamicsModel(DynamicsModel):
                  **kwargs
                  ):
         
-        super(BayesianDynamicsModel, self).__init__()
+        super(BayesianDynamicsModel, self).__init__(*args, **kwargs)
+        self.reward_model = reward_model
         if model_class == "ProbabilisticEnsembleModel":
             model_cls = ProbabilisticEnsembleModel
         elif model_class == "fSVGDEnsemble":
@@ -183,14 +187,18 @@ class BayesianDynamicsModel(DynamicsModel):
 
         return next_obs
 
-    def train_step(self, tran: Transition, val: Transition = None):
+    @partial(jax.jit, static_argnums=0)
+    def _train_step(self, tran: Transition, model_params, model_opt_state, val: Transition = None):
+
         x = jnp.concatenate([tran.obs, tran.action], axis=-1)
-        val_logl = 0
-        val_mse = 0
-        likelihood, grad_norm = self.model.train_step(
+        new_model_params, new_model_opt_state, likelihood, grad_norm = self.model._train_step(
+            params=model_params,
+            opt_state=model_opt_state,
             x=x,
             y=tran.next_obs,
         )
+        val_logl = jnp.zeros_like(likelihood)
+        val_mse = jnp.zeros_like(likelihood)
         if val is not None:
             val_x = jnp.concatenate([val.obs, val.action], axis=-1)
             val_y = val.next_obs
@@ -202,16 +210,44 @@ class BayesianDynamicsModel(DynamicsModel):
             )
             mean, std = jnp.split(y_pred, 2, axis=-1)
             logl = val_likelihood(val_y, mean, std)
-            val_logl = logl.mean().item()
+            val_logl = logl.mean()
             val_mse = jax.vmap(
                 lambda pred: mse(val_y, pred),
             )(mean)
-            val_mse = val_mse.mean().item()
-
+            val_mse = val_mse.mean()
         summary = BayesianDynamicsModelSummary(
-            model_likelihood=likelihood.item(),
-            grad_norm=grad_norm.item(),
-            val_logl=val_logl,
-            val_mse=val_mse,
+            model_likelihood=likelihood.astype(float),
+            grad_norm=grad_norm.astype(float),
+            val_logl=val_logl.astype(float),
+            val_mse=val_mse.astype(float),
         )
-        return summary.dict()
+
+        return new_model_params, new_model_opt_state, summary
+
+    @property
+    def model_params(self):
+        return self.model.particles
+
+    @property
+    def model_opt_state(self):
+        return self.model.opt_state
+
+    def update_model(self, model_params, model_opt_state):
+        self.model.particles = model_params
+        self.model.opt_state = model_opt_state
+
+    def evaluate(self, obs, action, rng=None):
+        model_rng = None
+        reward_rng = None
+        if rng is not None:
+            rng, model_rng = jax.random.split(rng, 2)
+            rng, reward_rng = jax.random.split(rng, 2)
+        transformed_obs, transformed_action, _ = self.transforms(obs, action)
+        transformed_next_obs = self.predict(transformed_obs, transformed_action, model_rng)
+        _, _, next_obs = self.inverse_transforms(transformed_obs=transformed_obs, transformed_action=None,
+                                                 transformed_next_state=transformed_next_obs)
+
+        reward = self.reward_model.predict(obs, action, next_obs, reward_rng)
+        return next_obs, reward
+
+

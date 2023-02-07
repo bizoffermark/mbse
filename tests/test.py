@@ -34,27 +34,34 @@ if __name__ == "__main__":
         min_action=-1,
         max_action=1,
     )
-    env = make_vec_env(kwargs['env_id'], wrapper_class=wrapper_cls, n_envs=4)
+    env = make_vec_env(kwargs['env_id'], wrapper_class=wrapper_cls, n_envs=10)
 
-    agent = SACAgent(
-        action_space=env.action_space,
-        observation_space=env.observation_space,
-        discount=kwargs['agent']['discount'],
-        lr_actor=kwargs['agent']['lr_actor'],
-        lr_critic=kwargs['agent']['lr_critic'],
-        lr_alpha=kwargs['agent']['lr_alpha'],
-        actor_features=kwargs['agent']['actor_features'],
-        critic_features=kwargs['agent']['critic_features'],
-        scale_reward=kwargs['agent']['scale_reward'],
-        tau=kwargs['agent']['tau'],
-        tune_entropy_coef=kwargs['agent']['tune_entropy_coef'],
-        init_ent_coef=kwargs['agent']['init_ent_coef']
-    )
+
+    agent_fn = \
+        lambda x, y, z, v:\
+            SACAgent(
+                use_wandb=x,
+                validate=y,
+                train_steps=z,
+                batch_size=v,
+                action_space=env.action_space,
+                observation_space=env.observation_space,
+                discount=kwargs['agent']['discount'],
+                lr_actor=kwargs['agent']['lr_actor'],
+                lr_critic=kwargs['agent']['lr_critic'],
+                lr_alpha=kwargs['agent']['lr_alpha'],
+                actor_features=kwargs['agent']['actor_features'],
+                critic_features=kwargs['agent']['critic_features'],
+                scale_reward=kwargs['agent']['scale_reward'],
+                tau=kwargs['agent']['tau'],
+                tune_entropy_coef=kwargs['agent']['tune_entropy_coef'],
+                init_ent_coef=kwargs['agent']['init_ent_coef']
+        )
 
     USE_WANDB = True
     trainer = Trainer(
         env=env,
-        agent=agent,
+        agent_fn=agent_fn,
         buffer_size=kwargs['trainer']['buffer_size'],
         max_train_steps=kwargs['trainer']['max_train_steps'],
         exploration_steps=kwargs['trainer']['exploration_steps'],

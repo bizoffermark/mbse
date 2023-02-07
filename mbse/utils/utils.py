@@ -4,9 +4,8 @@ import jax
 from functools import partial
 from mbse.utils.replay_buffer import Transition
 from mbse.models.dynamics_model import DynamicsModel
-from mbse.models.reward_model import RewardModel
-from mbse.agents.dummy_agent import DummyAgent
 from typing import Optional, Union, Tuple, Callable
+
 
 EPS = 1e-6
 
@@ -104,23 +103,22 @@ def rollout_policy(policy, initial_state, dynamics_model, reward_model, rng, num
 
 def sample_trajectories(
     dynamics_model: DynamicsModel,
-    reward_model: RewardModel,
     init_state: jnp.ndarray,
     horizon: int,
     key: jax.random.PRNGKey,
     *,
     policy: Optional[Callable] = None,
     actions: Optional[jnp.ndarray] = None,
-    observations: Optional[jnp.ndarray] = None
+    # observations: Optional[jnp.ndarray] = None
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     TODO (yarden): document this thing.
     """
     assert policy is not None or actions is not None, \
       'Please provide policy or actor'
-    use_observations = observations is not None
+    # use_observations = observations is not None
     use_policy = policy is not None
-    batch_size = init_state.shape[0]
+    # batch_size = init_state.shape[0]
     def step(carry, ins):
         seed = carry[0]
         #if use_observations:
@@ -134,14 +132,10 @@ def sample_trajectories(
           acs = policy(jax.lax.stop_gradient(obs), rng=actor_seed)
         else:
           acs = ins[-1]
-
         model_seed = None
-        reward_seed = None
         if seed is not None:
             seed, model_seed = jax.random.split(seed, 2)
-            seed, reward_seed = jax.random.split(seed, 2)
-        next_obs = dynamics_model.predict(obs, acs, rng=model_seed)
-        reward = reward_model.predict(obs, acs, rng=reward_seed)
+        next_obs, reward = dynamics_model.evaluate(obs, acs, rng=model_seed)
         # if use_observations:
         #  carry = seed, obs, hidden
         #else:

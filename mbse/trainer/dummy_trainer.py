@@ -2,19 +2,22 @@ import os
 
 import jax
 from mbse.utils.replay_buffer import Transition, ReplayBuffer
-from mbse.agents.dummy_agent import DummyAgent
+# from mbse.agents.dummy_agent import DummyAgent
+from typing import Callable
 import wandb
 import cloudpickle
 from copy import deepcopy
 import numpy as np
 from mbse.utils.vec_env import VecEnv
 from tqdm import tqdm
+from gym.wrappers.record_video import RecordVideo
+import glob
 
 
 class DummyTrainer(object):
     def __init__(self,
                  env: VecEnv,
-                 agent: DummyAgent,
+                 agent_fn: Callable,
                  buffer_size: int = int(1e6),
                  max_train_steps: int = int(1e6),
                  batch_size: int = 256,
@@ -27,16 +30,24 @@ class DummyTrainer(object):
                  eval_episodes: int = 100,
                  agent_name: str = "DummyAgent",
                  use_wandb: bool = True,
+                 validate: bool = False,
+                 normalize: bool = False,
+                 action_normalize: bool = False,
+                 learn_deltas: bool = False,
+                 record_test_video: bool = False,
                  ):
         self.env = env
         self.num_envs = max(env.num_envs, 1)
         self.buffer = ReplayBuffer(
             obs_shape=env.observation_space.shape,
             action_shape=env.action_space.shape,
-            max_size=buffer_size
+            max_size=buffer_size,
+            normalize=normalize,
+            action_normalize=action_normalize,
+            learn_deltas=learn_deltas
         )
         self.buffer_size = buffer_size
-        self.agent = agent
+
         self.eval_episodes = eval_episodes
         self.agent_name = agent_name
         self.rng = jax.random.PRNGKey(seed)
@@ -49,7 +60,18 @@ class DummyTrainer(object):
         self.eval_freq = eval_freq
         self.exploration_steps = exploration_steps
         self.rollout_steps = rollout_steps
-        self.test_env = deepcopy(self.env.envs[0])
+        if record_test_video:
+            test_env_wrapper = lambda x: RecordVideo(x, video_folder='./video', episode_trigger=lambda x: True)
+        else:
+            test_env_wrapper = lambda x: x
+        self.test_env = test_env_wrapper(deepcopy(self.env.envs[0]))
+        self.agent = agent_fn(
+            self.use_wandb,
+            validate,
+            self.train_steps,
+            self.batch_size,
+        )
+        self.record_test_video = record_test_video
 
     def train(self):
         pass
@@ -165,9 +187,15 @@ class DummyTrainer(object):
             next_obs=next_obs_vec,
             done=done_vec,
         )
+        reset_seed = jax.random.randint(
+            reset_rng,
+            (1,),
+            minval=0,
+            maxval=num_steps).item()
+        obs, _ = self.env.reset(seed=reset_seed)
         return transitions
 
-    def eval_policy(self, rng=None) -> float:
+    def eval_policy(self, step=0, rng=None) -> float:
         avg_reward = 0.0
         for e in range(self.eval_episodes):
             obs, _ = self.test_env.reset(seed=e)
@@ -187,4 +215,12 @@ class DummyTrainer(object):
                     obs, _ = self.test_env.reset(seed=e)
         avg_reward /= self.eval_episodes
         pbar.close()
+        if self.use_wandb and self.record_test_video:
+            mp4list = glob.glob('video/*.mp4')
+            if len(mp4list) > 0:
+                mp4 = mp4list[-1]
+                # log gameplay video in wandb
+                wandb.log({"gameplays":
+                               wandb.Video(mp4, caption='episode: '+str(step), fps=4, format="gif"),
+                           "step": step})
         return avg_reward

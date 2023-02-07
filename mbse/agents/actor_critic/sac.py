@@ -8,14 +8,16 @@ import jax.numpy as jnp
 from flax import linen as nn
 from jax import jit, vmap, random, value_and_grad
 from mbse.utils.network_utils import MLP, mse
-from mbse.utils.replay_buffer import Transition
+from mbse.utils.replay_buffer import ReplayBuffer, Transition
 from flax import struct
 from copy import deepcopy
 import gym
 from mbse.utils.utils import gaussian_log_likelihood, sample_normal_dist
 from mbse.agents.dummy_agent import DummyAgent
+import wandb
 
 EPS = 1e-6
+ZERO = 0.0
 
 
 # Perform Polyak averaging provided two network parameters and the averaging value tau.
@@ -100,10 +102,25 @@ def get_soft_td_target(
 @partial(jit, static_argnums=(0, ))
 def get_action(actor_fn, actor_params, obs, rng=None, eval=False):
     mu, sig = actor_fn(actor_params, obs)
-    if rng is None or eval:
-        action = mu
-    else:
-        action = sample_normal_dist(mu, sig, rng)
+
+    def get_mean(mu, sig, rng):
+        return mu
+    def sample_action(mu, sig, rng):
+        return sample_normal_dist(mu, sig, rng)
+
+    action = jax.lax.cond(
+        jnp.logical_or(rng is None, eval),
+        get_mean,
+        sample_action,
+        mu,
+        sig,
+        rng
+    )
+
+    # if rng is None or eval:
+    #    action = mu
+    #else:
+    #    action = sample_normal_dist(mu, sig, rng)
     return squash_action(action)
 
 
@@ -177,41 +194,41 @@ def update_alpha(log_alpha_fn, alpha_params, alpha_opt_state, alpha_update_fn, l
 
 @struct.dataclass
 class SACModelSummary:
-    actor_loss: float
-    entropy: float
-    critic_loss: float
-    v_loss: float
-    q_loss: float
-    alpha_loss: float
-    log_alpha: float
-    actor_std: float
-    critic_grad_norm: float
-    actor_grad_norm: float
-    alpha_grad_norm: float
-    target_q_term: float
-    target_v_term: float
-    entropy_term: float
-    max_reward: float
-    min_reward: float
+    actor_loss: jnp.array = ZERO
+    entropy: jnp.array = ZERO
+    critic_loss: jnp.array = ZERO
+    v_loss: jnp.array = ZERO
+    q_loss: jnp.array = ZERO
+    alpha_loss: jnp.array = ZERO
+    log_alpha: jnp.array = ZERO
+    actor_std: jnp.array = ZERO
+    critic_grad_norm: jnp.array = ZERO
+    actor_grad_norm: jnp.array = ZERO
+    alpha_grad_norm: jnp.array = ZERO
+    target_q_term: jnp.array = ZERO
+    target_v_term: jnp.array = ZERO
+    entropy_term: jnp.array = ZERO
+    max_reward: jnp.array = ZERO
+    min_reward: jnp.array = ZERO
 
     def dict(self):
         return {
-                        'actor_loss': self.actor_loss,
-                        'entropy': self.entropy,
-                        'actor_std': self.actor_std,
-                        'critic_loss': self.critic_loss,
-                        'v_loss': self.v_loss,
-                        'q_loss': self.q_loss,
-                        'alpha_loss': self.alpha_loss,
-                        'log_alpha': self.log_alpha,
-                        'critic_grad_norm': self.critic_grad_norm,
-                        'actor_grad_norm': self.actor_grad_norm,
-                        'alpha_grad_norm': self.alpha_grad_norm,
-                        'target_q_term': self.target_q_term,
-                        'target_v_term': self.target_v_term,
-                        'entropy_term': self.entropy_term,
-                        'max_reward': self.max_reward,
-                        'min_reward': self.min_reward,
+                        'actor_loss': self.actor_loss.item(),
+                        'entropy': self.entropy.item(),
+                        'actor_std': self.actor_std.item(),
+                        'critic_loss': self.critic_loss.item(),
+                        'v_loss': self.v_loss.item(),
+                        'q_loss': self.q_loss.item(),
+                        'alpha_loss': self.alpha_loss.item(),
+                        'log_alpha': self.log_alpha.item(),
+                        'critic_grad_norm': self.critic_grad_norm.item(),
+                        'actor_grad_norm': self.actor_grad_norm.item(),
+                        'alpha_grad_norm': self.alpha_grad_norm.item(),
+                        'target_q_term': self.target_q_term.item(),
+                        'target_v_term': self.target_v_term.item(),
+                        'entropy_term': self.entropy_term.item(),
+                        'max_reward': self.max_reward.item(),
+                        'min_reward': self.min_reward.item(),
                     }
 
 
@@ -297,8 +314,10 @@ class SACAgent(DummyAgent):
             tau: float = 0.005,
             init_ent_coef: float = 1.0,
             tune_entropy_coef: bool = True,
+            *args,
+            **kwargs
     ):
-        super(SACAgent, self).__init__()
+        super(SACAgent, self).__init__(*args, **kwargs)
         action_dim = np.prod(action_space.shape)
         sample_obs = observation_space.sample()
         sample_act = action_space.sample()
@@ -356,20 +375,25 @@ class SACAgent(DummyAgent):
             eval
         )
 
-    def train_step(
-            self,
-            rng,
-            tran: Transition,
-    ):
+    @partial(jit, static_argnums=(0))
+    def _train_step_(self,
+                     rng,
+                     tran: Transition,
+                     alpha_params,
+                     alpha_opt_state,
+                     actor_params,
+                     actor_opt_state,
+                     critic_params,
+                     target_critic_params,
+                     critic_opt_state,
+                     ):
         rng, actor_rng, td_rng = random.split(rng, 3)
-
         alpha = jax.lax.stop_gradient(
             jnp.exp(
-                self.log_alpha.apply(self.alpha_params)
+                self.log_alpha.apply(
+                    alpha_params)
             )
         )
-
-        #for u in range(self.q_update_frequency):
         td_rng, target_q_rng = random.split(td_rng, 2)
         target_v, target_q, target_v_term, target_q_term, entropy_term = \
             jax.lax.stop_gradient(
@@ -380,86 +404,285 @@ class SACAgent(DummyAgent):
                     obs=tran.obs,
                     reward=tran.reward,
                     not_done=1.0 - tran.done,
-                    critic_target_params=self.target_critic_params,
-                    critic_params=self.critic_params,
-                    actor_params=self.actor_params,
+                    critic_target_params=target_critic_params,
+                    critic_params=critic_params,
+                    actor_params=actor_params,
                     alpha=alpha,
                     discount=self.discount,
                     rng=target_q_rng,
                     reward_scale=self.scale_reward,
                 )
-        )
-
-        critic_params, critic_opt_state, critic_loss, critic_grad_norm, v_loss, q_loss = \
+            )
+        new_critic_params, new_critic_opt_state, critic_loss, critic_grad_norm, v_loss, q_loss = \
             update_critic(
                 critic_fn=self.critic.apply,
-                critic_params=self.critic_params,
-                critic_opt_state=self.critic_opt_state,
+                critic_params=critic_params,
+                critic_opt_state=critic_opt_state,
                 critic_update_fn=self.critic_optimizer.update,
                 obs=tran.obs,
                 action=tran.action,
                 target_q=target_q,
                 target_v=target_v,
             )
+        new_target_critic_params = soft_update(target_critic_params, new_critic_params, self.tau)
 
-        target_critic_params = soft_update(self.target_critic_params, critic_params, self.tau)
-
-        actor_params, actor_opt_state, actor_loss, log_a, actor_grad_norm = update_actor(
+        new_actor_params, new_actor_opt_state, actor_loss, log_a, actor_grad_norm = update_actor(
             actor_fn=self.actor.apply,
             critic_fn=self.critic.apply,
-            actor_params=self.actor_params,
+            actor_params=actor_params,
             actor_update_fn=self.actor_optimizer.update,
-            critic_params=self.critic_params,
+            critic_params=critic_params,
             alpha=alpha,
-            actor_opt_state=self.actor_opt_state,
+            actor_opt_state=actor_opt_state,
             obs=tran.obs,
             rng=actor_rng,
         )
 
         if self.tune_entropy_coef:
-            alpha_params, alpha_opt_state, alpha_loss, alpha_grad_norm = update_alpha(
+            new_alpha_params, new_alpha_opt_state, alpha_loss, alpha_grad_norm = update_alpha(
                 log_alpha_fn=self.log_alpha.apply,
-                alpha_params=self.alpha_params,
-                alpha_opt_state=self.alpha_opt_state,
+                alpha_params=alpha_params,
+                alpha_opt_state=alpha_opt_state,
                 alpha_update_fn=self.alpha_optimizer.update,
                 log_a=log_a,
                 target_entropy=self.target_entropy
             )
-            self.alpha_params = alpha_params
-            self.alpha_opt_state = alpha_opt_state
+
         else:
             alpha_loss = jnp.zeros(1)
             alpha_grad_norm = jnp.zeros(1)
 
-        self.actor_params = actor_params
-        self.actor_opt_state = actor_opt_state
-        self.critic_params = critic_params
-        self.critic_opt_state = critic_opt_state
-        self.target_critic_params = target_critic_params
+        summary = SACModelSummary()
+        if self.use_wandb:
+            log_alpha = self.log_alpha.apply(new_alpha_params)
+            _, std = self.actor.apply(new_actor_params, tran.obs)
 
-        log_alpha = self.log_alpha.apply(self.alpha_params)
-        _, std = self.actor.apply(self.actor_params, tran.obs)
+            summary = SACModelSummary(
+                actor_loss=actor_loss.astype(float),
+                entropy=-log_a.mean().astype(float),
+                actor_std=std.mean().astype(float),
+                critic_loss=critic_loss.astype(float),
+                v_loss=v_loss.astype(float),
+                q_loss=q_loss.astype(float),
+                alpha_loss=alpha_loss.astype(float),
+                log_alpha=log_alpha.astype(float),
+                critic_grad_norm=critic_grad_norm.astype(float),
+                actor_grad_norm=actor_grad_norm.astype(float),
+                alpha_grad_norm=alpha_grad_norm.astype(float),
+                target_v_term=target_v_term.astype(float),
+                target_q_term=target_q_term.astype(float),
+                entropy_term=entropy_term.astype(float),
+                max_reward=jnp.max(tran.reward).astype(float),
+                min_reward=jnp.min(tran.reward).astype(float),
+            )
 
-        summary = SACModelSummary(
-            actor_loss=actor_loss.item(),
-            entropy=-log_a.mean().item(),
-            actor_std=std.mean().item(),
-            critic_loss=critic_loss.item(),
-            v_loss=v_loss.item(),
-            q_loss=q_loss.item(),
-            alpha_loss=alpha_loss.item(),
-            log_alpha=log_alpha.item(),
-            critic_grad_norm=critic_grad_norm.item(),
-            actor_grad_norm=actor_grad_norm.item(),
-            alpha_grad_norm=alpha_grad_norm.item(),
-            target_v_term=target_v_term.item(),
-            target_q_term=target_q_term.item(),
-            entropy_term=entropy_term.item(),
-            max_reward=jnp.max(tran.reward).item(),
-            min_reward=jnp.min(tran.reward).item(),
+        return (
+            new_alpha_params,
+            new_alpha_opt_state,
+            new_actor_params,
+            new_actor_opt_state,
+            new_critic_params,
+            new_target_critic_params,
+            new_critic_opt_state,
+            summary,
         )
 
-        return summary.dict()
+    def train_step(self,
+                   rng,
+                   buffer: ReplayBuffer,
+                   ):
+
+        @partial(jit, static_argnums=(0, 2))
+        def sample_data(data_buffer, rng, batch_size):
+            tran = data_buffer.sample(rng, batch_size=batch_size)
+            return tran
+        def step(carry, ins):
+            rng = carry[0]
+            alpha_params = carry[1]
+            alpha_opt_state = carry[2]
+            actor_params = carry[3]
+            actor_opt_state = carry[4]
+            critic_params = carry[5]
+            target_critic_params = carry[6]
+            critic_opt_state = carry[7]
+            # if use_observations:
+            #  obs = ins[0]
+            # else:
+            #  obs = carry[1]
+            buffer_rng, train_rng, rng = jax.random.split(rng, 3)
+            tran = sample_data(buffer, buffer_rng, self.batch_size)
+
+            (
+                new_alpha_params,
+                new_alpha_opt_state,
+                new_actor_params,
+                new_actor_opt_state,
+                new_critic_params,
+                new_target_critic_params,
+                new_critic_opt_state,
+                summary,
+            ) = \
+                self._train_step_(
+                rng=train_rng,
+                tran=tran,
+                alpha_params=alpha_params,
+                alpha_opt_state=alpha_opt_state,
+                actor_params=actor_params,
+                actor_opt_state=actor_opt_state,
+                critic_params=critic_params,
+                target_critic_params=target_critic_params,
+                critic_opt_state=critic_opt_state,
+            )
+            # if use_observations:
+            #  carry = seed, obs, hidden
+            # else:
+            carry = [
+                rng,
+                new_alpha_params,
+                new_alpha_opt_state,
+                new_actor_params,
+                new_actor_opt_state,
+                new_critic_params,
+                new_target_critic_params,
+                new_critic_opt_state,
+                summary,
+            ]
+            outs = carry[1:]
+            return carry, outs
+        carry = [
+            rng,
+            self.alpha_params,
+            self.alpha_opt_state,
+            self.actor_params,
+            self.actor_opt_state,
+            self.critic_params,
+            self.target_critic_params,
+            self.critic_opt_state,
+            SACModelSummary(),
+        ]
+        carry, outs = jax.lax.scan(step, carry, xs=None, length=self.train_steps)
+        self.alpha_params = carry[1]
+        self.alpha_opt_state = carry[2]
+        self.actor_params = carry[3]
+        self.actor_opt_state = carry[4]
+        self.critic_params = carry[5]
+        self.target_critic_params = carry[6]
+        self.critic_opt_state = carry[7]
+        summary = carry[8]
+        if self.use_wandb:
+            wandb.log(summary.dict())
+
+
+
+
+
+
+
+    # def train_step(
+    #         self,
+    #         rng,
+    #         tran: Transition,
+    #         writer,
+    # ):
+    #     rng, actor_rng, td_rng = random.split(rng, 3)
+    #
+    #     alpha = jax.lax.stop_gradient(
+    #         jnp.exp(
+    #             self.log_alpha.apply(self.alpha_params)
+    #         )
+    #     )
+    #
+    #     #for u in range(self.q_update_frequency):
+    #     td_rng, target_q_rng = random.split(td_rng, 2)
+    #     target_v, target_q, target_v_term, target_q_term, entropy_term = \
+    #         jax.lax.stop_gradient(
+    #             get_soft_td_target(
+    #                 critic_fn=self.critic.apply,
+    #                 actor_fn=self.actor.apply,
+    #                 next_obs=tran.next_obs,
+    #                 obs=tran.obs,
+    #                 reward=tran.reward,
+    #                 not_done=1.0 - tran.done,
+    #                 critic_target_params=self.target_critic_params,
+    #                 critic_params=self.critic_params,
+    #                 actor_params=self.actor_params,
+    #                 alpha=alpha,
+    #                 discount=self.discount,
+    #                 rng=target_q_rng,
+    #                 reward_scale=self.scale_reward,
+    #             )
+    #     )
+    #
+    #     critic_params, critic_opt_state, critic_loss, critic_grad_norm, v_loss, q_loss = \
+    #         update_critic(
+    #             critic_fn=self.critic.apply,
+    #             critic_params=self.critic_params,
+    #             critic_opt_state=self.critic_opt_state,
+    #             critic_update_fn=self.critic_optimizer.update,
+    #             obs=tran.obs,
+    #             action=tran.action,
+    #             target_q=target_q,
+    #             target_v=target_v,
+    #         )
+    #
+    #     target_critic_params = soft_update(self.target_critic_params, critic_params, self.tau)
+    #
+    #     actor_params, actor_opt_state, actor_loss, log_a, actor_grad_norm = update_actor(
+    #         actor_fn=self.actor.apply,
+    #         critic_fn=self.critic.apply,
+    #         actor_params=self.actor_params,
+    #         actor_update_fn=self.actor_optimizer.update,
+    #         critic_params=self.critic_params,
+    #         alpha=alpha,
+    #         actor_opt_state=self.actor_opt_state,
+    #         obs=tran.obs,
+    #         rng=actor_rng,
+    #     )
+    #
+    #     if self.tune_entropy_coef:
+    #         alpha_params, alpha_opt_state, alpha_loss, alpha_grad_norm = update_alpha(
+    #             log_alpha_fn=self.log_alpha.apply,
+    #             alpha_params=self.alpha_params,
+    #             alpha_opt_state=self.alpha_opt_state,
+    #             alpha_update_fn=self.alpha_optimizer.update,
+    #             log_a=log_a,
+    #             target_entropy=self.target_entropy
+    #         )
+    #         self.alpha_params = alpha_params
+    #         self.alpha_opt_state = alpha_opt_state
+    #     else:
+    #         alpha_loss = jnp.zeros(1)
+    #         alpha_grad_norm = jnp.zeros(1)
+    #
+    #     self.actor_params = actor_params
+    #     self.actor_opt_state = actor_opt_state
+    #     self.critic_params = critic_params
+    #     self.critic_opt_state = critic_opt_state
+    #     self.target_critic_params = target_critic_params
+    #
+    #     log_alpha = self.log_alpha.apply(self.alpha_params)
+    #     _, std = self.actor.apply(self.actor_params, tran.obs)
+    #
+    #     summary = SACModelSummary(
+    #         actor_loss=actor_loss.item(),
+    #         entropy=-log_a.mean().item(),
+    #         actor_std=std.mean().item(),
+    #         critic_loss=critic_loss.item(),
+    #         v_loss=v_loss.item(),
+    #         q_loss=q_loss.item(),
+    #         alpha_loss=alpha_loss.item(),
+    #         log_alpha=log_alpha.item(),
+    #         critic_grad_norm=critic_grad_norm.item(),
+    #         actor_grad_norm=actor_grad_norm.item(),
+    #         alpha_grad_norm=alpha_grad_norm.item(),
+    #         target_v_term=target_v_term.item(),
+    #         target_q_term=target_q_term.item(),
+    #         entropy_term=entropy_term.item(),
+    #         max_reward=jnp.max(tran.reward).item(),
+    #         min_reward=jnp.min(tran.reward).item(),
+    #     )
+    #
+    #     return summary.dict()
 
 
 

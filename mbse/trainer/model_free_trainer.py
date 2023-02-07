@@ -43,24 +43,17 @@ class ModelFreeTrainer(DummyTrainer):
             self.buffer.add(transitions)
 
             if step % self.train_freq == 0:
-                for _ in range(self.train_steps):
-                    train_rng, agent_rng, buffer_rng = random.split(train_rng, 3)
-                    batch = self.buffer.sample(buffer_rng, self.batch_size)
-                    summary = self.agent.train_step(
-                        agent_rng,
-                        batch,
-                    )
-                    train_steps += 1
-                    train_log = summary
-                    train_log['train_steps'] = train_steps
-                    train_log['env_steps'] = step
-                    if self.use_wandb:
-                        wandb.log(train_log)
+                train_rng, agent_rng = random.split(train_rng, 2)
+                self.agent.train_step(
+                    rng=agent_rng,
+                    buffer=self.buffer,
+                )
+                train_steps += self.train_steps
 
             # Evaluate episode
             if train_steps % self.eval_freq == 0:
                 eval_rng, curr_eval = random.split(eval_rng, 2)
-                eval_reward = self.eval_policy(rng=eval_rng)
+                eval_reward = self.eval_policy(rng=eval_rng, step=train_steps)
                 reward_log = {
                     'env_steps': train_steps,
                     'average_reward': eval_reward

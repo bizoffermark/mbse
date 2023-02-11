@@ -101,16 +101,25 @@ def rollout_policy(policy, initial_state, dynamics_model, reward_model, rng, num
     return transitions
 
 
+@partial(jax.jit, static_argnums=(0, 3))
 def sample_trajectories(
-    dynamics_model: DynamicsModel,
+    evaluate_fn: Callable,
+    parameters,
     init_state: jnp.ndarray,
     horizon: int,
     key: jax.random.PRNGKey,
     *,
     policy: Optional[Callable] = None,
     actions: Optional[jnp.ndarray] = None,
+    bias_obs: Union[jnp.ndarray, float] = 0.0,
+    bias_act: Union[jnp.ndarray, float] = 0.0,
+    bias_out: Union[jnp.ndarray, float] = 0.0,
+    scale_obs: Union[jnp.ndarray, float] = 1.0,
+    scale_act: Union[jnp.ndarray, float] = 1.0,
+    scale_out: Union[jnp.ndarray, float] = 1.0,
+    sampling_idx=None,
     # observations: Optional[jnp.ndarray] = None
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+) -> Transition:
     """
     TODO (yarden): document this thing.
     """
@@ -135,7 +144,19 @@ def sample_trajectories(
         model_seed = None
         if seed is not None:
             seed, model_seed = jax.random.split(seed, 2)
-        next_obs, reward = dynamics_model.evaluate(obs, acs, rng=model_seed)
+        next_obs, reward = evaluate_fn(
+                    parameters=parameters,
+                    obs=obs,
+                    action=acs,
+                    rng=model_seed,
+                    sampling_idx=sampling_idx,
+                    bias_obs=bias_obs,
+                    bias_act=bias_act,
+                    bias_out=bias_out,
+                    scale_obs=scale_obs,
+                    scale_act=scale_act,
+                    scale_out=scale_out,
+                )
         # if use_observations:
         #  carry = seed, obs, hidden
         #else:
@@ -150,7 +171,7 @@ def sample_trajectories(
   #  assert observations.shape[1] == horizon
   #  ins.append(observations)
     if not use_policy:
-        assert actions.shape[-2] == horizon, 'action shape must be the same as horizon'
+        # assert actions.shape[-2] == horizon, 'action shape must be the same as horizon'
         # actions = jnp.repeat(actions, repeats=batch_size, axis=0)
         # actions_T = jnp.expand_dims(actions_T, 2) \
         #    if len(actions_T.shape) < 3 else actions_T

@@ -23,7 +23,7 @@ class CrossEntropyOptimizer(DummyOptimizer):
         self.seed = seed
         self.init_var = init_var
 
-    @partial(jit, static_argnums=(0, 1))
+    # @partial(jit, static_argnums=(0, 1))
     def step(self, func, mean, std, key):
         mean = mean.reshape(-1, 1).squeeze()
         std = std.reshape(-1, 1).squeeze()
@@ -42,7 +42,7 @@ class CrossEntropyOptimizer(DummyOptimizer):
         elite_values = values[best_elite_idx]
         return elites, elite_values
 
-    @partial(jit, static_argnums=(0, 1))
+    # @partial(jit, static_argnums=(0, 1))
     def optimize(self, func, rng=None):
         best_value = -jnp.inf
         mean = jnp.zeros(self.action_dim)

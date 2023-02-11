@@ -7,7 +7,7 @@ from jax import jit, vmap
 class MLP(nn.Module):
     features: Sequence[int]
     output_dim: int
-    non_linearity: Callable = nn.relu
+    non_linearity: Callable = nn.swish
 
     @nn.compact
     def __call__(self, x, train=False):

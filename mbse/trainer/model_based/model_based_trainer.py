@@ -23,9 +23,15 @@ class ModelBasedTrainer(DummyTrainer):
             wandb.define_metric('env_steps')
         self.rng, eval_rng = random.split(self.rng, 2)
         eval_rng, curr_eval = random.split(eval_rng, 2)
+
         self.agent.set_transforms(
-            transforms=self.buffer.transform,
-            inverse_transforms=self.buffer.inverse_transform
+            bias_obs=self.buffer.state_normalizer.mean,
+            bias_act=self.buffer.action_normalizer.mean,
+            bias_out=self.buffer.next_state_normalizer.mean,
+            scale_obs=self.buffer.state_normalizer.std,
+            scale_act=self.buffer.action_normalizer.std,
+            scale_out=self.buffer.next_state_normalizer.std,
+
         )
         average_reward = self.eval_policy(rng=curr_eval)
         best_performance = average_reward
@@ -56,8 +62,13 @@ class ModelBasedTrainer(DummyTrainer):
         for step in tqdm(range(learning_steps)):
             actor_rng, train_rng = random.split(rng_keys[step], 2)
             self.agent.set_transforms(
-                transforms=self.buffer.transform,
-                inverse_transforms=self.buffer.inverse_transform,
+                bias_obs=self.buffer.state_normalizer.mean,
+                bias_act=self.buffer.action_normalizer.mean,
+                bias_out=self.buffer.next_state_normalizer.mean,
+                scale_obs=self.buffer.state_normalizer.std,
+                scale_act=self.buffer.action_normalizer.std,
+                scale_out=self.buffer.next_state_normalizer.std,
+
             )
             policy = self.agent.act
             actor_rng, val_rng = random.split(actor_rng, 2)

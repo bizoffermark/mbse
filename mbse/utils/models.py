@@ -4,31 +4,40 @@ from flax import linen as nn
 from jax import jit, vmap, value_and_grad
 from mbse.utils.network_utils import MLP
 import jax
-from functools import partial
 from mbse.utils.utils import gaussian_log_likelihood, rbf_kernel
 import optax
 
 EPS = 1e-6
 
 
-class ProbabilisticEnsembleModel(object):
+def _predict(apply_fn, params, x, sig_max, sig_min, rng=None):
+    forward = jax.vmap(apply_fn, (0, None))
+    predictions = forward(params, x)
+    mu, sig = jnp.split(predictions, 2, axis=-1)
+    sig = nn.softplus(sig)
+    sig = jnp.clip(sig, 0, sig_max) + sig_min
+    predictions = jnp.concatenate([mu, sig], axis=-1)
+    return predictions
 
+
+class ProbabilisticEnsembleModel(object):
     def __init__(
             self,
             example_input: jnp.ndarray,
             num_ensemble: int = 10,
             features: Sequence[int] = [256, 256],
             output_dim: int = 1,
-            non_linearity: Callable = nn.relu,
+            non_linearity: Callable = nn.swish,
             lr: float = 1e-3,
             weight_decay: float = 1e-4,
             seed: int = 0,
             sig_min: float = 1e-3,
             sig_max: float = 1e3,
+            initialize_train_fn: bool = True,
     ):
         self.output_dim = output_dim
         self.mlp = MLP(
-            features=features, 
+            features=features,
             output_dim=2*output_dim,
             non_linearity=non_linearity
         )
@@ -49,38 +58,48 @@ class ProbabilisticEnsembleModel(object):
         self.particles = particles
         self.opt_state = optimizer_state
         self.example_input = example_input
+        self._predict = jit(lambda params, x:
+                            _predict(
+                                apply_fn=self.net,
+                                params=params,
+                                x=x,
+                                sig_max=self.sig_max,
+                                sig_min=self.sig_min,
+                            )
+                        )
+        if initialize_train_fn:
+            self._train_step = jit(lambda params, opt_state, x, y: self._train_fn(
+                predict_fn=self._predict,
+                update_fn=self.optimizer.update,
+                params=params,
+                opt_state=opt_state,
+                x=x,
+                y=y,
+            ))
+
 
     @property
     def params(self):
         return self.particles
 
-    @partial(jit, static_argnums=0)
-    def _predict(self, params, x):
-        forward = jax.vmap(self.net, (0, None))
-        predictions = forward(params, x)
-        mu, sig = jnp.split(predictions, 2, axis=-1)
-        sig = nn.softplus(sig)
-        sig = jnp.clip(sig, 0, self.sig_max) + self.sig_min
-        predictions = jnp.concatenate([mu, sig], axis=-1)
-        return predictions
-
     def predict(self, x):
         return self._predict(self.particles, x)
 
-    @partial(jit, static_argnums=0)
-    def _train_step(self, params, opt_state, x, y, prior_particles=None):
+
+    @staticmethod
+    def _train_fn(predict_fn, update_fn, params, opt_state, x, y, prior_particles=None):
         likelihood = jax.vmap(gaussian_log_likelihood, in_axes=(None, 0, 0), out_axes=0)
 
         def likelihood_loss(model_params):
-            predictions = self._predict(model_params, x)
+            predictions = predict_fn(model_params, x)
             mu, sig = jnp.split(predictions, 2, axis=-1)
             logl = likelihood(y, mu, sig)
             return -logl.mean()
         # vmap over ensemble
         loss, grads = value_and_grad(likelihood_loss)(params)
-        updates, new_opt_state = self.optimizer.update(grads,
-                                                             opt_state,
-                                                             params=params)
+        updates, new_opt_state = update_fn(grads,
+                                           opt_state,
+                                           params=params)
         new_params = optax.apply_updates(params, updates)
         grad_norm = optax.global_norm(grads)
         return new_params, new_opt_state, loss, grad_norm
@@ -97,13 +116,14 @@ class ProbabilisticEnsembleModel(object):
         return loss, grad_norm
 
 
-class fSVGDEnsemble(ProbabilisticEnsembleModel):
+class FSVGDEnsemble(ProbabilisticEnsembleModel):
     def __init__(self,
                  n_prior_particles: Union[int, None] = None,
                  prior_bandwidth: float = 0.1,
                  k_bandwidth: float = 0.1,
+                 initialize_train_fn: bool = True,
                  *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(FSVGDEnsemble, self).__init__(*args, **kwargs, initialize_train_fn=False)
         n_prior_particles = n_prior_particles or self.num_ensembles
         init = vmap(self.mlp.init, (0, None))
         seed_sequence = jax.random.split(self.rng, n_prior_particles+1)
@@ -112,6 +132,29 @@ class fSVGDEnsemble(ProbabilisticEnsembleModel):
         self.priors = init(seed_sequence, self.example_input)
         self.prior_bandwidth = prior_bandwidth
         self.k_bandwidth = k_bandwidth
+
+        if initialize_train_fn:
+            def train_step(
+                    params,
+                    opt_state,
+                    x,
+                    y,
+                    prior_particles,
+                    rng,
+            ):
+                return self._train_fn(predict_fn=self._predict,
+                                      update_fn=self.optimizer.update,
+                                      params=params,
+                                      opt_state=opt_state,
+                                      x=x,
+                                      y=y,
+                                      prior_particles=prior_particles,
+                                      rng=rng,
+                                      prior_bandwidth=self.prior_bandwidth,
+                                      k_bandwidth=self.k_bandwidth,
+                                      )
+            self._train_step = jit(train_step)
+
 
     def _prior(self, prior_particles, x):
         predictions = self._predict(prior_particles, x)
@@ -124,18 +167,29 @@ class fSVGDEnsemble(ProbabilisticEnsembleModel):
         mean = jnp.mean(altered_predictions, axis=0)
         return mean, var
 
-    @partial(jit, static_argnums=0)
-    def _train_step(self, params, opt_state, x, y, prior_particles, rng):
+    @staticmethod
+    def _train_fn(
+            predict_fn,
+            update_fn,
+            params,
+            opt_state,
+            x,
+            y,
+            prior_particles,
+            rng,
+            prior_bandwidth,
+            k_bandwidth
+    ):
         # mean_prior, k_prior = self._prior(prior_particles, x)
-        rbf = lambda z,v: rbf_kernel(z, v, bandwidth=self.prior_bandwidth)
+        rbf = lambda z,v: rbf_kernel(z, v, bandwidth=prior_bandwidth)
         kernel = lambda x: rbf(x, x) #K(x, x)
         k_prior = kernel(x)
         k_prior = jnp.stack([k_prior, k_prior], axis=-1)
 
-        k_rbf = lambda z, v: rbf_kernel(z, v, bandwidth=self.k_bandwidth)
+        k_rbf = lambda z, v: rbf_kernel(z, v, bandwidth=k_bandwidth)
 
         def fsvgdloss(model_params):
-            predictions, pred_vjp = jax.vjp(lambda p: self._predict(p, x), model_params)
+            predictions, pred_vjp = jax.vjp(lambda p: predict_fn(p, x), model_params)
             k_pred, k_pred_vjp = jax.vjp(
                 lambda x: k_rbf(x, predictions), predictions)
             grad_k = k_pred_vjp(-jnp.ones(k_pred.shape))[0]
@@ -170,9 +224,9 @@ class fSVGDEnsemble(ProbabilisticEnsembleModel):
             return log_post.mean(), grad
 
         loss, grads = fsvgdloss(params)
-        updates, new_opt_state = self.optimizer.update(grads,
-                                                       opt_state,
-                                                       params=params)
+        updates, new_opt_state = update_fn(grads,
+                                           opt_state,
+                                           params=params)
         new_params = optax.apply_updates(params, updates)
         grad_norm = optax.global_norm(grads)
         return new_params, new_opt_state, loss, grad_norm
@@ -192,22 +246,36 @@ class fSVGDEnsemble(ProbabilisticEnsembleModel):
         return log_post, grad_norm
 
 
-class KDEfWGDEnsemble(fSVGDEnsemble):
+class KDEfWGDEnsemble(FSVGDEnsemble):
     def __init__(self, *args, **kwargs):
-        super(KDEfWGDEnsemble, self).__init__(*args, **kwargs)
+        super(KDEfWGDEnsemble, self).__init__(initialize_train_fn=True,
+                                              *args,
+                                              **kwargs)
 
-    @partial(jit, static_argnums=0)
-    def _train_step(self, params, opt_state, x, y, prior_particles, rng):
+
+    @staticmethod
+    def _train_fn(
+            predict_fn,
+            update_fn,
+            params,
+            opt_state,
+            x,
+            y,
+            prior_particles,
+            rng,
+            prior_bandwidth,
+            k_bandwidth
+    ):
         # mean_prior, k_prior = self._prior(prior_particles, x)
-        rbf = lambda z,v: rbf_kernel(z, v, bandwidth=self.prior_bandwidth)
+        rbf = lambda z,v: rbf_kernel(z, v, bandwidth=prior_bandwidth)
         kernel = lambda x: rbf(x, x) #K(x, x)
         k_prior = kernel(x)
         k_prior = jnp.stack([k_prior, k_prior], axis=-1)
 
-        k_rbf = lambda z, v: rbf_kernel(z, v, bandwidth=self.k_bandwidth)
+        k_rbf = lambda z, v: rbf_kernel(z, v, bandwidth=k_bandwidth)
 
         def kdeloss(model_params):
-            predictions, pred_vjp = jax.vjp(lambda p: self._predict(p, x), model_params)
+            predictions, pred_vjp = jax.vjp(lambda p: predict_fn(p, x), model_params)
             k_pred, k_pred_vjp = jax.vjp(
                 lambda x: k_rbf(x, predictions), predictions)
             grad_k = k_pred_vjp(-jnp.ones(k_pred.shape))[0]
@@ -244,10 +312,9 @@ class KDEfWGDEnsemble(fSVGDEnsemble):
             return log_post.mean(), grad
 
         loss, grads = kdeloss(params)
-        updates, new_opt_state = self.optimizer.update(grads,
+        updates, new_opt_state = update_fn(grads,
                                                        opt_state,
                                                        params=params)
         new_params = optax.apply_updates(params, updates)
         grad_norm = optax.global_norm(grads)
         return new_params, new_opt_state, loss, grad_norm
-

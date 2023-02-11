@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from mbse.utils.models import ProbabilisticEnsembleModel, fSVGDEnsemble, KDEfWGDEnsemble
+from mbse.utils.models import ProbabilisticEnsembleModel, FSVGDEnsemble, KDEfWGDEnsemble
 import seaborn as sns
 sns.reset_defaults()
 sns.set_context(context='talk', font_scale=1.0)
@@ -43,7 +43,7 @@ def dataset(x, y, batch_size):
 
 
 def plot(x, y, x_tst, y_true, yhats_mean, yhats_std, name):
-    plt.figure(figsize=[15, 4.0], dpi= 100)  # inches
+    plt.figure(figsize=[15, 4.0], dpi=100)  # inches
     plt.plot(x, y, 'b.', label='observed')
     plt.plot(x_tst, y_true, label='true function', linewidth=1.)
     #for i, yhat_mean in enumerate(yhats_mean):
@@ -79,8 +79,8 @@ x_range_train = [-10, 30]
 batch_size = 256
 y, x, x_tst, y_true = load_dataset(x_range, x_range_train, b0, w0, n=1000, n_tst=500)
 data = iter(dataset(x, y, batch_size))
-num_train_steps = 5000
-ModelName = "kde"
+num_train_steps = 20000
+ModelName = "fSVGD"
 
 NUM_ENSEMBLES = 5
 if ModelName == "ProbabilisticEnsemble":
@@ -92,7 +92,7 @@ if ModelName == "ProbabilisticEnsemble":
     )
     NAME = 'probabilistic_ensemble_'
 elif ModelName == "fSVGD":
-    model = fSVGDEnsemble(
+    model = FSVGDEnsemble(
         example_input=x[:batch_size],
         features=[64, 64],
         num_ensemble=NUM_ENSEMBLES,
@@ -106,7 +106,7 @@ else:
         features=[64, 64],
         num_ensemble=NUM_ENSEMBLES,
         lr=0.005,
-        prior_bandwidth=100,
+        #prior_bandwidth=100,
     )
     NAME = 'kde_ensemble_'
 

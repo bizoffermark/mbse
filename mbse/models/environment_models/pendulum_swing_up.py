@@ -6,6 +6,7 @@ from gym.envs.classic_control.pendulum import PendulumEnv, angle_normalize
 import jax.numpy as jnp
 import jax
 from functools import partial
+from typing import Union
 
 
 class PendulumReward(RewardModel):
@@ -125,13 +126,14 @@ class PendulumSwingUpEnv(PendulumEnv):
 
 class PendulumDynamicsModel(DynamicsModel):
     def __init__(self, env: PendulumEnv, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
+        super(PendulumDynamicsModel).__init__(*args, **kwargs)
         self.env = env
         reward_model = PendulumReward(
             action_space=self.env.action_space,
             ctrl_cost_weight=ctrl_cost_weight,
             sparse=sparse
         )
-        super(PendulumDynamicsModel).__init__(reward_model, *args, **kwargs)
+        self.reward_model = reward_model
 
     @partial(jax.jit, static_argnums=0)
     def predict(self, obs, action, rng=None):
@@ -155,7 +157,19 @@ class PendulumDynamicsModel(DynamicsModel):
         next_obs = self._get_obs(new_state)
         return next_obs.T
 
-    def evaluate(self, obs, action, rng=None):
+    def evaluate(self,
+                 parameters,
+                 obs,
+                 action,
+                 rng,
+                 sampling_idx=None,
+                 bias_obs: Union[jnp.ndarray, float] = 0.0,
+                 bias_act: Union[jnp.ndarray, float] = 0.0,
+                 bias_out: Union[jnp.ndarray, float] = 0.0,
+                 scale_obs: Union[jnp.ndarray, float] = 1.0,
+                 scale_act: Union[jnp.ndarray, float] = 1.0,
+                 scale_out: Union[jnp.ndarray, float] = 1.0,
+                 ):
         next_obs = self.predict(obs, action, rng)
         reward = self.reward_model.predict(obs, action, next_obs)
         return next_obs, reward

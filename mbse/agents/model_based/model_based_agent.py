@@ -1,7 +1,6 @@
 import jax
 
-from mbse.models.dynamics_model import DynamicsModel
-from mbse.models.bayesian_dynamics_model import BayesianDynamicsModelSummary
+from mbse.models.dynamics_model import DynamicsModel, ModelSummary
 from mbse.optimizers.dummy_optimizer import DummyOptimizer
 import gym
 from mbse.utils.utils import rollout_actions, sample_trajectories
@@ -11,6 +10,7 @@ import numpy as np
 import jax.numpy as jnp
 from functools import partial
 import wandb
+from typing import Union, Callable
 
 
 class ModelBasedAgent(DummyAgent):
@@ -33,27 +33,72 @@ class ModelBasedAgent(DummyAgent):
         self.policy_optimzer = policy_optimizer
         self.discount = discount
         self.n_particles = n_particles
+        # self.optimize = lambda rewards, key: self.policy_optimzer.optimize(
+        #        rewards,
+        #        key
+        #    )
+
+    @staticmethod
+    @partial(jax.jit, static_argnums=(0, 1, 2, 3))
+    def optimize(eval_fn,
+                 optimize_fn,
+                 n_particles,
+                 horizon,
+                 params,
+                 init_state,
+                 key,
+                 optimizer_key,
+                 bias_obs,
+                 bias_act,
+                 bias_out,
+                 scale_obs,
+                 scale_act,
+                 scale_out,
+                 ):
+        eval_func = lambda seq, x, k: sample_trajectories(
+            evaluate_fn=eval_fn,
+            parameters=params,
+            init_state=x,
+            horizon=horizon,
+            key=k,
+            actions=seq,
+            bias_obs=bias_obs,
+            bias_act=bias_act,
+            bias_out=bias_out,
+            scale_obs=scale_obs,
+            scale_act=scale_act,
+            scale_out=scale_out,
+        )
+
+        def sum_rewards(seq):
+            seq = jnp.repeat(jnp.expand_dims(seq, 0), n_particles, 0)
+            transition = eval_func(seq, init_state, key)
+            return transition.reward.mean()
+
+        action_seq, reward = optimize_fn(
+            sum_rewards,
+            optimizer_key
+        )
+        return action_seq, reward
 
     def act_in_jax(self, obs, rng, eval=False):
-
         def optimize(init_state, key, optimizer_key):
-            eval_func = lambda seq, x, k: sample_trajectories(
-                dynamics_model=self.dynamics_model,
-                init_state=x,
+
+            action_seq, reward = self.optimize(
+                eval_fn=self.dynamics_model.evaluate,
+                optimize_fn=self.policy_optimzer.optimize,
+                params=self.dynamics_model.model_params,
                 horizon=self.policy_optimzer.action_dim[-2],
-                key=k,
-                actions=seq,
-            )
-
-            @jax.jit
-            def sum_rewards(seq):
-                seq = jnp.repeat(jnp.expand_dims(seq, 0), self.n_particles, 0)
-                transition = eval_func(seq, init_state, key)
-                return transition.reward.mean()
-
-            action_seq, reward = self.policy_optimzer.optimize(
-                sum_rewards,
-                optimizer_key
+                init_state=init_state,
+                key=key,
+                optimizer_key=optimizer_key,
+                n_particles=self.n_particles,
+                bias_obs=self.dynamics_model.bias_obs,
+                bias_act=self.dynamics_model.bias_act,
+                bias_out=self.dynamics_model.bias_out,
+                scale_obs=self.dynamics_model.scale_obs,
+                scale_act=self.dynamics_model.scale_act,
+                scale_out=self.dynamics_model.scale_out,
             )
             return action_seq, reward
 
@@ -86,7 +131,7 @@ class ModelBasedAgent(DummyAgent):
                    rng,
                    buffer: ReplayBuffer,
                    ):
-        @partial(jax.jit, static_argnums=(0, 2, 3))
+        # @partial(jax.jit, static_argnums=(0, 2, 3))
         def sample_data(data_buffer, rng, batch_size, validate=False):
             val_tran = None
             if validate:
@@ -131,7 +176,7 @@ class ModelBasedAgent(DummyAgent):
             rng,
             self.dynamics_model.model_params,
             self.dynamics_model.model_opt_state,
-            BayesianDynamicsModelSummary(),
+            ModelSummary(),
         ]
         carry, outs = jax.lax.scan(step, carry, xs=None, length=self.train_steps)
         self.dynamics_model.update_model(model_params=carry[1], model_opt_state=carry[2])
@@ -139,6 +184,20 @@ class ModelBasedAgent(DummyAgent):
         if self.use_wandb:
             wandb.log(summary.dict())
 
-    def set_transforms(self, transforms, inverse_transforms):
-        self.dynamics_model.set_transforms(transforms, inverse_transforms)
+    def set_transforms(self,
+                       bias_obs: Union[jnp.ndarray, float] = 0.0,
+                       bias_act: Union[jnp.ndarray, float] = 0.0,
+                       bias_out: Union[jnp.ndarray, float] = 0.0,
+                       scale_obs: Union[jnp.ndarray, float] = 1.0,
+                       scale_act: Union[jnp.ndarray, float] = 1.0,
+                       scale_out: Union[jnp.ndarray, float] = 1.0,
+                       ):
+        self.dynamics_model.set_transforms(
+            bias_obs=bias_obs,
+            bias_act=bias_act,
+            bias_out=bias_out,
+            scale_obs=scale_obs,
+            scale_act=scale_act,
+            scale_out=scale_out,
+        )
 

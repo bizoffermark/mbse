@@ -81,6 +81,7 @@ def get_soft_td_target(
         obs=obs,
         rng=rng,
     )
+
     # Get predictions for both Q functions and take the min
     _, _, target_v = critic_fn(critic_target_params, obs=next_obs,
                                action=jnp.zeros_like(current_action))
@@ -365,6 +366,8 @@ class SACAgent(DummyAgent):
         self.q_update_frequency = q_update_frequency
         self.scale_reward = scale_reward
         self.tau = tau
+        self.log_alpha_apply = jax.jit(self.log_alpha.apply)
+        self.actor_apply = jax.jit(self.actor.apply)
 
     def act_in_jax(self, obs, rng=None, eval=False):
         return get_action(
@@ -375,7 +378,6 @@ class SACAgent(DummyAgent):
             eval
         )
 
-    @partial(jit, static_argnums=(0))
     def _train_step_(self,
                      rng,
                      tran: Transition,
@@ -387,6 +389,7 @@ class SACAgent(DummyAgent):
                      target_critic_params,
                      critic_opt_state,
                      ):
+
         rng, actor_rng, td_rng = random.split(rng, 3)
         alpha = jax.lax.stop_gradient(
             jnp.exp(
@@ -454,8 +457,8 @@ class SACAgent(DummyAgent):
 
         summary = SACModelSummary()
         if self.use_wandb:
-            log_alpha = self.log_alpha.apply(new_alpha_params)
-            _, std = self.actor.apply(new_actor_params, tran.obs)
+            log_alpha = self.log_alpha_apply(new_alpha_params)
+            _, std = self.actor_apply(new_actor_params, tran.obs)
 
             summary = SACModelSummary(
                 actor_loss=actor_loss.astype(float),
@@ -492,7 +495,7 @@ class SACAgent(DummyAgent):
                    buffer: ReplayBuffer,
                    ):
 
-        @partial(jit, static_argnums=(0, 2))
+        # @partial(jit, static_argnums=(0, 2))
         def sample_data(data_buffer, rng, batch_size):
             tran = data_buffer.sample(rng, batch_size=batch_size)
             return tran

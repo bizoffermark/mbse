@@ -9,7 +9,7 @@ def loss_function(x, bias):
     return -jnp.sum(jnp.square(x-bias))
 
 
-opt_cls = CrossEntropyOptimizer
+opt_cls = GradientBasedOptimizer
 num_steps = 25
 action_dim = (10, 2)
 for bias in jnp.linspace(-5, 5, 10):

@@ -4,6 +4,7 @@ from flax import struct
 import numpy as np
 from typing import Union
 EPS = 1e-8
+from copy import deepcopy
 
 
 def identity_transform(obs, action=None, next_state=None):
@@ -125,6 +126,8 @@ class ReplayBuffer(object):
                 self.action_normalizer.update(self.action[start:end])
             if self.learn_deltas:
                 self.next_state_normalizer.update(self.next_obs[start:end] - self.obs[start:end])
+            else:
+                self.next_state_normalizer = deepcopy(self.state_normalizer)
             self.reward_normalizer.update(self.reward[start:end])
         self.current_ptr = end % self.max_size
 
@@ -144,41 +147,6 @@ class ReplayBuffer(object):
                 self.reward_normalizer.normalize(jnp.asarray(self.reward)[ind]),
                 jnp.asarray(self.done)[ind],
             )
-
-    def transform(self, obs, action=None, next_state=None):
-        if next_state is not None:
-            if self.learn_deltas:
-                transformed_next_state = \
-                    self.next_state_normalizer.normalize(next_state - obs)
-            else:
-                transformed_next_state = self.state_normalizer.normalize(next_state)
-        else:
-            transformed_next_state = None
-
-        transformed_action = None
-        if action is not None:
-            transformed_action = self.action_normalizer.normalize(action)
-
-        transformed_state = self.state_normalizer.normalize(obs)
-        return transformed_state, transformed_action, transformed_next_state
-
-    def inverse_transform(self, transformed_obs, transformed_action=None, transformed_next_state=None):
-        obs = self.state_normalizer.inverse(transformed_obs)
-        if transformed_next_state is not None:
-            if self.learn_deltas:
-                next_state = self.next_state_normalizer.inverse(
-                    transformed_next_state
-                ) + obs
-            else:
-                next_state = self.state_normalizer.inverse(
-                    transformed_next_state
-                )
-        else:
-            next_state = None
-        action = None
-        if transformed_action is not None:
-            action = self.action_normalizer.inverse(transformed_action)
-        return obs, action, next_state
 
     def reset(self):
         self.current_ptr = 0

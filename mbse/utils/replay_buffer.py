@@ -57,6 +57,29 @@ class Transition:
     def shape(self):
         return self.obs.shape[:-1]
 
+    def reshape(self, dim_1, dim_2):
+        tran = Transition(
+            obs=self.obs.reshape(dim_1, dim_2, -1),
+            action=self.action.reshape(dim_1, dim_2, -1),
+            next_obs=self.next_obs.reshape(dim_1, dim_2, -1),
+            reward=self.reward.reshape(dim_1, dim_2, -1),
+            done=self.done.reshape(dim_1, dim_2, -1)
+        )
+        return tran
+
+    def get_idx(self, idx):
+        tran = Transition(
+            obs=self.obs[idx],
+            action=self.action[idx],
+            next_obs=self.next_obs[idx],
+            reward=self.reward[idx],
+            done=self.done[idx]
+        )
+        return tran
+
+    def get_data(self):
+        return self.obs, self.action, self.next_obs, self.reward, self.done
+
 
 class Normalizer(object):
     def __init__(self, input_shape):

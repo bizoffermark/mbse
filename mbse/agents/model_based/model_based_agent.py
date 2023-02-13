@@ -3,14 +3,12 @@ import jax
 from mbse.models.dynamics_model import DynamicsModel, ModelSummary
 from mbse.optimizers.dummy_optimizer import DummyOptimizer
 import gym
-from mbse.utils.utils import rollout_actions, sample_trajectories
+from mbse.utils.utils import sample_trajectories
 from mbse.utils.replay_buffer import ReplayBuffer
 from mbse.agents.dummy_agent import DummyAgent
-import numpy as np
 import jax.numpy as jnp
-from functools import partial
 import wandb
-from typing import Union, Callable
+from typing import Union
 
 
 class ModelBasedAgent(DummyAgent):
@@ -33,28 +31,95 @@ class ModelBasedAgent(DummyAgent):
         self.policy_optimzer = policy_optimizer
         self.discount = discount
         self.n_particles = n_particles
+        self._init_fn()
+
         # self.optimize = lambda rewards, key: self.policy_optimzer.optimize(
         #        rewards,
         #        key
         #    )
 
+    def _init_fn(self):
+        def _optimize(
+                params,
+                init_state,
+                key,
+                optimizer_key,
+                bias_obs,
+                bias_act,
+                bias_out,
+                scale_obs,
+                scale_act,
+                scale_out):
+            return self._optimize(
+                eval_fn=self.dynamics_model.evaluate,
+                optimize_fn=self.policy_optimzer.optimize,
+                n_particles=self.n_particles,
+                horizon=self.policy_optimzer.action_dim[-2],
+                params=params,
+                init_state=init_state,
+                key=key,
+                optimizer_key=optimizer_key,
+                bias_obs=bias_obs,
+                bias_act=bias_act,
+                bias_out=bias_out,
+                scale_obs=scale_obs,
+                scale_act=scale_act,
+                scale_out=scale_out,
+            )
+
+        self.optimize = jax.jit(_optimize)
+
+        def step(carry, ins):
+            rng = carry[0]
+            model_params = carry[1]
+            model_opt_state = carry[2]
+            idx = carry[4]
+            transition = carry[5]
+            val_transition = carry[6]
+            train_rng, rng = jax.random.split(rng, 2)
+            tran = transition.get_idx(idx)
+            val_tran = val_transition.get_idx(idx)
+
+            (
+                new_model_params,
+                new_model_opt_state,
+                summary,
+            ) = \
+                self.dynamics_model._train_step(
+                    tran=tran,
+                    model_params=model_params,
+                    model_opt_state=model_opt_state,
+                    val=val_tran,
+                )
+            carry = [
+                rng,
+                new_model_params,
+                new_model_opt_state,
+                summary,
+                idx + 1,
+                transition,
+                val_transition,
+            ]
+            outs = carry[1:]
+            return carry, outs
+        self.step = step
+
     @staticmethod
-    @partial(jax.jit, static_argnums=(0, 1, 2, 3))
-    def optimize(eval_fn,
-                 optimize_fn,
-                 n_particles,
-                 horizon,
-                 params,
-                 init_state,
-                 key,
-                 optimizer_key,
-                 bias_obs,
-                 bias_act,
-                 bias_out,
-                 scale_obs,
-                 scale_act,
-                 scale_out,
-                 ):
+    def _optimize(eval_fn,
+                  optimize_fn,
+                  n_particles,
+                  horizon,
+                  params,
+                  init_state,
+                  key,
+                  optimizer_key,
+                  bias_obs,
+                  bias_act,
+                  bias_out,
+                  scale_obs,
+                  scale_act,
+                  scale_out,
+                  ):
         eval_func = lambda seq, x, k: sample_trajectories(
             evaluate_fn=eval_fn,
             parameters=params,
@@ -85,14 +150,10 @@ class ModelBasedAgent(DummyAgent):
         def optimize(init_state, key, optimizer_key):
 
             action_seq, reward = self.optimize(
-                eval_fn=self.dynamics_model.evaluate,
-                optimize_fn=self.policy_optimzer.optimize,
                 params=self.dynamics_model.model_params,
-                horizon=self.policy_optimzer.action_dim[-2],
                 init_state=init_state,
                 key=key,
                 optimizer_key=optimizer_key,
-                n_particles=self.n_particles,
                 bias_obs=self.dynamics_model.bias_obs,
                 bias_act=self.dynamics_model.bias_act,
                 bias_out=self.dynamics_model.bias_out,
@@ -110,7 +171,7 @@ class ModelBasedAgent(DummyAgent):
         else:
             n_envs = obs.shape[0]
             obs = jnp.repeat(jnp.expand_dims(obs, 1), self.n_particles, 1)
-            #eval_func = lambda seq: rollout_actions(seq,
+            # eval_func = lambda seq: rollout_actions(seq,
             #                                        initial_state=obs,
             #                                        dynamics_model=self.dynamics_model,
             #                                        reward_model=self.reward_model,
@@ -132,53 +193,25 @@ class ModelBasedAgent(DummyAgent):
                    buffer: ReplayBuffer,
                    ):
         # @partial(jax.jit, static_argnums=(0, 2, 3))
-        def sample_data(data_buffer, rng, batch_size, validate=False):
-            val_tran = None
-            if validate:
-                rng, val_rng = jax.random.split(rng, 2)
-                val_tran = data_buffer.sample(val_rng, batch_size=batch_size)
-            tran = data_buffer.sample(rng, batch_size=batch_size)
-            return tran, val_tran
+        transitions = buffer.sample(rng, batch_size=int(self.batch_size * self.train_steps))
+        transitions = transitions.reshape(self.train_steps, self.batch_size)
+        val_transitions = None
+        if self.validate:
+            rng, val_rng = jax.random.split(rng, 2)
+            val_transitions = buffer.sample(val_rng, batch_size=int(self.batch_size * self.train_steps))
+            val_transitions = val_transitions.reshape(self.train_steps, self.batch_size)
 
-        def step(carry, ins):
-            rng = carry[0]
-            model_params = carry[1]
-            model_opt_state = carry[2]
-            buffer_rng, train_rng, rng = jax.random.split(rng, 3)
-            tran, val_tran = sample_data(
-                buffer,
-                buffer_rng,
-                self.batch_size,
-                self.validate
-            )
-
-            (
-                new_model_params,
-                new_model_opt_state,
-                summary,
-            ) = \
-                self.dynamics_model._train_step(
-                    tran=tran,
-                    model_params=model_params,
-                    model_opt_state=model_opt_state,
-                    val=val_tran,
-                )
-            carry = [
-                rng,
-                new_model_params,
-                new_model_opt_state,
-                summary,
-            ]
-            outs = carry[1:]
-            return carry, outs
 
         carry = [
             rng,
             self.dynamics_model.model_params,
             self.dynamics_model.model_opt_state,
             ModelSummary(),
+            0,
+            transitions,
+            val_transitions,
         ]
-        carry, outs = jax.lax.scan(step, carry, xs=None, length=self.train_steps)
+        carry, outs = jax.lax.scan(self.step, carry, xs=None, length=self.train_steps)
         self.dynamics_model.update_model(model_params=carry[1], model_opt_state=carry[2])
         summary = carry[3]
         if self.use_wandb:
@@ -200,4 +233,3 @@ class ModelBasedAgent(DummyAgent):
             scale_act=scale_act,
             scale_out=scale_out,
         )
-

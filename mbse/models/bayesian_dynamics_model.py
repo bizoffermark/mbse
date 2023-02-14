@@ -78,6 +78,7 @@ class BayesianDynamicsModel(DynamicsModel):
             assert False, "Model class must be ProbabilisticEnsembleModel or fSVGDEnsemble."
 
         obs_dim = np.prod(observation_space.shape)
+        act_dim = np.prod(action_space.shape)
         sample_obs = observation_space.sample()
         sample_act = action_space.sample()
         obs_action = jnp.concatenate([sample_obs, sample_act], axis=-1)
@@ -96,6 +97,7 @@ class BayesianDynamicsModel(DynamicsModel):
         self.sampling_type = SamplingType
         self.sampling_idx = jnp.zeros(1)
         self.obs_dim = obs_dim
+        self.act_dim = act_dim
 
         def predict(parameters,
                      obs,

@@ -57,7 +57,7 @@ class HUCRLModel(BayesianDynamicsModel):
                 predict_fn=self.model._predict,
                 parameters=parameters,
                 obs=obs,
-                obs_dim=self.obs_dim,
+                act_dim=self.act_dim,
                 action=action,
                 rng=rng,
                 num_ensembles=self.model.num_ensembles,
@@ -126,7 +126,7 @@ class HUCRLModel(BayesianDynamicsModel):
     @staticmethod
     def _predict(predict_fn,
                  parameters,
-                 obs_dim,
+                 act_dim,
                  obs,
                  action,
                  rng,
@@ -142,13 +142,12 @@ class HUCRLModel(BayesianDynamicsModel):
                  pred_diff: bool = 1,
                  sampling_idx: Optional[int] = None,
                  ):
-        eta, act = jnp.split(action, axis=-1, indices_or_sections=[obs_dim])
+        act, eta = jnp.split(action, axis=-1, indices_or_sections=[act_dim])
         transformed_obs = (obs - bias_obs) / scale_obs
         transformed_act = (act - bias_act) / scale_act
         obs_action = jnp.concatenate([transformed_obs, transformed_act], axis=-1)
         next_obs_tot = predict_fn(parameters, obs_action)
         mean, std = jnp.split(next_obs_tot, 2, axis=-1)
-        next_obs_mean = jnp.mean(mean, axis=0)
 
         if rng is None:
             mean, _ = jnp.split(next_obs_tot, 2, axis=-1)

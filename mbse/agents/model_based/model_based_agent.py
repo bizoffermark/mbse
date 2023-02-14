@@ -186,6 +186,7 @@ class ModelBasedAgent(DummyAgent):
                 optimizer_rng
             )
             action = action_sequence[:, 0, ...]
+        action = action[..., :self.action_space.shape[0]]
         return action
 
     def train_step(self,

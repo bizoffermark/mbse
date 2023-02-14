@@ -95,6 +95,7 @@ class BayesianDynamicsModel(DynamicsModel):
         )
         self.sampling_type = SamplingType
         self.sampling_idx = jnp.zeros(1)
+        self.obs_dim = obs_dim
 
         def predict(parameters,
                      obs,

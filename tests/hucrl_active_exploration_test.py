@@ -2,19 +2,15 @@ from argparse_dataclass import ArgumentParser
 from typing import Any
 import yaml
 from mbse.trainer.model_based.model_based_trainer import ModelBasedTrainer as Trainer
-from mbse.agents.model_based.model_based_agent import ModelBasedAgent
+from mbse.agents.model_based.mb_active_exploration_agent import MBActiveExplorationAgent
 from dataclasses import dataclass, field
 import wandb
 from gym.wrappers.time_limit import TimeLimit
 from gym.wrappers.rescale_action import RescaleAction
 from mbse.models.environment_models.pendulum_swing_up import PendulumSwingUpEnv, PendulumDynamicsModel
 from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
-from mbse.optimizers.gradient_based_optimizer import GradientBasedOptimizer
-from mbse.agents.actor_critic.sac import SACAgent
 from mbse.utils.vec_env.env_util import make_vec_env
-from mbse.models.bayesian_dynamics_model import BayesianDynamicsModel
-from jax.config import config
-config.update("jax_log_compiles", 1)
+from mbse.models.active_learning_model import ActiveLearningModel
 
 OptState = Any
 
@@ -44,7 +40,7 @@ if __name__ == "__main__":
     reward_model = env.envs[0].reward_model()
     reward_model.set_bounds(max_action=1.0)
     dynamics_model = PendulumDynamicsModel(env=env.envs[0])
-    dynamics_model = BayesianDynamicsModel(
+    dynamics_model = ActiveLearningModel(
         action_space=env.action_space,
         observation_space=env.observation_space,
         num_ensemble=5,
@@ -60,7 +56,7 @@ if __name__ == "__main__":
     #)
 
     model_based_agent_fn = lambda x, y, z, v: \
-        ModelBasedAgent(
+        MBActiveExplorationAgent(
             use_wandb=x,
             validate=y,
             train_steps=z,
@@ -75,7 +71,7 @@ if __name__ == "__main__":
                 num_samples=500,
                 num_elites=50,
                 num_steps=10,
-                action_dim=(horizon, env.action_space.shape[0])),
+                action_dim=(horizon, env.action_space.shape[0] + env.observation_space.shape[0])),
     )
 
     USE_WANDB = True

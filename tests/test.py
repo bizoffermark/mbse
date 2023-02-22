@@ -13,7 +13,8 @@ from gym.wrappers.rescale_action import RescaleAction
 from mbse.utils.vec_env.env_util import make_vec_env
 
 OptState = Any
-
+# from jax.config import config
+# config.update("jax_log_compiles", 1)
 
 @dataclass
 class Experiment:

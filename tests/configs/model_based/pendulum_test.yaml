@@ -1,5 +1,5 @@
 seed: 6
-project_name: "Pendulum-test-model-based"
+project_name: "Pendulum-test-model-based-check"
 time_limit: 200
 agent:
   discount: 0.99

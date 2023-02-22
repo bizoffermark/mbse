@@ -49,7 +49,7 @@ class OffPolicyTrainer(DummyTrainer):
         obs, _ = self.env.reset(seed=reset_seed)
         for step in tqdm(range(learning_steps)):
             actor_rng, train_rng = random.split(rng_keys[step], 2)
-            policy = self.agent.act
+            policy = self.agent.act_in_train
             transitions, obs, done = self.step_env(obs, policy, self.rollout_steps, actor_rng)
             self.buffer.add(transitions)
             #    reset_rng, next_reset_rng = random.split(reset_rng, 2)

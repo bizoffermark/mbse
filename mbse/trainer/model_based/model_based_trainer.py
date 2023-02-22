@@ -70,7 +70,7 @@ class ModelBasedTrainer(DummyTrainer):
                 scale_out=self.buffer.next_state_normalizer.std,
 
             )
-            policy = self.agent.act
+            policy = self.agent.act_in_train
             actor_rng, val_rng = random.split(actor_rng, 2)
             transitions, obs, done = self.step_env(obs, policy, self.rollout_steps, actor_rng)
             self.buffer.add(transitions)

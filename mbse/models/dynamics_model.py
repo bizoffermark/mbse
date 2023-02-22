@@ -10,6 +10,8 @@ class ModelSummary:
     grad_norm: jnp.array = 0.0
     val_logl: jnp.array = 0.0
     val_mse: jnp.array = 0.0
+    val_al_std: jnp.array = 0.0
+    val_eps_std: jnp.array = 0.0
 
     def dict(self):
         return {
@@ -17,6 +19,8 @@ class ModelSummary:
             'grad_norm': self.grad_norm.item(),
             'val_logl': self.val_logl.item(),
             'val_mse': self.val_mse.item(),
+            'val_al_std': self.val_al_std.item(),
+            'val_eps_std': self.val_eps_std.item(),
         }
 
 

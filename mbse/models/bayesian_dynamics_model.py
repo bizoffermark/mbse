@@ -273,73 +273,6 @@ class BayesianDynamicsModel(DynamicsModel):
         next_obs = next_obs*scale_out + bias_out + pred_diff * obs
         return next_obs
 
-    # def predict(self, obs, action, rng=None):
-    #     """
-    #     Predict using learning model
-    #     :param obs: observation, shape (batch, dim_state)
-    #     :param action: action, shape (batch, dim_action)
-    #     :param rng:
-    #     :return:
-    #
-    #     """
-    #     obs_action = jnp.concatenate([obs, action], axis=-1)
-    #     next_obs_tot = self.model.predict(obs_action)
-    #     batch_size = obs.shape[0]
-    #     next_obs = next_obs_tot
-    #
-    #     sampling_scheme = 'mean' if rng is None \
-    #         else self.sampling_type.name
-    #
-    #     if sampling_scheme == 'mean':
-    #         mean, _ = jnp.split(next_obs_tot, 2, axis=-1)
-    #         next_obs = jnp.mean(mean, axis=0)
-    #
-    #     elif sampling_scheme == 'TS1':
-    #         model_rng, sample_rng = jax.random.split(rng, 2)
-    #         model_idx = jax.random.randint(
-    #             model_rng,
-    #             shape=(batch_size, ),
-    #             minval=0,
-    #             maxval=self.model.num_ensembles)
-    #
-    #         sample_rng = jax.random.split(
-    #             sample_rng,
-    #             batch_size
-    #         )
-    #
-    #         next_obs = jax.vmap(sample, in_axes=(1, 0, 0), out_axes=0)(
-    #             next_obs_tot,
-    #             model_idx,
-    #             sample_rng
-    #         )
-    #     elif sampling_scheme == 'TSInf':
-    #         assert self.sampling_idx.shape[0] == batch_size, \
-    #             'Set sampling indexes size to be particle size'
-    #         sample_rng = jax.random.split(
-    #             rng,
-    #             batch_size
-    #         )
-    #         next_obs = jax.vmap(sample, in_axes=(1, 1, 1), out_axes=1)(
-    #             next_obs_tot,
-    #             self.sampling_idx,
-    #             sample_rng
-    #         )
-    #
-    #     elif sampling_scheme == 'DS':
-    #         mean, std = jnp.split(next_obs_tot, 2, axis=-1)
-    #         obs_mean = jnp.mean(mean, axis=0)
-    #         al_var = jnp.mean(jnp.square(std), axis=0)
-    #         ep_var = jnp.var(mean, axis=0)
-    #         obs_var = al_var + ep_var
-    #         obs_std = jnp.sqrt(obs_var)
-    #         next_obs = sample_normal_dist(
-    #             obs_mean,
-    #             obs_std,
-    #             rng,
-    #         )
-    #
-    #     return next_obs
-
     @staticmethod
     def _train(train_fn, predict_fn, tran: Transition, model_params, model_opt_state, val: Transition = None):
 
@@ -362,6 +295,7 @@ class BayesianDynamicsModel(DynamicsModel):
                 out_axes=0
             )
             mean, std = jnp.split(y_pred, 2, axis=-1)
+            eps_std = jnp.std(mean, axis=0)
             logl = val_likelihood(val_y, mean, std)
             val_logl = logl.mean()
             val_mse = jax.vmap(
@@ -373,6 +307,8 @@ class BayesianDynamicsModel(DynamicsModel):
             grad_norm=grad_norm.astype(float),
             val_logl=val_logl.astype(float),
             val_mse=val_mse.astype(float),
+            val_al_std=std.mean().astype(float),
+            val_eps_std=eps_std.mean().astype(float),
         )
 
         return new_model_params, new_model_opt_state, summary

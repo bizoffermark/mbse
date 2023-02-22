@@ -11,6 +11,7 @@ class DummyAgent(object):
         self.validate = validate
         self.train_steps = train_steps
         self.batch_size = batch_size
+        self.act_in_train = lambda obs, rng: self.act(obs, rng, eval=False)
         pass
 
     def act(self, obs: np.ndarray, rng=None, eval=False):

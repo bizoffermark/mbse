@@ -1,5 +1,3 @@
-import torch
-import gym
 from gym.wrappers import RescaleAction, TimeLimit
 from mbse.utils.vec_env.env_util import make_vec_env
 from mbse.models.environment_models.pendulum_swing_up import PendulumReward
@@ -7,7 +5,6 @@ from mbse.models.active_learning_model import ActiveLearningModel
 from mbse.agents.model_based.mb_active_exploration_agent import MBActiveExplorationAgent
 from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
 from mbse.trainer.model_based.model_based_trainer import ModelBasedTrainer as Trainer
-from typing import Union
 import numpy as np
 import time
 import json
@@ -128,7 +125,6 @@ def main(args):
     """ Experiment core """
     t_start = time.time()
     np.random.seed(args.seed + 5)
-    torch.manual_seed(args.seed)
 
     eval_metrics = experiment(
         use_wandb=args.use_wandb,

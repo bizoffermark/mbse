@@ -103,7 +103,7 @@ if __name__ == '__main__':
     parser.add_argument('--exp_name', type=str, default='Pendulum-ActiveExploration')
     parser.add_argument('--num_cpus', type=int, default=8, help='number of cpus to use')
     parser.add_argument('--num_gpus', type=int, default=1, help='number of gpus to use')
-    parser.add_argument('--launch_mode', type=str, default='local', help='how to launch the experiments')
+    parser.add_argument('--launch_mode', type=str, default='euler', help='how to launch the experiments')
     parser.add_argument('--num_hparam_samples', type=int, default=1)
     parser.add_argument('--num_seeds_per_hparam', type=int, default=3)
 

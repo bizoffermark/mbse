@@ -2,16 +2,15 @@ import os
 
 import jax
 from mbse.utils.replay_buffer import Transition, ReplayBuffer
-# from mbse.agents.dummy_agent import DummyAgent
 from typing import Callable
 import wandb
-import cloudpickle
 from copy import deepcopy
 import numpy as np
 from mbse.utils.vec_env import VecEnv
 from tqdm import tqdm
 from gym.wrappers.record_video import RecordVideo
 import glob
+from datetime import datetime
 
 
 class DummyTrainer(object):
@@ -60,8 +59,11 @@ class DummyTrainer(object):
         self.eval_freq = eval_freq
         self.exploration_steps = exploration_steps
         self.rollout_steps = rollout_steps
+        now = datetime.now()
+        dt_string = now.strftime("%d_%m_%Y_%H_%M_%S")
+        self.video_dir_name = 'video' + dt_string
         if record_test_video:
-            test_env_wrapper = lambda x: RecordVideo(x, video_folder='./video', episode_trigger=lambda x: True)
+            test_env_wrapper = lambda x: RecordVideo(x, video_folder='./' + self.video_dir_name, episode_trigger=lambda x: True)
         else:
             test_env_wrapper = lambda x: x
         self.test_env = test_env_wrapper(deepcopy(self.env.envs[0]))
@@ -217,7 +219,7 @@ class DummyTrainer(object):
         avg_reward /= self.eval_episodes
         pbar.close()
         if self.use_wandb and self.record_test_video:
-            mp4list = glob.glob('video/*.mp4')
+            mp4list = glob.glob(self.video_dir_name + '/*.mp4')
             if len(mp4list) > 0:
                 mp4 = mp4list[-1]
                 # log gameplay video in wandb

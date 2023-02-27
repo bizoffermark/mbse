@@ -14,7 +14,6 @@ from mbse.utils.utils import gaussian_log_likelihood
 from mbse.utils.network_utils import mse
 
 
-
 class SamplingType:
     name: str = 'TS1'
     name_types: List[str] = \
@@ -36,9 +35,9 @@ def sample(predictions, idx, s_rng):
     """
     pred = predictions[idx]
     mu, sig = jnp.split(pred,
-                          2,
-                          axis=-1
-                          )
+                        2,
+                        axis=-1
+                        )
 
     sampled_obs = sample_normal_dist(
         mu,
@@ -66,7 +65,7 @@ class BayesianDynamicsModel(DynamicsModel):
                  *args,
                  **kwargs
                  ):
-        
+
         super(BayesianDynamicsModel, self).__init__(*args, **kwargs)
         self.reward_model = reward_model
         if model_class == "ProbabilisticEnsembleModel":
@@ -98,18 +97,20 @@ class BayesianDynamicsModel(DynamicsModel):
         self.sampling_idx = jnp.zeros(1)
         self.obs_dim = obs_dim
         self.act_dim = act_dim
+        self._init_fn()
 
+    def _init_fn(self):
         def predict(parameters,
-                     obs,
-                     action,
-                     rng, sampling_idx=self.sampling_idx,
-                     bias_obs: Union[jnp.ndarray, float] = 0.0,
-                     bias_act: Union[jnp.ndarray, float] = 0.0,
-                     bias_out: Union[jnp.ndarray, float] = 0.0,
-                     scale_obs: Union[jnp.ndarray, float] = 1.0,
-                     scale_act: Union[jnp.ndarray, float] = 1.0,
-                     scale_out: Union[jnp.ndarray, float] = 1.0,
-                     ):
+                    obs,
+                    action,
+                    rng, sampling_idx=self.sampling_idx,
+                    bias_obs: Union[jnp.ndarray, float] = 0.0,
+                    bias_act: Union[jnp.ndarray, float] = 0.0,
+                    bias_out: Union[jnp.ndarray, float] = 0.0,
+                    scale_obs: Union[jnp.ndarray, float] = 1.0,
+                    scale_act: Union[jnp.ndarray, float] = 1.0,
+                    scale_out: Union[jnp.ndarray, float] = 1.0,
+                    ):
             return self._predict(
                 predict_fn=self.model._predict,
                 parameters=parameters,
@@ -128,6 +129,7 @@ class BayesianDynamicsModel(DynamicsModel):
                 scale_out=scale_out,
                 pred_diff=self.pred_diff,
             )
+
         self.predict = jax.jit(predict)
 
         def evaluate(
@@ -144,29 +146,29 @@ class BayesianDynamicsModel(DynamicsModel):
                 scale_out: Union[jnp.ndarray, float] = 1.0,
         ):
             return self._evaluate(
-                    pred_fn=self.predict,
-                    reward_fn=self.reward_model.predict,
-                    parameters=parameters,
-                    obs=obs,
-                    action=action,
-                    rng=rng,
-                    sampling_idx=sampling_idx,
-                    bias_obs=bias_obs,
-                    bias_act=bias_act,
-                    bias_out=bias_out,
-                    scale_obs=scale_obs,
-                    scale_act=scale_act,
-                    scale_out=scale_out,
+                pred_fn=self.predict,
+                reward_fn=self.reward_model.predict,
+                parameters=parameters,
+                obs=obs,
+                action=action,
+                rng=rng,
+                sampling_idx=sampling_idx,
+                bias_obs=bias_obs,
+                bias_act=bias_act,
+                bias_out=bias_out,
+                scale_obs=scale_obs,
+                scale_act=scale_act,
+                scale_out=scale_out,
             )
+
         self.evaluate = jax.jit(evaluate)
 
         def _train_step(
-                    tran: Transition,
-                    model_params,
-                    model_opt_state,
-                    val: Optional[Transition] = None
+                tran: Transition,
+                model_params,
+                model_opt_state,
+                val: Optional[Transition] = None
         ):
-
             return self._train(
                 train_fn=self.model._train_step,
                 predict_fn=self.model._predict,
@@ -178,6 +180,31 @@ class BayesianDynamicsModel(DynamicsModel):
 
         self._train_step = jax.jit(_train_step)
 
+        def _predict_raw(
+                parameters,
+                tran: Transition,
+                bias_obs: Union[jnp.ndarray, float] = 0.0,
+                bias_act: Union[jnp.ndarray, float] = 0.0,
+                bias_out: Union[jnp.ndarray, float] = 0.0,
+                scale_obs: Union[jnp.ndarray, float] = 1.0,
+                scale_act: Union[jnp.ndarray, float] = 1.0,
+                scale_out: Union[jnp.ndarray, float] = 1.0,
+        ):
+            return self._predict_raw(
+                predict_fn=self.model._predict,
+                parameters=parameters,
+                tran=tran,
+                bias_obs=bias_obs,
+                bias_act=bias_act,
+                bias_out=bias_out,
+                scale_obs=scale_obs,
+                scale_act=scale_act,
+                scale_out=scale_out,
+                pred_diff=self.pred_diff,
+            )
+
+        self.predict_raw = jax.jit(_predict_raw)
+
     def set_sampling_type(self, name):
         self.sampling_type.set_type(name)
 
@@ -187,6 +214,30 @@ class BayesianDynamicsModel(DynamicsModel):
             0,
             self.model.num_ensembles
         )
+
+    @staticmethod
+    def _predict_raw(
+            predict_fn,
+            parameters,
+            tran: Transition,
+            bias_obs: Union[jnp.ndarray, float] = 0.0,
+            bias_act: Union[jnp.ndarray, float] = 0.0,
+            bias_out: Union[jnp.ndarray, float] = 0.0,
+            scale_obs: Union[jnp.ndarray, float] = 1.0,
+            scale_act: Union[jnp.ndarray, float] = 1.0,
+            scale_out: Union[jnp.ndarray, float] = 1.0,
+            pred_diff: bool = 1,
+    ):
+        obs = tran.obs
+        action = tran.action
+        transformed_obs = (obs - bias_obs) / scale_obs
+        transformed_act = (action - bias_act) / scale_act
+        obs_action = jnp.concatenate([transformed_obs, transformed_act], axis=-1)
+        next_obs_tot = predict_fn(parameters, obs_action)
+        mean, std = jnp.split(next_obs_tot, 2, axis=-1)
+        next_obs_mean = mean * scale_out + bias_out + pred_diff * obs
+        next_obs_std = std * scale_out
+        return next_obs_mean, next_obs_std
 
     @staticmethod
     def _predict(predict_fn,
@@ -214,8 +265,8 @@ class BayesianDynamicsModel(DynamicsModel):
                 :return:
 
                 """
-        transformed_obs = (obs - bias_obs)/scale_obs
-        transformed_act = (action - bias_act)/scale_act
+        transformed_obs = (obs - bias_obs) / scale_obs
+        transformed_act = (action - bias_act) / scale_act
         obs_action = jnp.concatenate([transformed_obs, transformed_act], axis=-1)
         next_obs_tot = predict_fn(parameters, obs_action)
         next_obs = next_obs_tot
@@ -270,7 +321,7 @@ class BayesianDynamicsModel(DynamicsModel):
                 obs_std,
                 rng,
             )
-        next_obs = next_obs*scale_out + bias_out + pred_diff * obs
+        next_obs = next_obs * scale_out + bias_out + pred_diff * obs
         return next_obs
 
     @staticmethod
@@ -347,23 +398,17 @@ class BayesianDynamicsModel(DynamicsModel):
             rng, model_rng = jax.random.split(rng, 2)
             rng, reward_rng = jax.random.split(rng, 2)
         next_obs = pred_fn(
-                     parameters=parameters,
-                     obs=obs,
-                     action=action,
-                     rng=model_rng,
-                     sampling_idx=sampling_idx,
-                     bias_obs=bias_obs,
-                     bias_act=bias_act,
-                     bias_out=bias_out,
-                     scale_obs=scale_obs,
-                     scale_act=scale_act,
-                     scale_out=scale_out
+            parameters=parameters,
+            obs=obs,
+            action=action,
+            rng=model_rng,
+            sampling_idx=sampling_idx,
+            bias_obs=bias_obs,
+            bias_act=bias_act,
+            bias_out=bias_out,
+            scale_obs=scale_obs,
+            scale_act=scale_act,
+            scale_out=scale_out
         )
-        #transformed_obs, transformed_action, _ = self.transforms(obs, action)
-        #transformed_next_obs = self.predict(transformed_obs, transformed_action, model_rng)
-        #_, _, next_obs = self.inverse_transforms(transformed_obs=transformed_obs, transformed_action=None,
-        #                                         transformed_next_state=transformed_next_obs)
         reward = reward_fn(obs, action, next_obs, reward_rng)
         return next_obs, reward
-
-

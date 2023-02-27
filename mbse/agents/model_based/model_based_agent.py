@@ -4,7 +4,7 @@ from mbse.models.dynamics_model import DynamicsModel, ModelSummary
 from mbse.optimizers.dummy_optimizer import DummyOptimizer
 import gym
 from mbse.utils.utils import sample_trajectories
-from mbse.utils.replay_buffer import ReplayBuffer
+from mbse.utils.replay_buffer import ReplayBuffer, Transition
 from mbse.agents.dummy_agent import DummyAgent
 import jax.numpy as jnp
 import wandb
@@ -102,6 +102,7 @@ class ModelBasedAgent(DummyAgent):
             ]
             outs = carry[1:]
             return carry, outs
+
         self.step = step
 
     @staticmethod
@@ -201,8 +202,6 @@ class ModelBasedAgent(DummyAgent):
             rng, val_rng = jax.random.split(rng, 2)
             val_transitions = buffer.sample(val_rng, batch_size=int(self.batch_size * self.train_steps))
             val_transitions = val_transitions.reshape(self.train_steps, self.batch_size)
-
-
         carry = [
             rng,
             self.dynamics_model.model_params,
@@ -214,9 +213,10 @@ class ModelBasedAgent(DummyAgent):
         ]
         carry, outs = jax.lax.scan(self.step, carry, xs=None, length=self.train_steps)
         self.dynamics_model.update_model(model_params=carry[1], model_opt_state=carry[2])
-        summary = carry[3]
+        summary = outs[2].dict()
         if self.use_wandb:
-            wandb.log(summary.dict())
+            for log_dict in summary:
+                wandb.log(log_dict)
 
     def set_transforms(self,
                        bias_obs: Union[jnp.ndarray, float] = 0.0,
@@ -233,4 +233,18 @@ class ModelBasedAgent(DummyAgent):
             scale_obs=scale_obs,
             scale_act=scale_act,
             scale_out=scale_out,
+        )
+
+    def predict_next_state(self,
+                           tran: Transition,
+                           ):
+        return self.dynamics_model.predict_raw(
+            parameters=self.dynamics_model.model_params,
+            tran=tran,
+            bias_obs=self.dynamics_model.bias_obs,
+            bias_act=self.dynamics_model.bias_act,
+            bias_out=self.dynamics_model.bias_out,
+            scale_obs=self.dynamics_model.scale_obs,
+            scale_act=self.dynamics_model.scale_act,
+            scale_out=self.dynamics_model.scale_out,
         )

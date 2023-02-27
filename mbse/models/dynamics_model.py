@@ -14,14 +14,41 @@ class ModelSummary:
     val_eps_std: jnp.array = 0.0
 
     def dict(self):
-        return {
-            'model_likelihood': self.model_likelihood.item(),
-            'grad_norm': self.grad_norm.item(),
-            'val_logl': self.val_logl.item(),
-            'val_mse': self.val_mse.item(),
-            'val_al_std': self.val_al_std.item(),
-            'val_eps_std': self.val_eps_std.item(),
-        }
+        final_list = []
+        if self.model_likelihood.ndim >= 1:
+            if self.model_likelihood.shape[0] >= 1:
+                s = self.model_likelihood.shape[0]
+                for i in range(s):
+                    current_dict = {
+                        'model_likelihood': self.model_likelihood[i].item(),
+                        'grad_norm': self.grad_norm[i].item(),
+                        'val_logl': self.val_logl[i].item(),
+                        'val_mse': self.val_mse[i].item(),
+                        'val_al_std': self.val_al_std[i].item(),
+                        'val_eps_std': self.val_eps_std[i].item(),
+                    }
+                    final_list.append(current_dict)
+            else:
+                current_dict = {
+                    'model_likelihood': self.model_likelihood[0].item(),
+                    'grad_norm': self.grad_norm[0].item(),
+                    'val_logl': self.val_logl[0].item(),
+                    'val_mse': self.val_mse[0].item(),
+                    'val_al_std': self.val_al_std[0].item(),
+                    'val_eps_std': self.val_eps_std[0].item(),
+                }
+                final_list.append(current_dict)
+        else:
+            current_dict = {
+                'model_likelihood': self.model_likelihood.item(),
+                'grad_norm': self.grad_norm.item(),
+                'val_logl': self.val_logl.item(),
+                'val_mse': self.val_mse.item(),
+                'val_al_std': self.val_al_std.item(),
+                'val_eps_std': self.val_eps_std.item(),
+            }
+            final_list.append(current_dict)
+        return final_list
 
 
 class DynamicsModel(object):
@@ -45,7 +72,22 @@ class DynamicsModel(object):
         self.pred_diff = pred_diff
         pass
 
+    def _init_fn(self):
+        pass
+
     def predict(self, obs, action, rng=None):
+        pass
+
+    def predict_raw(self,
+                    parameters,
+                    tran: Transition,
+                    bias_obs: Union[jnp.ndarray, float] = 0.0,
+                    bias_act: Union[jnp.ndarray, float] = 0.0,
+                    bias_out: Union[jnp.ndarray, float] = 0.0,
+                    scale_obs: Union[jnp.ndarray, float] = 1.0,
+                    scale_act: Union[jnp.ndarray, float] = 1.0,
+                    scale_out: Union[jnp.ndarray, float] = 1.0,
+                    ):
         pass
 
     def evaluate(self,

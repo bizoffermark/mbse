@@ -41,6 +41,8 @@ class HUCRLModel(BayesianDynamicsModel):
 
     def _init_fn(self):
 
+        super()._init_fn()
+
         def predict(parameters,
                     obs,
                     action,

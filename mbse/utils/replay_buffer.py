@@ -3,6 +3,7 @@ import jax
 from flax import struct
 import numpy as np
 from typing import Union
+
 EPS = 1e-8
 from copy import deepcopy
 
@@ -13,7 +14,6 @@ def identity_transform(obs, action=None, next_state=None):
 
 def inverse_identitiy_transform(transformed_obs, transformed_action=None, transformed_next_state=None):
     return identity_transform(transformed_obs, transformed_action, transformed_next_state)
-
 
 
 def merge_transitions(tran_a, tran_b):
@@ -33,11 +33,11 @@ def merge_transitions(tran_a, tran_b):
 
 def transition_to_jax(tran):
     return Transition(
-            obs=jnp.asarray(tran.obs),
-            action=jnp.asarray(tran.action),
-            next_obs=jnp.asarray(tran.next_obs),
-            reward=jnp.asarray(tran.reward),
-            done=jnp.asarray(tran.done),
+        obs=jnp.asarray(tran.obs),
+        action=jnp.asarray(tran.action),
+        next_obs=jnp.asarray(tran.next_obs),
+        reward=jnp.asarray(tran.reward),
+        done=jnp.asarray(tran.done),
     )
 
 
@@ -90,27 +90,33 @@ class Normalizer(object):
     def update(self, x):
         new_size = x.shape[0]
         total_size = new_size + self.size
-        new_mean = (self.mean*self.size + np.mean(x, axis=0))/total_size
-        new_var = (np.square(self.std)+np.square(self.mean))*self.size + \
-                  np.sum(np.square(x), axis=0)
-        new_var = new_var/total_size - np.square(new_mean)
+        new_mean = (self.mean * self.size + np.sum(x, axis=0)) / total_size
+        new_s_n = np.square(self.std) * self.size + np.sum(np.square(x - new_mean),
+                                                           axis=0
+                                                           ) + self.size * np.square(self.mean -
+                                                                                     new_mean)
+
+        new_var = new_s_n / total_size
+        # new_var = (np.square(self.std)+np.square(self.mean))*self.size + \
+        #          np.sum(np.square(x), axis=0)
+        # new_var = new_var/total_size - np.square(new_mean)
         new_std = np.sqrt(new_var)
         self.mean = new_mean
-        self.std = new_std
+        self.std = np.maximum(new_std, np.ones_like(new_std) * EPS)
         self.size = total_size
 
     def normalize(self, x):
-        return (x-self.mean)/(self.std+EPS)
+        return (x - self.mean) / self.std
 
     def inverse(self, x):
-        return x*self.std + self.mean
+        return x * self.std + self.mean
 
 
 class ReplayBuffer(object):
     def __init__(self,
                  obs_shape,
                  action_shape,
-                 max_size: int = 1e6,
+                 max_size: int = int(1e6),
                  normalize=False,
                  action_normalize=False,
                  learn_deltas=False
@@ -164,12 +170,12 @@ class ReplayBuffer(object):
             next_state = self.state_normalizer.normalize(next_state)
 
         return Transition(
-                self.state_normalizer.normalize(obs),
-                self.action_normalizer.normalize(jnp.asarray(self.action)[ind]),
-                next_state,
-                self.reward_normalizer.normalize(jnp.asarray(self.reward)[ind]),
-                jnp.asarray(self.done)[ind],
-            )
+            self.state_normalizer.normalize(obs),
+            self.action_normalizer.normalize(jnp.asarray(self.action)[ind]),
+            next_state,
+            self.reward_normalizer.normalize(jnp.asarray(self.reward)[ind]),
+            jnp.asarray(self.done)[ind],
+        )
 
     def reset(self):
         self.current_ptr = 0

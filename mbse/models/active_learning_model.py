@@ -138,7 +138,7 @@ class ActiveLearningModel(HUCRLModel):
         else:
             def get_epistemic_estimate(mean, std, eta, rng):
                 next_obs_eps_std = jnp.std(mean, axis=0)
-                al_uncertainty = jnp.mean(std, axis=0)
+                al_uncertainty = jnp.sqrt(jnp.mean(jnp.square(std), axis=0))
                 next_state_mean = jnp.mean(mean, axis=0) + beta * next_obs_eps_std * eta
                 next_obs = sample_normal_dist(
                     next_state_mean,

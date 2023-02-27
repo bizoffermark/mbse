@@ -14,6 +14,10 @@ from mbse.models.active_learning_model import ActiveLearningModel
 
 OptState = Any
 
+# from jax.config import config
+
+# config.update("jax_log_compiles", 1)
+
 
 @dataclass
 class Experiment:
@@ -34,7 +38,7 @@ if __name__ == "__main__":
         max_action=1,
     )
     n_envs = 4
-    horizon = 30
+    horizon = 20
     env = make_vec_env(PendulumSwingUpEnv, wrapper_class=wrapper_cls, n_envs=n_envs)
 
     reward_model = env.envs[0].reward_model()
@@ -53,7 +57,7 @@ if __name__ == "__main__":
     #    num_samples=50,
     #    num_steps=10,
     #    action_dim=(horizon, env.action_space.shape[0])
-    #)
+    # )
 
     model_based_agent_fn = lambda x, y, z, v: \
         MBActiveExplorationAgent(
@@ -72,7 +76,7 @@ if __name__ == "__main__":
                 num_elites=50,
                 num_steps=10,
                 action_dim=(horizon, env.action_space.shape[0] + env.observation_space.shape[0])),
-    )
+        )
 
     USE_WANDB = True
 
@@ -95,6 +99,7 @@ if __name__ == "__main__":
         learn_deltas=dynamics_model.pred_diff,
         validate=True,
         record_test_video=True,
+        validation_buffer_size=10000,
     )
     if USE_WANDB:
         wandb.init(

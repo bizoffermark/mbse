@@ -8,7 +8,7 @@ import os
 import itertools
 
 applicable_configs = {
-    'general': ['use_wandb'],
+    'general': ['use_wandb', 'exp_name'],
     'env': ['env_name', 'time_limit', 'n_envs'],
     'optimizer': ['num_samples', 'num_elites', 'num_steps', 'horizon'],
     'agent': ['discount', 'n_particles'],
@@ -20,6 +20,7 @@ applicable_configs = {
 
 default_configs = {
     'use_wandb': True,
+    'exp_name': "test",
     'env_name': 'Pendulum-v1',
     'time_limit': 200,
     'n_envs': 5,
@@ -70,7 +71,7 @@ def main(args):
     for _ in range(args.num_hparam_samples):
         # transfer flags from the args
         flags = copy.deepcopy(args.__dict__)
-        [flags.pop(key) for key in ['seed', 'num_hparam_samples', 'num_seeds_per_hparam', 'exp_name', 'num_cpus',
+        [flags.pop(key) for key in ['seed', 'num_hparam_samples', 'num_seeds_per_hparam', 'num_cpus',
                                     'num_gpus', 'launch_mode']]
 
         # randomly sample flags
@@ -79,7 +80,6 @@ def main(args):
                 flags[flag] = sample_flag(sample_spec=search_ranges[flag], rds=rds)
             else:
                 flags[flag] = default_configs[flag]
-
         for exploration_strategy in EXPLORATION_STRATEGY:
             # determine subdir which holds the repetitions of the exp
             flags_hash = hash_dict(flags)
@@ -101,7 +101,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=834, help='random number generator seed')
     parser.add_argument('--exp_name', type=str, required=True, default='Pendulum-ActiveExploration')
-    parser.add_argument('--beta', type=float, default=1.0)
     parser.add_argument('--num_cpus', type=int, default=8, help='number of cpus to use')
     parser.add_argument('--num_gpus', type=int, default=1, help='number of gpus to use')
     parser.add_argument('--launch_mode', type=str, default='euler', help='how to launch the experiments')

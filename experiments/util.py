@@ -120,7 +120,7 @@ def generate_run_commands(command_list: List[str], num_cpus: int = 1, num_gpus: 
     if mode == 'euler':
         cluster_cmds = []
         sbatch_cmd = 'sbatch ' + \
-                     f'--time=={23 if long else 3}:59:00 ' + \
+                     f'--time={23 if long else 3}:59:00 ' + \
                      f'--mem-per-cpu={mem} ' + \
                      f'-n {num_cpus} '
 

@@ -1,5 +1,5 @@
 import jax.random
-from mbse.utils.replay_buffer import ReplayBuffer
+from mbse.utils.replay_buffer import ReplayBuffer, Transition
 from mbse.trainer.dummy_trainer import DummyTrainer
 from mbse.agents.model_based.model_based_agent import ModelBasedAgent
 import wandb
@@ -35,14 +35,36 @@ class ModelBasedTrainer(DummyTrainer):
                 action_normalize=False,
                 learn_deltas=False
             )
-            policy = lambda x, y: np.concatenate(
-                [self.env.action_space.sample().reshape(1, -1)
-                 for s in range(self.num_envs)], axis=0)
-            self.rng, val_rng = random.split(self.rng, 2)
-            transitions = self.rollout_policy(validation_buffer_size,
-                                              policy,
-                                              val_rng
-                                              )
+            num_points = int(validation_buffer_size * self.num_envs)
+            obs_shape = (num_points,) + self.env.observation_space.shape
+            action_space = (num_points,) + self.env.action_space.shape
+            obs_vec = np.zeros(obs_shape)
+            action_vec = np.zeros(action_space)
+            reward_vec = np.zeros((num_points,))
+            next_obs_vec = np.zeros(obs_shape)
+            done_vec = np.zeros((num_points,))
+            for step in range(validation_buffer_size):
+                obs = self.env.observation_space.sample()
+                action = self.env.action_space.sample()
+                obs_vec[step * self.num_envs: (step + 1) * self.num_envs] = obs
+                action_vec[step * self.num_envs: (step + 1) * self.num_envs] = action
+
+            transitions = Transition(
+                obs=obs_vec,
+                action=action_vec,
+                reward=reward_vec,
+                next_obs=next_obs_vec,
+                done=done_vec,
+            )
+
+            #policy = lambda x, y: np.concatenate(
+            #    [self.env.action_space.sample().reshape(1, -1)
+            #     for s in range(self.num_envs)], axis=0)
+            #self.rng, val_rng = random.split(self.rng, 2)
+            #transitions = self.rollout_policy(validation_buffer_size,
+            #                                  policy,
+            #                                  val_rng
+            #                                  )
             self.validation_buffer.add(transitions)
 
     def validate_model(self, rng):
@@ -58,10 +80,10 @@ class ModelBasedTrainer(DummyTrainer):
             max_eps_uncertainty = jnp.max(eps_uncertainty)
             std_eps_uncertainty = jnp.std(eps_uncertainty)
             std_pred = jnp.mean(jnp.sum(jnp.sqrt(jnp.mean(jnp.square(std_pred), axis=0)), axis=-1))
-            y_true = val_tran.next_obs
-            mse = jnp.mean(jnp.sum(jnp.square(y_true - mean_pred), axis=-1))
+            # y_true = val_tran.next_obs
+            # mse = jnp.mean(jnp.sum(jnp.square(y_true - mean_pred), axis=-1))
             model_log = {
-                'validation_mse': mse.astype(float).item(),
+                # 'validation_mse': mse.astype(float).item(),
                 'validation_al_std': std_pred.astype(float).item(),
                 'validation_eps_std_mean': mean_eps_uncertainty.astype(float).item(),
                 'validation_eps_std_max': max_eps_uncertainty.astype(float).item(),

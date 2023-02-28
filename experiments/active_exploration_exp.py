@@ -1,6 +1,6 @@
 from gym.wrappers import RescaleAction, TimeLimit
 from mbse.utils.vec_env.env_util import make_vec_env
-from mbse.models.environment_models.pendulum_swing_up import PendulumReward
+from mbse.models.environment_models.pendulum_swing_up import PendulumReward, CustomPendulumEnv
 from mbse.models.active_learning_model import ActiveLearningModel
 from mbse.agents.model_based.mb_active_exploration_agent import MBActiveExplorationAgent
 from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
@@ -17,7 +17,7 @@ import wandb
 
 def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n_envs: int,
                num_samples: int, num_elites: int, num_steps: int, horizon: int, n_particles: int, num_ensembles: int,
-               hidden_layers: int, num_neurons: int,
+               hidden_layers: int, num_neurons: int, beta: float,
                pred_diff: bool, batch_size: int, eval_freq: int, max_train_steps: int, buffer_size: int,
                exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int, rollout_steps: int,
                normalize: bool, action_normalize: bool, validate: bool, record_test_video: bool,
@@ -31,10 +31,14 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
         min_action=-1,
         max_action=1,
     )
-    env = make_vec_env(env_id=env_name, wrapper_class=wrapper_cls, n_envs=n_envs, env_kwargs={
-        'render_mode': 'rgb_array'
-    }
-                       )
+    if env_name == "Pendulum-v1":
+        env = make_vec_env(env_id=CustomPendulumEnv, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed)
+
+    else:
+        env = make_vec_env(env_id=env_name, wrapper_class=wrapper_cls, seed=seed, n_envs=n_envs, env_kwargs={
+            'render_mode': 'rgb_array'
+        }
+                           )
 
     features = [num_neurons] * hidden_layers
     reward_model = PendulumReward(action_space=env.action_space)
@@ -46,6 +50,8 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
         reward_model=reward_model,
         features=features,
         pred_diff=pred_diff,
+        beta=beta,
+        seed=seed,
     )
 
     model_based_agent_fn = lambda x, y, z, v: \
@@ -137,6 +143,7 @@ def main(args):
         num_steps=args.num_steps,
         horizon=args.horizon,
         n_particles=args.n_particles,
+        beta=args.beta,
         num_ensembles=args.num_ensembles,
         pred_diff=args.pred_diff,
         batch_size=args.batch_size,
@@ -204,6 +211,7 @@ if __name__ == '__main__':
     parser.add_argument('--hidden_layers', type=int, default=2)
     parser.add_argument('--num_neurons', type=int, default=128)
     parser.add_argument('--pred_diff', default=True, action="store_true")
+    parser.add_argument('--beta', type=float, default=1.0)
 
     # trainer experiment args
     parser.add_argument('--batch_size', type=int, default=128)

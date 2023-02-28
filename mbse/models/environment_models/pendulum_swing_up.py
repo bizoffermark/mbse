@@ -6,7 +6,7 @@ from gym.envs.classic_control.pendulum import PendulumEnv, angle_normalize
 import jax.numpy as jnp
 import jax
 from functools import partial
-from typing import Union
+from typing import Union, Optional, Any
 
 
 class PendulumReward(RewardModel):
@@ -66,6 +66,25 @@ class PendulumReward(RewardModel):
             )
             action = jnp.clip(action, low, high)
         return action
+
+
+class CustomPendulumEnv(PendulumEnv):
+    def __init__(self, render_mode='rgb_array', *args, **kwargs):
+        self.state = None
+        super(CustomPendulumEnv, self).__init__(render_mode=render_mode, *args, **kwargs)
+        self.observation_space.sample = self.sample_obs
+
+    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+        super().reset(seed=seed, options=options)
+        self.state = np.array([np.pi, 0.0])
+        return self._get_obs(), {}
+
+    def sample_obs(self, mask: Optional[Any] = None):
+        high = np.array([np.pi, 1.0])
+        low = -high
+        theta, thetadot = self.np_random.uniform(low=low, high=high)
+        obs = np.asarray([np.cos(theta), np.sin(theta), thetadot], dtype=np.float32)
+        return obs
 
 
 class PendulumSwingUpEnv(PendulumEnv):

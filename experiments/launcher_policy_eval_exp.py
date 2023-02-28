@@ -50,7 +50,8 @@ default_configs = {
     'validation_buffer_size': 100000,
 }
 
-search_ranges = {}
+search_ranges = {
+}
 
 EXPLORATION_STRATEGY = ['Uniform', 'Optimistic']
 # check consistency of configuration dicts
@@ -101,6 +102,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=834, help='random number generator seed')
     parser.add_argument('--exp_name', type=str, default='Pendulum-ActiveExploration')
+    parser.add_argument('--beta', type=float, default=1.0)
     parser.add_argument('--num_cpus', type=int, default=8, help='number of cpus to use')
     parser.add_argument('--num_gpus', type=int, default=1, help='number of gpus to use')
     parser.add_argument('--launch_mode', type=str, default='euler', help='how to launch the experiments')

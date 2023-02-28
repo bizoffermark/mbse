@@ -86,8 +86,9 @@ def make_vec_env(
             else:
                 env = env_id(**env_kwargs)
             if seed is not None:
-                env.seed(seed + rank)
+                obs, _ = env.reset(seed=seed + rank)
                 env.action_space.seed(seed + rank)
+                env.observation_space.seed(seed + rank)
             # Wrap the env in a Monitor wrapper
             # to have additional training information
             monitor_path = os.path.join(monitor_dir, str(rank)) if monitor_dir is not None else None

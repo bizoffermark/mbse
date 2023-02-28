@@ -8,7 +8,7 @@ import os
 import itertools
 
 applicable_configs = {
-    'general': ['use_wandb', 'exp_name'],
+    'general': ['use_wandb'],
     'env': ['env_name', 'time_limit', 'n_envs'],
     'optimizer': ['num_samples', 'num_elites', 'num_steps', 'horizon'],
     'agent': ['discount', 'n_particles'],
@@ -20,7 +20,6 @@ applicable_configs = {
 
 default_configs = {
     'use_wandb': True,
-    'exp_name': 'Pendulum-Active-Exploration',
     'env_name': 'Pendulum-v1',
     'time_limit': 200,
     'n_envs': 5,
@@ -101,7 +100,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=834, help='random number generator seed')
-    parser.add_argument('--exp_name', type=str, default='Pendulum-ActiveExploration')
+    parser.add_argument('--exp_name', type=str, required=True, default='Pendulum-ActiveExploration')
     parser.add_argument('--beta', type=float, default=1.0)
     parser.add_argument('--num_cpus', type=int, default=8, help='number of cpus to use')
     parser.add_argument('--num_gpus', type=int, default=1, help='number of gpus to use')

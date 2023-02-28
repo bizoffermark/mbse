@@ -8,7 +8,7 @@ import os
 import itertools
 
 applicable_configs = {
-    'general': ['use_wandb', 'exp_name'],
+    'general': ['use_wandb'],
     'env': ['env_name', 'time_limit', 'n_envs'],
     'optimizer': ['num_samples', 'num_elites', 'num_steps', 'horizon'],
     'agent': ['discount', 'n_particles'],
@@ -20,7 +20,6 @@ applicable_configs = {
 
 default_configs = {
     'use_wandb': True,
-    'exp_name': "test",
     'env_name': 'Pendulum-v1',
     'time_limit': 200,
     'n_envs': 5,

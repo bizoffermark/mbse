@@ -128,7 +128,7 @@ def generate_run_commands(command_list: List[str], num_cpus: int = 1, num_gpus: 
             sbatch_cmd += f'--gpus={num_gpus} '
 
         for python_cmd in command_list:
-            cluster_cmds.append(sbatch_cmd + python_cmd)
+            cluster_cmds.append(sbatch_cmd + f'--wrap="{python_cmd}"')
 
         if promt:
             answer = input(f"About to submit {len(cluster_cmds)} compute jobs to the cluster. Proceed? [yes/no]")

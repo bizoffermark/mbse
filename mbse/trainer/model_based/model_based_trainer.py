@@ -19,7 +19,8 @@ class ModelBasedTrainer(DummyTrainer):
                  **kwargs
                  ):
 
-        super(ModelBasedTrainer, self).__init__(agent_name=agent_name, *args, **kwargs)
+        video_prefix = "Uniform" if uniform_exploration else "Learning"
+        super(ModelBasedTrainer, self).__init__(agent_name=agent_name, video_prefix=video_prefix, *args, **kwargs)
         assert isinstance(self.agent, ModelBasedAgent), "Only Model based agents are allowed"
         self.validation_buffer = None
         self.validation_batch_size = validation_batch_size

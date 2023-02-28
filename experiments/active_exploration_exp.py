@@ -189,7 +189,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Active-Exploration-run')
 
     # general experiment args
-    parser.add_argument('--exp_name', type=str, default='active_exploration')
+    parser.add_argument('--exp_name', type=str, required=True, default='active_exploration')
     parser.add_argument('--use_wandb', default=True, action="store_true")
     # env experiment args
     parser.add_argument('--env_name', type=str, default='Pendulum-v1')

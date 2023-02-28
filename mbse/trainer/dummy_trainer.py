@@ -34,6 +34,7 @@ class DummyTrainer(object):
                  action_normalize: bool = False,
                  learn_deltas: bool = False,
                  record_test_video: bool = False,
+                 video_prefix: str = "",
                  ):
         self.env = env
         self.num_envs = max(env.num_envs, 1)
@@ -61,7 +62,7 @@ class DummyTrainer(object):
         self.rollout_steps = rollout_steps
         now = datetime.now()
         dt_string = now.strftime("%d_%m_%Y_%H_%M_%S")
-        self.video_dir_name = 'video' + dt_string
+        self.video_dir_name = 'video' + str(seed) + video_prefix + dt_string
         if record_test_video:
             test_env_wrapper = lambda x: RecordVideo(x, video_folder='./' + self.video_dir_name, episode_trigger=lambda x: True)
         else:

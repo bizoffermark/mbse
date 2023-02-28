@@ -15,6 +15,7 @@ RESULT_DIR = os.path.join(BASE_DIR, 'results')
 
 """ Custom Logger """
 
+
 class Logger:
     """ Trivial light-weight logger for writing output to the console and a log file.
         Not intended as full Logger with verbosity capabilities.
@@ -32,9 +33,11 @@ class Logger:
         self.console.flush()
         self.file.flush()
 
+
 """ Async executer """
 
 import multiprocessing
+
 
 class AsyncExecutor:
 
@@ -54,7 +57,7 @@ class AsyncExecutor:
                     self._pool[i].terminate()
                     if len(tasks) > 0:
                         if verbose:
-                          print(n_tasks-len(tasks))
+                            print(n_tasks - len(tasks))
                         next_task = tasks.pop(0)
                         self._pool[i] = _start_process(target, next_task)
                     else:
@@ -62,6 +65,7 @@ class AsyncExecutor:
 
     def _populate_pool(self):
         self._pool = [_start_process(_dummy_fun) for _ in range(self.num_workers)]
+
 
 def _start_process(target, args=None):
     if args:
@@ -71,11 +75,13 @@ def _start_process(target, args=None):
     p.start()
     return p
 
+
 def _dummy_fun():
     pass
 
 
 """ Command generators """
+
 
 def generate_base_command(module, flags: Optional[Dict[str, Any]] = None, unbuffered: bool = True) -> str:
     """ Generates the command to execute python module with provided flags
@@ -111,19 +117,18 @@ def generate_base_command(module, flags: Optional[Dict[str, Any]] = None, unbuff
 def generate_run_commands(command_list: List[str], num_cpus: int = 1, num_gpus: int = 0,
                           dry: bool = False, n_hosts: int = 1, mem: int = 6000, long: bool = False,
                           mode: str = 'local', promt: bool = True) -> None:
-
     if mode == 'euler':
         cluster_cmds = []
-        bsub_cmd = 'bsub ' + \
-                   f'-W {23 if long else 3}:59 ' + \
-                   f'-R "rusage[mem={mem}]" ' + \
-                   f'-n {num_cpus} '
+        sbatch_cmd = 'sbatch ' + \
+                     f'--time=={23 if long else 3}:59:00 ' + \
+                     f'--mem-per-cpu={mem} ' + \
+                     f'-n {num_cpus} '
 
         if num_gpus > 0:
-            bsub_cmd += f'-R "rusage[ngpus_excl_p={num_gpus}]" '
+            sbatch_cmd += f'--gpus={num_gpus} '
 
         for python_cmd in command_list:
-            cluster_cmds.append(bsub_cmd + python_cmd)
+            cluster_cmds.append(sbatch_cmd + python_cmd)
 
         if promt:
             answer = input(f"About to submit {len(cluster_cmds)} compute jobs to the cluster. Proceed? [yes/no]")
@@ -151,7 +156,8 @@ def generate_run_commands(command_list: List[str], num_cpus: int = 1, num_gpus: 
 
     elif mode == 'local_async':
         if promt:
-            answer = input(f"About to launch {len(command_list)} commands in {num_cpus} local processes. Proceed? [yes/no]")
+            answer = input(
+                f"About to launch {len(command_list)} commands in {num_cpus} local processes. Proceed? [yes/no]")
         else:
             answer = 'yes'
 
@@ -166,7 +172,9 @@ def generate_run_commands(command_list: List[str], num_cpus: int = 1, num_gpus: 
     else:
         raise NotImplementedError
 
+
 """ Hashing and Encoding dicts to JSON """
+
 
 class NumpyArrayEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -181,10 +189,13 @@ class NumpyArrayEncoder(json.JSONEncoder):
         else:
             return super(NumpyArrayEncoder, self).default(obj)
 
+
 def hash_dict(d):
     return str(abs(json.dumps(d, sort_keys=True, cls=NumpyArrayEncoder).__hash__()))
 
+
 """ Randomly sampling flags """
+
 
 def sample_flag(sample_spec, rds=None):
     if rds is None:
@@ -194,7 +205,7 @@ def sample_flag(sample_spec, rds=None):
     sample_type, range = sample_spec
     if sample_type == 'loguniform':
         assert len(range) == 2
-        return 10**rds.uniform(*range)
+        return 10 ** rds.uniform(*range)
     elif sample_type == 'uniform':
         assert len(range) == 2
         return rds.uniform(*range)
@@ -205,6 +216,8 @@ def sample_flag(sample_spec, rds=None):
 
 
 """ Collecting the exp result"""
+
+
 def collect_exp_results(exp_name: str, dir_tree_depth: int = 3, verbose: bool = True):
     exp_dir = os.path.join(RESULT_DIR, exp_name)
     no_results_counter = 0
@@ -243,6 +256,7 @@ def collect_exp_results(exp_name: str, dir_tree_depth: int = 3, verbose: bool = 
 
 
 """ Some aggregation functions """
+
 
 def ucb(row):
     assert row.shape[0] > 1

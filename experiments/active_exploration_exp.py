@@ -43,6 +43,8 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
     features = [num_neurons] * hidden_layers
     reward_model = PendulumReward(action_space=env.action_space)
     reward_model.set_bounds(max_action=1.0)
+    if exploration_strategy == 'Mean':
+        beta = 0.0
     dynamics_model = ActiveLearningModel(
         action_space=env.action_space,
         observation_space=env.observation_space,

@@ -180,7 +180,7 @@ class ModelBasedTrainer(DummyTrainer):
                 eval_rng, eval_val_rng = jax.random.split(eval_rng, 2)
                 model_log = self.validate_model(eval_val_rng)
             # Evaluate episode
-            if step % self.eval_freq == 0 and train_steps > 0:
+            if train_steps % self.eval_freq == 0 and train_steps > 0:
                 eval_rng, curr_eval = random.split(eval_rng, 2)
                 eval_reward = self.eval_policy(rng=curr_eval, step=train_steps)
                 reward_log = {

@@ -95,6 +95,7 @@ class ModelBasedTrainer(DummyTrainer):
     def train(self):
         if self.use_wandb:
             wandb.define_metric('env_steps')
+            wandb.define_metric('learning_step')
         self.rng, eval_rng = random.split(self.rng, 2)
         eval_rng, curr_eval = random.split(eval_rng, 2)
 
@@ -113,6 +114,7 @@ class ModelBasedTrainer(DummyTrainer):
         best_performance = average_reward
         initial_log = {
             'env_steps': 0,
+            'learning_step': 0,
             'train_steps': 0,
             'average_reward': average_reward
         }
@@ -162,7 +164,8 @@ class ModelBasedTrainer(DummyTrainer):
             train_step_log = {}
             model_log = {}
             env_step_log = {
-                'env_steps': step * self.rollout_steps * self.num_envs
+                'env_steps': step * self.rollout_steps * self.num_envs,
+                'learning_step': step,
             }
             if step % self.train_freq == 0 and self.buffer.size >= self.batch_size:
                 train_rng, agent_rng = random.split(train_rng, 2)
@@ -177,7 +180,7 @@ class ModelBasedTrainer(DummyTrainer):
                 eval_rng, eval_val_rng = jax.random.split(eval_rng, 2)
                 model_log = self.validate_model(eval_val_rng)
             # Evaluate episode
-            if train_steps % self.eval_freq == 0 and train_steps > 0:
+            if step % self.eval_freq == 0 and train_steps > 0:
                 eval_rng, curr_eval = random.split(eval_rng, 2)
                 eval_reward = self.eval_policy(rng=curr_eval, step=train_steps)
                 reward_log = {

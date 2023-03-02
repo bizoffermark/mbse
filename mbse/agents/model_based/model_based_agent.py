@@ -100,7 +100,7 @@ class ModelBasedAgent(DummyAgent):
                 transition,
                 val_transition,
             ]
-            outs = carry[1:]
+            outs = [summary]
             return carry, outs
 
         self.step = step
@@ -213,7 +213,7 @@ class ModelBasedAgent(DummyAgent):
         ]
         carry, outs = jax.lax.scan(self.step, carry, xs=None, length=self.train_steps)
         self.dynamics_model.update_model(model_params=carry[1], model_opt_state=carry[2])
-        summary = outs[2].dict()
+        summary = outs[0].dict()
         if self.use_wandb:
             for log_dict in summary:
                 wandb.log(log_dict)

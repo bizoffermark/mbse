@@ -503,7 +503,7 @@ class SACAgent(DummyAgent):
                 idx+1,
                 transition,
             ]
-            outs = carry[1:]
+            outs = [summary]
             return carry, outs
 
         self.step = step

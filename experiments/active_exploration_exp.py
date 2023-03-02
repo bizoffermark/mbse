@@ -16,8 +16,8 @@ import wandb
 
 
 def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n_envs: int,
-               num_samples: int, num_elites: int, num_steps: int, horizon: int, n_particles: int, num_ensembles: int,
-               hidden_layers: int, num_neurons: int, beta: float,
+               num_samples: int, num_elites: int, num_steps: int, horizon: int, n_particles: int, reset_model: bool,
+               num_ensembles: int, hidden_layers: int, num_neurons: int, beta: float,
                pred_diff: bool, batch_size: int, eval_freq: int, max_train_steps: int, buffer_size: int,
                exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int, rollout_steps: int,
                normalize: bool, action_normalize: bool, validate: bool, record_test_video: bool,
@@ -66,6 +66,7 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
             observation_space=env.action_space,
             dynamics_model=dynamics_model,
             n_particles=n_particles,
+            reset_model=reset_model,
             # policy_optimizer=policy_optimizer,
             policy_optimizer=CrossEntropyOptimizer(
                 upper_bound=1,
@@ -145,6 +146,7 @@ def main(args):
         num_steps=args.num_steps,
         horizon=args.horizon,
         n_particles=args.n_particles,
+        reset_model=args.reset_model,
         beta=args.beta,
         num_ensembles=args.num_ensembles,
         pred_diff=args.pred_diff,
@@ -207,6 +209,7 @@ if __name__ == '__main__':
     # agent experiment args
     parser.add_argument('--discount', type=float, default=1.0)
     parser.add_argument('--n_particles', type=int, default=10)
+    parser.add_argument('--reset_model', default=True, action="store_true")
 
     # dynamics_model experiment args
     parser.add_argument('--num_ensembles', type=int, default=5)

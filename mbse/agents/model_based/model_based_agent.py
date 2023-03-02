@@ -21,6 +21,7 @@ class ModelBasedAgent(DummyAgent):
             policy_optimizer: DummyOptimizer,
             discount: float = 0.99,
             n_particles: int = 10,
+            reset_model: bool = False,
             *args,
             **kwargs,
     ):
@@ -31,6 +32,7 @@ class ModelBasedAgent(DummyAgent):
         self.policy_optimzer = policy_optimizer
         self.discount = discount
         self.n_particles = n_particles
+        self.reset_model = reset_model
         self._init_fn()
 
         # self.optimize = lambda rewards, key: self.policy_optimzer.optimize(
@@ -202,15 +204,26 @@ class ModelBasedAgent(DummyAgent):
             rng, val_rng = jax.random.split(rng, 2)
             val_transitions = buffer.sample(val_rng, batch_size=int(self.batch_size * self.train_steps))
             val_transitions = val_transitions.reshape(self.train_steps, self.batch_size)
-        carry = [
-            rng,
-            self.dynamics_model.model_params,
-            self.dynamics_model.model_opt_state,
-            ModelSummary(),
-            0,
-            transitions,
-            val_transitions,
-        ]
+        if self.reset_model:
+            carry = [
+                rng,
+                self.dynamics_model.init_model_params,
+                self.dynamics_model.init_model_opt_state,
+                ModelSummary(),
+                0,
+                transitions,
+                val_transitions,
+            ]
+        else:
+            carry = [
+                rng,
+                self.dynamics_model.model_params,
+                self.dynamics_model.model_opt_state,
+                ModelSummary(),
+                0,
+                transitions,
+                val_transitions,
+            ]
         carry, outs = jax.lax.scan(self.step, carry, xs=None, length=self.train_steps)
         self.dynamics_model.update_model(model_params=carry[1], model_opt_state=carry[2])
         summary = outs[0].dict()

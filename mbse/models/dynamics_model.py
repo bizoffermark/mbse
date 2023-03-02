@@ -120,6 +120,14 @@ class DynamicsModel(object):
     def model_opt_state(self):
         return None
 
+    @property
+    def init_model_params(self):
+        return None
+
+    @property
+    def init_model_opt_state(self):
+        return None
+
     def update_model(self, model_params, model_opt_state):
         pass
 

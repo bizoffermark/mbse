@@ -372,6 +372,14 @@ class BayesianDynamicsModel(DynamicsModel):
     def model_opt_state(self):
         return self.model.opt_state
 
+    @property
+    def init_model_params(self):
+        return self.model.init_particles
+
+    @property
+    def init_model_opt_state(self):
+        return self.model.init_opt_state
+
     def update_model(self, model_params, model_opt_state):
         self.model.particles = model_params
         self.model.opt_state = model_opt_state

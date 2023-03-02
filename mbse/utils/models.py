@@ -57,6 +57,8 @@ class ProbabilisticEnsembleModel(object):
         optimizer_state = self.optimizer.init(particles)
         self.particles = particles
         self.opt_state = optimizer_state
+        self.init_particles = particles
+        self.init_opt_state = optimizer_state
         self.example_input = example_input
         self._predict = jit(lambda params, x:
                             _predict(

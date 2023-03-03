@@ -70,6 +70,7 @@ class ModelBasedAgent(DummyAgent):
             )
 
         self.optimize = jax.jit(_optimize)
+        self.optimize_for_eval = self.optimize
 
         def step(carry, ins):
             rng = carry[0]
@@ -150,28 +151,42 @@ class ModelBasedAgent(DummyAgent):
         return action_seq, reward
 
     def act_in_jax(self, obs, rng, eval=False):
-        def optimize(init_state, key, optimizer_key):
-
-            action_seq, reward = self.optimize(
-                params=self.dynamics_model.model_params,
-                init_state=init_state,
-                key=key,
-                optimizer_key=optimizer_key,
-                bias_obs=self.dynamics_model.bias_obs,
-                bias_act=self.dynamics_model.bias_act,
-                bias_out=self.dynamics_model.bias_out,
-                scale_obs=self.dynamics_model.scale_obs,
-                scale_act=self.dynamics_model.scale_act,
-                scale_out=self.dynamics_model.scale_out,
-            )
-            return action_seq, reward
 
         if eval:
+            def optimize_for_eval(init_state, key, optimizer_key):
+                action_seq, reward = self.optimize_for_eval(
+                    params=self.dynamics_model.model_params,
+                    init_state=init_state,
+                    key=key,
+                    optimizer_key=optimizer_key,
+                    bias_obs=self.dynamics_model.bias_obs,
+                    bias_act=self.dynamics_model.bias_act,
+                    bias_out=self.dynamics_model.bias_out,
+                    scale_obs=self.dynamics_model.scale_obs,
+                    scale_act=self.dynamics_model.scale_act,
+                    scale_out=self.dynamics_model.scale_out,
+                )
+                return action_seq, reward
             obs = jnp.repeat(jnp.expand_dims(obs, 0), self.n_particles, 0)
             rollout_rng, optimizer_rng = jax.random.split(rng, 2)
-            action_sequence, best_reward = optimize(obs, rollout_rng, optimizer_rng)
+            action_sequence, best_reward = optimize_for_eval(obs, rollout_rng, optimizer_rng)
             action = action_sequence[0, ...]
         else:
+            def optimize(init_state, key, optimizer_key):
+
+                action_seq, reward = self.optimize(
+                    params=self.dynamics_model.model_params,
+                    init_state=init_state,
+                    key=key,
+                    optimizer_key=optimizer_key,
+                    bias_obs=self.dynamics_model.bias_obs,
+                    bias_act=self.dynamics_model.bias_act,
+                    bias_out=self.dynamics_model.bias_out,
+                    scale_obs=self.dynamics_model.scale_obs,
+                    scale_act=self.dynamics_model.scale_act,
+                    scale_out=self.dynamics_model.scale_out,
+                )
+                return action_seq, reward
             n_envs = obs.shape[0]
             obs = jnp.repeat(jnp.expand_dims(obs, 1), self.n_particles, 1)
             # eval_func = lambda seq: rollout_actions(seq,

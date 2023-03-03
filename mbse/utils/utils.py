@@ -107,7 +107,7 @@ def sample_trajectories(
     parameters,
     init_state: jnp.ndarray,
     horizon: int,
-    key: jax.random.PRNGKey,
+    key: Optional[jax.random.PRNGKey],
     *,
     policy: Optional[Callable] = None,
     actions: Optional[jnp.ndarray] = None,
@@ -117,7 +117,7 @@ def sample_trajectories(
     scale_obs: Union[jnp.ndarray, float] = 1.0,
     scale_act: Union[jnp.ndarray, float] = 1.0,
     scale_out: Union[jnp.ndarray, float] = 1.0,
-    sampling_idx=None,
+    sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
     # observations: Optional[jnp.ndarray] = None
 ) -> Transition:
     """

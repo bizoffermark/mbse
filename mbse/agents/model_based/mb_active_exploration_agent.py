@@ -17,6 +17,35 @@ class MBActiveExplorationAgent(ModelBasedAgent):
 
     def _init_fn(self):
         super()._init_fn()
+
+        def _optimize(
+                params,
+                init_state,
+                key,
+                optimizer_key,
+                bias_obs,
+                bias_act,
+                bias_out,
+                scale_obs,
+                scale_act,
+                scale_out):
+            return self._optimize(
+                eval_fn=self.dynamics_model.evaluate,
+                optimize_fn=self.policy_optimzer.optimize,
+                n_particles=self.n_particles,
+                horizon=self.policy_optimzer.action_dim[-2],
+                params=params,
+                init_state=init_state,
+                key=None,
+                optimizer_key=optimizer_key,
+                bias_obs=bias_obs,
+                bias_act=bias_act,
+                bias_out=bias_out,
+                scale_obs=scale_obs,
+                scale_act=scale_act,
+                scale_out=scale_out,
+            )
+        self.optimize_for_eval = jax.jit(_optimize)
         def _optimize_for_exploration(
                 params,
                 init_state,
@@ -50,6 +79,8 @@ class MBActiveExplorationAgent(ModelBasedAgent):
         )
         self.act_in_train = lambda obs, rng: \
             np.asarray(self.act_in_train_jax(jnp.asarray(obs), rng))
+
+
 
     def act_in_train_jax(self, obs, rng):
         def optimize(init_state, key, optimizer_key):

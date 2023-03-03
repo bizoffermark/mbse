@@ -106,6 +106,7 @@ if __name__ == '__main__':
     parser.add_argument('--launch_mode', type=str, default='euler', help='how to launch the experiments')
     parser.add_argument('--num_hparam_samples', type=int, default=1)
     parser.add_argument('--num_seeds_per_hparam', type=int, default=3)
+    parser.add_argument('--use_log', default=False, action="store_true")
 
     args = parser.parse_args()
     main(args)

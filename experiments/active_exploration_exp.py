@@ -22,7 +22,7 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
                exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int, rollout_steps: int,
                normalize: bool, action_normalize: bool, validate: bool, record_test_video: bool,
                validation_buffer_size: int,
-               seed: int, exploration_strategy: str):
+               seed: int, exploration_strategy: str, use_log: bool):
     """ Run experiment for a given method and environment. """
 
     """ Environment """
@@ -54,6 +54,7 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
         pred_diff=pred_diff,
         beta=beta,
         seed=seed,
+        use_log_uncertainties=use_log,
     )
 
     model_based_agent_fn = lambda x, y, z, v: \
@@ -103,10 +104,13 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
         seed=seed,
         uniform_exploration=uniform_exploration,
     )
+    group_name = exploration_strategy
+    if use_log:
+        group_name += "_log_rewards"
     if USE_WANDB:
         wandb.init(
             project=exp_name,
-            group=exploration_strategy,
+            group=group_name,
         )
     trainer.train()
 
@@ -168,6 +172,7 @@ def main(args):
         hidden_layers=args.hidden_layers,
         num_neurons=args.num_neurons,
         exploration_strategy=args.exploration_strategy,
+        use_log=args.use_log,
     )
 
     t_end = time.time()
@@ -234,6 +239,7 @@ if __name__ == '__main__':
     parser.add_argument('--record_test_video', default=True, action="store_true")
     parser.add_argument('--validation_buffer_size', type=int, default=100000)
     parser.add_argument('--exploration_strategy', type=str, default='Optimistic')
+    parser.add_argument('--use_log', default=False, action="store_true")
 
     # general args
     parser.add_argument('--exp_result_folder', type=str, default=None)

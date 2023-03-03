@@ -31,11 +31,13 @@ def sample(predictions, idx, s_rng):
 class ActiveLearningModel(HUCRLModel):
 
     def __init__(self,
+                 use_log_uncertainties=False,
                  *args,
                  **kwargs
                  ):
 
         super(ActiveLearningModel, self).__init__(*args, **kwargs)
+        self.use_log_uncertainties = use_log_uncertainties
         self._init_fn()
 
     def _init_fn(self):
@@ -100,6 +102,7 @@ class ActiveLearningModel(HUCRLModel):
                 scale_act=scale_act,
                 scale_out=scale_out,
                 sampling_idx=sampling_idx,
+                use_log_uncertainties=self.use_log_uncertainties,
             )
 
         self.evaluate_for_exploration = jax.jit(evaluate_for_exploration)
@@ -174,6 +177,7 @@ class ActiveLearningModel(HUCRLModel):
             scale_act: Union[jnp.ndarray, float] = 1.0,
             scale_out: Union[jnp.ndarray, float] = 1.0,
             sampling_idx: Optional[int] = None,
+            use_log_uncertainties: bool = False,
     ):
         model_rng = None
         if rng is not None:
@@ -190,5 +194,8 @@ class ActiveLearningModel(HUCRLModel):
             scale_act=scale_act,
             scale_out=scale_out,
         )
-        reward = jnp.sum(eps_uncertainty, axis=-1)
+        if use_log_uncertainties:
+            reward = jnp.sum(jnp.log(eps_uncertainty + 1e-6), axis=-1)
+        else:
+            reward = jnp.sum(eps_uncertainty, axis=-1)
         return next_obs, reward

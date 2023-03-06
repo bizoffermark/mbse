@@ -22,6 +22,7 @@ class ModelBasedAgent(DummyAgent):
             discount: float = 0.99,
             n_particles: int = 10,
             reset_model: bool = False,
+            calibrate_model: bool = True,
             *args,
             **kwargs,
     ):
@@ -33,6 +34,7 @@ class ModelBasedAgent(DummyAgent):
         self.discount = discount
         self.n_particles = n_particles
         self.reset_model = reset_model
+        self.calibrate_model = calibrate_model
         self._init_fn()
 
         # self.optimize = lambda rewards, key: self.policy_optimzer.optimize(
@@ -46,6 +48,7 @@ class ModelBasedAgent(DummyAgent):
                 init_state,
                 key,
                 optimizer_key,
+                alpha,
                 bias_obs,
                 bias_act,
                 bias_out,
@@ -61,6 +64,7 @@ class ModelBasedAgent(DummyAgent):
                 init_state=init_state,
                 key=key,
                 optimizer_key=optimizer_key,
+                alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
                 bias_out=bias_out,
@@ -119,6 +123,7 @@ class ModelBasedAgent(DummyAgent):
                   init_state,
                   key,
                   optimizer_key,
+                  alpha,
                   bias_obs,
                   bias_act,
                   bias_out,
@@ -133,6 +138,7 @@ class ModelBasedAgent(DummyAgent):
             horizon=horizon,
             key=k,
             actions=seq,
+            alpha=alpha,
             bias_obs=bias_obs,
             bias_act=bias_act,
             bias_out=bias_out,
@@ -161,6 +167,7 @@ class ModelBasedAgent(DummyAgent):
                     init_state=init_state,
                     key=key,
                     optimizer_key=optimizer_key,
+                    alpha=self.dynamics_model.alpha,
                     bias_obs=self.dynamics_model.bias_obs,
                     bias_act=self.dynamics_model.bias_act,
                     bias_out=self.dynamics_model.bias_out,
@@ -181,6 +188,7 @@ class ModelBasedAgent(DummyAgent):
                     init_state=init_state,
                     key=key,
                     optimizer_key=optimizer_key,
+                    alpha=self.dynamics_model.alpha,
                     bias_obs=self.dynamics_model.bias_obs,
                     bias_act=self.dynamics_model.bias_act,
                     bias_out=self.dynamics_model.bias_out,
@@ -221,7 +229,7 @@ class ModelBasedAgent(DummyAgent):
             rng, val_rng = jax.random.split(rng, 2)
             val_transitions = buffer.sample(val_rng, batch_size=int(self.batch_size * self.train_steps))
             val_transitions = val_transitions.reshape(self.train_steps, self.batch_size)
-            alpha = jnp.zeros(self.observation_space.shape)
+            alpha = jnp.ones(self.observation_space.shape)
         if self.reset_model:
             carry = [
                 rng,
@@ -245,7 +253,9 @@ class ModelBasedAgent(DummyAgent):
                 val_transitions,
             ]
         carry, outs = jax.lax.scan(self.step, carry, xs=None, length=self.train_steps)
-        self.dynamics_model.update_model(model_params=carry[2], model_opt_state=carry[3], alpha=carry[1])
+        if self.calibrate_model:
+            alpha = carry[1]
+        self.dynamics_model.update_model(model_params=carry[2], model_opt_state=carry[3], alpha=alpha)
         summary = outs[0].dict()
         if self.use_wandb:
             for log_dict in summary:
@@ -274,6 +284,7 @@ class ModelBasedAgent(DummyAgent):
         return self.dynamics_model.predict_raw(
             parameters=self.dynamics_model.model_params,
             tran=tran,
+            alpha=self.dynamics_model.alpha,
             bias_obs=self.dynamics_model.bias_obs,
             bias_act=self.dynamics_model.bias_act,
             bias_out=self.dynamics_model.bias_out,

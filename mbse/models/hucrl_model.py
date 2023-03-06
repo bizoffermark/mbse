@@ -47,6 +47,7 @@ class HUCRLModel(BayesianDynamicsModel):
                     obs,
                     action,
                     rng,
+                    alpha: Union[jnp.ndarray, float] = 1.0,
                     bias_obs: Union[jnp.ndarray, float] = 0.0,
                     bias_act: Union[jnp.ndarray, float] = 0.0,
                     bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -65,6 +66,7 @@ class HUCRLModel(BayesianDynamicsModel):
                 num_ensembles=self.model.num_ensembles,
                 beta=self.beta,
                 batch_size=obs.shape[0],
+                alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
                 bias_out=bias_out,
@@ -82,6 +84,7 @@ class HUCRLModel(BayesianDynamicsModel):
                 obs,
                 action,
                 rng,
+                alpha: Union[jnp.ndarray, float] = 1.0,
                 bias_obs: Union[jnp.ndarray, float] = 0.0,
                 bias_act: Union[jnp.ndarray, float] = 0.0,
                 bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -97,6 +100,7 @@ class HUCRLModel(BayesianDynamicsModel):
                 obs=obs,
                 action=action,
                 rng=rng,
+                alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
                 bias_out=bias_out,
@@ -136,6 +140,7 @@ class HUCRLModel(BayesianDynamicsModel):
                  num_ensembles,
                  beta,
                  batch_size,
+                 alpha: Union[jnp.ndarray, float] = 1.0,
                  bias_obs: Union[jnp.ndarray, float] = 0.0,
                  bias_act: Union[jnp.ndarray, float] = 0.0,
                  bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -158,7 +163,7 @@ class HUCRLModel(BayesianDynamicsModel):
 
         else:
             def get_epistemic_estimate(mean, std, eta, rng):
-                next_obs_eps_std = jnp.std(mean, axis=0)
+                next_obs_eps_std = alpha * jnp.std(mean, axis=0)
                 al_uncertainty = jnp.sqrt(jnp.mean(jnp.square(std), axis=0))
                 next_state_mean = jnp.mean(mean, axis=0) + beta * next_obs_eps_std * eta
                 next_obs = sample_normal_dist(
@@ -189,6 +194,7 @@ class HUCRLModel(BayesianDynamicsModel):
             obs,
             action,
             rng,
+            alpha: Union[jnp.ndarray, float] = 1.0,
             bias_obs: Union[jnp.ndarray, float] = 0.0,
             bias_act: Union[jnp.ndarray, float] = 0.0,
             bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -207,6 +213,7 @@ class HUCRLModel(BayesianDynamicsModel):
             obs=obs,
             action=action,
             rng=model_rng,
+            alpha=alpha,
             bias_obs=bias_obs,
             bias_act=bias_act,
             bias_out=bias_out,

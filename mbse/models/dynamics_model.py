@@ -78,6 +78,7 @@ class DynamicsModel(object):
         self.scale_act = scale_act
         self.scale_out = scale_out
         self.pred_diff = pred_diff
+        self.alpha = 1.0
         pass
 
     def _init_fn(self):
@@ -89,6 +90,7 @@ class DynamicsModel(object):
     def predict_raw(self,
                     parameters,
                     tran: Transition,
+                    alpha: Union[jnp.ndarray, float] = 1.0,
                     bias_obs: Union[jnp.ndarray, float] = 0.0,
                     bias_act: Union[jnp.ndarray, float] = 0.0,
                     bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -104,6 +106,7 @@ class DynamicsModel(object):
                  action,
                  rng,
                  sampling_idx=None,
+                 alpha: Union[jnp.ndarray, float] = 1.0,
                  bias_obs: Union[jnp.ndarray, float] = 0.0,
                  bias_act: Union[jnp.ndarray, float] = 0.0,
                  bias_out: Union[jnp.ndarray, float] = 0.0,

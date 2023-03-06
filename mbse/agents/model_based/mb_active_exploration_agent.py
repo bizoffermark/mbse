@@ -23,6 +23,7 @@ class MBActiveExplorationAgent(ModelBasedAgent):
                 init_state,
                 key,
                 optimizer_key,
+                alpha,
                 bias_obs,
                 bias_act,
                 bias_out,
@@ -38,6 +39,7 @@ class MBActiveExplorationAgent(ModelBasedAgent):
                 init_state=init_state,
                 key=None,
                 optimizer_key=optimizer_key,
+                alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
                 bias_out=bias_out,
@@ -45,12 +47,15 @@ class MBActiveExplorationAgent(ModelBasedAgent):
                 scale_act=scale_act,
                 scale_out=scale_out,
             )
+
         self.optimize_for_eval = jax.jit(_optimize)
+
         def _optimize_for_exploration(
                 params,
                 init_state,
                 key,
                 optimizer_key,
+                alpha,
                 bias_obs,
                 bias_act,
                 bias_out,
@@ -65,6 +70,7 @@ class MBActiveExplorationAgent(ModelBasedAgent):
                 params=params,
                 init_state=init_state,
                 key=key,
+                alpha=alpha,
                 optimizer_key=optimizer_key,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
@@ -80,8 +86,6 @@ class MBActiveExplorationAgent(ModelBasedAgent):
         self.act_in_train = lambda obs, rng: \
             np.asarray(self.act_in_train_jax(jnp.asarray(obs), rng))
 
-
-
     def act_in_train_jax(self, obs, rng):
         def optimize(init_state, key, optimizer_key):
             action_seq, reward = self.optimize_for_exploration(
@@ -89,6 +93,7 @@ class MBActiveExplorationAgent(ModelBasedAgent):
                 init_state=init_state,
                 key=key,
                 optimizer_key=optimizer_key,
+                alpha=self.dynamics_model.alpha,
                 bias_obs=self.dynamics_model.bias_obs,
                 bias_act=self.dynamics_model.bias_act,
                 bias_out=self.dynamics_model.bias_out,
@@ -97,6 +102,7 @@ class MBActiveExplorationAgent(ModelBasedAgent):
                 scale_out=self.dynamics_model.scale_out,
             )
             return action_seq, reward
+
         n_envs = obs.shape[0]
         obs = jnp.repeat(jnp.expand_dims(obs, 1), self.n_particles, 1)
         rollout_rng, optimizer_rng = jax.random.split(rng, 2)
@@ -112,5 +118,3 @@ class MBActiveExplorationAgent(ModelBasedAgent):
         action = action_sequence[:, 0, ...]
         action = action[..., :self.action_space.shape[0]]
         return action
-
-

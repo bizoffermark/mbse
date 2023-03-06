@@ -32,12 +32,14 @@ class ActiveLearningModel(HUCRLModel):
 
     def __init__(self,
                  use_log_uncertainties=False,
+                 use_al_uncertainties=False,
                  *args,
                  **kwargs
                  ):
 
         super(ActiveLearningModel, self).__init__(*args, **kwargs)
         self.use_log_uncertainties = use_log_uncertainties
+        self.use_al_uncertainties = use_al_uncertainties
         self._init_fn()
 
     def _init_fn(self):
@@ -47,6 +49,7 @@ class ActiveLearningModel(HUCRLModel):
                                      obs,
                                      action,
                                      rng,
+                                     alpha: Union[jnp.ndarray, float] = 1.0,
                                      bias_obs: Union[jnp.ndarray, float] = 0.0,
                                      bias_act: Union[jnp.ndarray, float] = 0.0,
                                      bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -64,6 +67,7 @@ class ActiveLearningModel(HUCRLModel):
                 rng=rng,
                 beta=self.beta,
                 batch_size=obs.shape[0],
+                alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
                 bias_out=bias_out,
@@ -81,6 +85,7 @@ class ActiveLearningModel(HUCRLModel):
                 obs,
                 action,
                 rng,
+                alpha: Union[jnp.ndarray, float] = 1.0,
                 bias_obs: Union[jnp.ndarray, float] = 0.0,
                 bias_act: Union[jnp.ndarray, float] = 0.0,
                 bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -95,6 +100,7 @@ class ActiveLearningModel(HUCRLModel):
                 obs=obs,
                 action=action,
                 rng=rng,
+                alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
                 bias_out=bias_out,
@@ -103,6 +109,7 @@ class ActiveLearningModel(HUCRLModel):
                 scale_out=scale_out,
                 sampling_idx=sampling_idx,
                 use_log_uncertainties=self.use_log_uncertainties,
+                use_al_uncertainties=self.use_al_uncertainties,
             )
 
         self.evaluate_for_exploration = jax.jit(evaluate_for_exploration)
@@ -117,6 +124,7 @@ class ActiveLearningModel(HUCRLModel):
             rng,
             beta,
             batch_size,
+            alpha: Union[jnp.ndarray, float] = 1.0,
             bias_obs: Union[jnp.ndarray, float] = 0.0,
             bias_act: Union[jnp.ndarray, float] = 0.0,
             bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -134,13 +142,13 @@ class ActiveLearningModel(HUCRLModel):
         mean, std = jnp.split(next_obs_tot, 2, axis=-1)
 
         if rng is None:
-            mean, _ = jnp.split(next_obs_tot, 2, axis=-1)
             next_obs = jnp.mean(mean, axis=0)
-            next_obs_eps_std = jnp.std(mean, axis=0)
+            next_obs_eps_std = alpha * jnp.std(mean, axis=0)
+            al_uncertainty = jnp.sqrt(jnp.mean(jnp.square(std), axis=0))
 
         else:
             def get_epistemic_estimate(mean, std, eta, rng):
-                next_obs_eps_std = jnp.std(mean, axis=0)
+                next_obs_eps_std = alpha * jnp.std(mean, axis=0)
                 al_uncertainty = jnp.sqrt(jnp.mean(jnp.square(std), axis=0))
                 next_state_mean = jnp.mean(mean, axis=0) + beta * next_obs_eps_std * eta
                 next_obs = sample_normal_dist(
@@ -148,20 +156,20 @@ class ActiveLearningModel(HUCRLModel):
                     al_uncertainty,
                     rng,
                 )
-                return next_obs, next_obs_eps_std
+                return next_obs, next_obs_eps_std, al_uncertainty
 
             sample_rng = jax.random.split(
                 rng,
                 batch_size
             )
-            next_obs, next_obs_eps_std = jax.vmap(get_epistemic_estimate, in_axes=(1, 1, 0, 0), out_axes=0)(
+            next_obs, next_obs_eps_std, al_uncertainty = jax.vmap(get_epistemic_estimate, in_axes=(1, 1, 0, 0), out_axes=0)(
                 mean,
                 std,
                 eta,
                 sample_rng
             )
         next_obs = next_obs * scale_out + bias_out + pred_diff * obs
-        return next_obs, next_obs_eps_std * scale_out
+        return next_obs, next_obs_eps_std * scale_out, al_uncertainty * scale_out
 
     @staticmethod
     def _evaluate_for_exploration(
@@ -170,6 +178,7 @@ class ActiveLearningModel(HUCRLModel):
             obs,
             action,
             rng,
+            alpha: Union[jnp.ndarray, float] = 1.0,
             bias_obs: Union[jnp.ndarray, float] = 0.0,
             bias_act: Union[jnp.ndarray, float] = 0.0,
             bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -178,15 +187,17 @@ class ActiveLearningModel(HUCRLModel):
             scale_out: Union[jnp.ndarray, float] = 1.0,
             sampling_idx: Optional[int] = None,
             use_log_uncertainties: bool = False,
+            use_al_uncertainties: bool = False,
     ):
         model_rng = None
         if rng is not None:
             rng, model_rng = jax.random.split(rng, 2)
-        next_obs, eps_uncertainty = pred_fn(
+        next_obs, eps_uncertainty, al_uncertainty = pred_fn(
             parameters=parameters,
             obs=obs,
             action=action,
             rng=model_rng,
+            alpha=alpha,
             bias_obs=bias_obs,
             bias_act=bias_act,
             bias_out=bias_out,
@@ -195,7 +206,11 @@ class ActiveLearningModel(HUCRLModel):
             scale_out=scale_out,
         )
         if use_log_uncertainties:
-            reward = jnp.sum(jnp.log(eps_uncertainty + 1e-6), axis=-1)
+            if use_al_uncertainties:
+                frac = eps_uncertainty/(al_uncertainty + 1e-6)
+                reward = jnp.sum(jnp.log(1 + jnp.square(frac)), axis=-1)
+            else:
+                reward = jnp.sum(jnp.log(1 + jnp.square(eps_uncertainty)), axis=-1)
         else:
-            reward = jnp.sum(eps_uncertainty, axis=-1)
+            reward = jnp.sum(jnp.square(eps_uncertainty), axis=-1)
         return next_obs, reward

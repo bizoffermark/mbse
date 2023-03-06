@@ -97,14 +97,15 @@ class BayesianDynamicsModel(DynamicsModel):
         self.sampling_idx = jnp.zeros(1)
         self.obs_dim = obs_dim
         self.act_dim = act_dim
-        self.alpha = 1.0
         self._init_fn()
 
     def _init_fn(self):
         def predict(parameters,
                     obs,
                     action,
-                    rng, sampling_idx=self.sampling_idx,
+                    rng,
+                    sampling_idx=self.sampling_idx,
+                    alpha: Union[jnp.ndarray, float] = 1.0,
                     bias_obs: Union[jnp.ndarray, float] = 0.0,
                     bias_act: Union[jnp.ndarray, float] = 0.0,
                     bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -122,6 +123,7 @@ class BayesianDynamicsModel(DynamicsModel):
                 num_ensembles=self.model.num_ensembles,
                 sampling_idx=sampling_idx,
                 batch_size=obs.shape[0],
+                alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
                 bias_out=bias_out,
@@ -139,6 +141,7 @@ class BayesianDynamicsModel(DynamicsModel):
                 action,
                 rng,
                 sampling_idx=self.sampling_idx,
+                alpha: Union[jnp.ndarray, float] = 1.0,
                 bias_obs: Union[jnp.ndarray, float] = 0.0,
                 bias_act: Union[jnp.ndarray, float] = 0.0,
                 bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -153,6 +156,7 @@ class BayesianDynamicsModel(DynamicsModel):
                 obs=obs,
                 action=action,
                 rng=rng,
+                alpha=alpha,
                 sampling_idx=sampling_idx,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
@@ -185,6 +189,7 @@ class BayesianDynamicsModel(DynamicsModel):
         def _predict_raw(
                 parameters,
                 tran: Transition,
+                alpha: Union[jnp.ndarray, float] = 1.0,
                 bias_obs: Union[jnp.ndarray, float] = 0.0,
                 bias_act: Union[jnp.ndarray, float] = 0.0,
                 bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -196,6 +201,7 @@ class BayesianDynamicsModel(DynamicsModel):
                 predict_fn=self.model._predict,
                 parameters=parameters,
                 tran=tran,
+                alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
                 bias_out=bias_out,
@@ -222,6 +228,7 @@ class BayesianDynamicsModel(DynamicsModel):
             predict_fn,
             parameters,
             tran: Transition,
+            alpha: Union[jnp.ndarray, float] = 1.0,
             bias_obs: Union[jnp.ndarray, float] = 0.0,
             bias_act: Union[jnp.ndarray, float] = 0.0,
             bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -251,6 +258,7 @@ class BayesianDynamicsModel(DynamicsModel):
                  num_ensembles,
                  sampling_idx,
                  batch_size,
+                 alpha: Union[jnp.ndarray, float] = 1.0,
                  bias_obs: Union[jnp.ndarray, float] = 0.0,
                  bias_act: Union[jnp.ndarray, float] = 0.0,
                  bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -401,6 +409,7 @@ class BayesianDynamicsModel(DynamicsModel):
             action,
             rng,
             sampling_idx,
+            alpha: Union[jnp.ndarray, float] = 1.0,
             bias_obs: Union[jnp.ndarray, float] = 0.0,
             bias_act: Union[jnp.ndarray, float] = 0.0,
             bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -419,6 +428,7 @@ class BayesianDynamicsModel(DynamicsModel):
             action=action,
             rng=model_rng,
             sampling_idx=sampling_idx,
+            alpha=alpha,
             bias_obs=bias_obs,
             bias_act=bias_act,
             bias_out=bias_out,

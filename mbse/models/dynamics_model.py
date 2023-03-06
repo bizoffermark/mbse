@@ -12,6 +12,8 @@ class ModelSummary:
     val_mse: jnp.array = 0.0
     val_al_std: jnp.array = 0.0
     val_eps_std: jnp.array = 0.0
+    calibration_alpha: jnp.array = 0.0,
+    calibration_error: jnp.array = 0.0,
 
     def dict(self):
         final_list = []
@@ -26,6 +28,8 @@ class ModelSummary:
                         'val_mse': self.val_mse[i].item(),
                         'val_al_std': self.val_al_std[i].item(),
                         'val_eps_std': self.val_eps_std[i].item(),
+                        'calibration_alpha': self.calibration_alpha[i].item(),
+                        'calibration_error': self.calibration_error[i].item(),
                     }
                     final_list.append(current_dict)
             else:
@@ -36,6 +40,8 @@ class ModelSummary:
                     'val_mse': self.val_mse[0].item(),
                     'val_al_std': self.val_al_std[0].item(),
                     'val_eps_std': self.val_eps_std[0].item(),
+                    'calibration_alpha': self.calibration_alpha[0].item(),
+                    'calibration_error': self.calibration_error[0].item(),
                 }
                 final_list.append(current_dict)
         else:
@@ -46,6 +52,8 @@ class ModelSummary:
                 'val_mse': self.val_mse.item(),
                 'val_al_std': self.val_al_std.item(),
                 'val_eps_std': self.val_eps_std.item(),
+                'calibration_alpha': self.calibration_alpha.item(),
+                'calibration_error': self.calibration_error.item(),
             }
             final_list.append(current_dict)
         return final_list
@@ -110,7 +118,7 @@ class DynamicsModel(object):
                     model_params=None,
                     model_opt_state=None,
                     val: Optional[Transition] = None):
-        return None, None, ModelSummary()
+        return None, None, None, ModelSummary()
 
     @property
     def model_params(self):
@@ -128,7 +136,7 @@ class DynamicsModel(object):
     def init_model_opt_state(self):
         return None
 
-    def update_model(self, model_params, model_opt_state):
+    def update_model(self, model_params, model_opt_state, alpha):
         pass
 
     def set_transforms(self,

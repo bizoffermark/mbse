@@ -76,9 +76,9 @@ class ModelBasedAgent(DummyAgent):
             rng = carry[0]
             model_params = carry[1]
             model_opt_state = carry[2]
-            idx = carry[4]
-            transition = carry[5]
-            val_transition = carry[6]
+            idx = carry[5]
+            transition = carry[6]
+            val_transition = carry[7]
             train_rng, rng = jax.random.split(rng, 2)
             tran = transition.get_idx(idx)
             val_tran = val_transition.get_idx(idx)
@@ -86,6 +86,7 @@ class ModelBasedAgent(DummyAgent):
             (
                 new_model_params,
                 new_model_opt_state,
+                alpha,
                 summary,
             ) = \
                 self.dynamics_model._train_step(
@@ -98,6 +99,7 @@ class ModelBasedAgent(DummyAgent):
                 rng,
                 new_model_params,
                 new_model_opt_state,
+                alpha,
                 summary,
                 idx + 1,
                 transition,
@@ -219,11 +221,13 @@ class ModelBasedAgent(DummyAgent):
             rng, val_rng = jax.random.split(rng, 2)
             val_transitions = buffer.sample(val_rng, batch_size=int(self.batch_size * self.train_steps))
             val_transitions = val_transitions.reshape(self.train_steps, self.batch_size)
+            alpha = 0.0
         if self.reset_model:
             carry = [
                 rng,
                 self.dynamics_model.init_model_params,
                 self.dynamics_model.init_model_opt_state,
+                alpha,
                 ModelSummary(),
                 0,
                 transitions,
@@ -234,13 +238,14 @@ class ModelBasedAgent(DummyAgent):
                 rng,
                 self.dynamics_model.model_params,
                 self.dynamics_model.model_opt_state,
+                alpha,
                 ModelSummary(),
                 0,
                 transitions,
                 val_transitions,
             ]
         carry, outs = jax.lax.scan(self.step, carry, xs=None, length=self.train_steps)
-        self.dynamics_model.update_model(model_params=carry[1], model_opt_state=carry[2])
+        self.dynamics_model.update_model(model_params=carry[1], model_opt_state=carry[2], alpha=carry[3])
         summary = outs[0].dict()
         if self.use_wandb:
             for log_dict in summary:

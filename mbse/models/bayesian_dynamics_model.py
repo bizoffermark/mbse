@@ -97,6 +97,7 @@ class BayesianDynamicsModel(DynamicsModel):
         self.sampling_idx = jnp.zeros(1)
         self.obs_dim = obs_dim
         self.act_dim = act_dim
+        self.alpha = 1.0
         self._init_fn()
 
     def _init_fn(self):
@@ -172,6 +173,7 @@ class BayesianDynamicsModel(DynamicsModel):
             return self._train(
                 train_fn=self.model._train_step,
                 predict_fn=self.model._predict,
+                calibrate_fn=self.model.calculate_calibration_alpha,
                 tran=tran,
                 model_params=model_params,
                 model_opt_state=model_opt_state,
@@ -325,8 +327,8 @@ class BayesianDynamicsModel(DynamicsModel):
         return next_obs
 
     @staticmethod
-    def _train(train_fn, predict_fn, tran: Transition, model_params, model_opt_state, val: Transition = None):
-
+    def _train(train_fn, predict_fn, calibrate_fn, tran: Transition, model_params, model_opt_state, val: Transition = None):
+        alpha = 1.0
         x = jnp.concatenate([tran.obs, tran.action], axis=-1)
         new_model_params, new_model_opt_state, likelihood, grad_norm = train_fn(
             params=model_params,
@@ -353,6 +355,8 @@ class BayesianDynamicsModel(DynamicsModel):
                 lambda pred: mse(val_y, pred),
             )(mean)
             val_mse = val_mse.mean()
+            alpha, best_score = calibrate_fn(new_model_params, val_x, val_y)
+
         summary = ModelSummary(
             model_likelihood=likelihood.astype(float),
             grad_norm=grad_norm.astype(float),
@@ -360,9 +364,11 @@ class BayesianDynamicsModel(DynamicsModel):
             val_mse=val_mse.astype(float),
             val_al_std=std.mean().astype(float),
             val_eps_std=eps_std.mean().astype(float),
+            calibration_alpha=alpha.astype(float),
+            calibration_error=best_score.astype(float),
         )
 
-        return new_model_params, new_model_opt_state, summary
+        return new_model_params, new_model_opt_state, alpha, summary
 
     @property
     def model_params(self):
@@ -380,9 +386,10 @@ class BayesianDynamicsModel(DynamicsModel):
     def init_model_opt_state(self):
         return self.model.init_opt_state
 
-    def update_model(self, model_params, model_opt_state):
+    def update_model(self, model_params, model_opt_state, alpha):
         self.model.particles = model_params
         self.model.opt_state = model_opt_state
+        self.alpha = alpha
 
     @staticmethod
     def _evaluate(

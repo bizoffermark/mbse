@@ -117,6 +117,7 @@ class HUCRLModel(BayesianDynamicsModel):
             return self._train(
                 train_fn=self.model._train_step,
                 predict_fn=self.model._predict,
+                calibrate_fn=self.model.calculate_calibration_alpha,
                 tran=tran,
                 model_params=model_params,
                 model_opt_state=model_opt_state,

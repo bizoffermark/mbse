@@ -114,6 +114,76 @@ class ActiveLearningModel(HUCRLModel):
 
         self.evaluate_for_exploration = jax.jit(evaluate_for_exploration)
 
+        def predict_without_optimism(parameters,
+                    obs,
+                    action,
+                    rng,
+                    alpha: Union[jnp.ndarray, float] = 1.0,
+                    bias_obs: Union[jnp.ndarray, float] = 0.0,
+                    bias_act: Union[jnp.ndarray, float] = 0.0,
+                    bias_out: Union[jnp.ndarray, float] = 0.0,
+                    scale_obs: Union[jnp.ndarray, float] = 1.0,
+                    scale_act: Union[jnp.ndarray, float] = 1.0,
+                    scale_out: Union[jnp.ndarray, float] = 1.0,
+                    sampling_idx: Optional[int] = None,
+                    ):
+            return self._predict(
+                predict_fn=self.model._predict,
+                parameters=parameters,
+                obs=obs,
+                act_dim=self.act_dim,
+                action=action,
+                rng=rng,
+                num_ensembles=self.model.num_ensembles,
+                beta=self.beta,
+                batch_size=obs.shape[0],
+                alpha=alpha,
+                bias_obs=bias_obs,
+                bias_act=bias_act,
+                bias_out=bias_out,
+                scale_obs=scale_obs,
+                scale_act=scale_act,
+                scale_out=scale_out,
+                pred_diff=self.pred_diff,
+                use_optimism=False,
+                sampling_idx=sampling_idx,
+            )
+
+        self.predict_without_optimism = jax.jit(predict_without_optimism)
+
+        def evaluate(
+                parameters,
+                obs,
+                action,
+                rng,
+                alpha: Union[jnp.ndarray, float] = 1.0,
+                bias_obs: Union[jnp.ndarray, float] = 0.0,
+                bias_act: Union[jnp.ndarray, float] = 0.0,
+                bias_out: Union[jnp.ndarray, float] = 0.0,
+                scale_obs: Union[jnp.ndarray, float] = 1.0,
+                scale_act: Union[jnp.ndarray, float] = 1.0,
+                scale_out: Union[jnp.ndarray, float] = 1.0,
+                sampling_idx: Optional[int] = None,
+        ):
+            return self._evaluate(
+                pred_fn=self.predict_without_optimism,
+                reward_fn=self.reward_model.predict,
+                parameters=parameters,
+                obs=obs,
+                action=action,
+                rng=rng,
+                alpha=alpha,
+                bias_obs=bias_obs,
+                bias_act=bias_act,
+                bias_out=bias_out,
+                scale_obs=scale_obs,
+                scale_act=scale_act,
+                scale_out=scale_out,
+                sampling_idx=sampling_idx,
+            )
+
+        self.evaluate = jax.jit(evaluate)
+
     @staticmethod
     def _predict_with_uncertainty(
             predict_fn,

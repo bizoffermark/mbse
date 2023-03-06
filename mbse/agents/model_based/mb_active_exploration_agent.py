@@ -37,7 +37,7 @@ class MBActiveExplorationAgent(ModelBasedAgent):
                 horizon=self.policy_optimzer.action_dim[-2],
                 params=params,
                 init_state=init_state,
-                key=None,
+                key=key,
                 optimizer_key=optimizer_key,
                 alpha=alpha,
                 bias_obs=bias_obs,

@@ -74,6 +74,7 @@ class HUCRLModel(BayesianDynamicsModel):
                 scale_act=scale_act,
                 scale_out=scale_out,
                 pred_diff=self.pred_diff,
+                use_optimism=True,
                 sampling_idx=sampling_idx,
             )
 
@@ -148,6 +149,7 @@ class HUCRLModel(BayesianDynamicsModel):
                  scale_act: Union[jnp.ndarray, float] = 1.0,
                  scale_out: Union[jnp.ndarray, float] = 1.0,
                  pred_diff: bool = 1,
+                 use_optimism: bool = 1,
                  sampling_idx: Optional[int] = None,
                  ):
         act, eta = jnp.split(action, axis=-1, indices_or_sections=[act_dim])
@@ -165,7 +167,7 @@ class HUCRLModel(BayesianDynamicsModel):
             def get_epistemic_estimate(mean, std, eta, rng):
                 next_obs_eps_std = alpha * jnp.std(mean, axis=0)
                 al_uncertainty = jnp.sqrt(jnp.mean(jnp.square(std), axis=0))
-                next_state_mean = jnp.mean(mean, axis=0) + beta * next_obs_eps_std * eta
+                next_state_mean = jnp.mean(mean, axis=0) + beta * next_obs_eps_std * eta * use_optimism
                 next_obs = sample_normal_dist(
                     next_state_mean,
                     al_uncertainty,

@@ -74,8 +74,8 @@ class ModelBasedAgent(DummyAgent):
 
         def step(carry, ins):
             rng = carry[0]
-            model_params = carry[1]
-            model_opt_state = carry[2]
+            model_params = carry[2]
+            model_opt_state = carry[3]
             idx = carry[5]
             transition = carry[6]
             val_transition = carry[7]
@@ -97,9 +97,9 @@ class ModelBasedAgent(DummyAgent):
                 )
             carry = [
                 rng,
+                alpha,
                 new_model_params,
                 new_model_opt_state,
-                alpha,
                 summary,
                 idx + 1,
                 transition,
@@ -221,13 +221,13 @@ class ModelBasedAgent(DummyAgent):
             rng, val_rng = jax.random.split(rng, 2)
             val_transitions = buffer.sample(val_rng, batch_size=int(self.batch_size * self.train_steps))
             val_transitions = val_transitions.reshape(self.train_steps, self.batch_size)
-            alpha = 0.0
+            alpha = jnp.zeros(self.observation_space.shape)
         if self.reset_model:
             carry = [
                 rng,
+                alpha,
                 self.dynamics_model.init_model_params,
                 self.dynamics_model.init_model_opt_state,
-                alpha,
                 ModelSummary(),
                 0,
                 transitions,
@@ -236,16 +236,16 @@ class ModelBasedAgent(DummyAgent):
         else:
             carry = [
                 rng,
+                alpha,
                 self.dynamics_model.model_params,
                 self.dynamics_model.model_opt_state,
-                alpha,
                 ModelSummary(),
                 0,
                 transitions,
                 val_transitions,
             ]
         carry, outs = jax.lax.scan(self.step, carry, xs=None, length=self.train_steps)
-        self.dynamics_model.update_model(model_params=carry[1], model_opt_state=carry[2], alpha=carry[3])
+        self.dynamics_model.update_model(model_params=carry[2], model_opt_state=carry[3], alpha=carry[1])
         summary = outs[0].dict()
         if self.use_wandb:
             for log_dict in summary:

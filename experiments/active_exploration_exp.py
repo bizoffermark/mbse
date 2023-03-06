@@ -64,7 +64,7 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
             train_steps=z,
             batch_size=v,
             action_space=env.action_space,
-            observation_space=env.action_space,
+            observation_space=env.observation_space,
             dynamics_model=dynamics_model,
             n_particles=n_particles,
             reset_model=reset_model,

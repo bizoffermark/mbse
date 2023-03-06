@@ -12,8 +12,8 @@ class ModelSummary:
     val_mse: jnp.array = 0.0
     val_al_std: jnp.array = 0.0
     val_eps_std: jnp.array = 0.0
-    calibration_alpha: jnp.array = 0.0,
-    calibration_error: jnp.array = 0.0,
+    calibration_alpha: jnp.array = 0.0
+    calibration_error: jnp.array = 0.0
 
     def dict(self):
         final_list = []

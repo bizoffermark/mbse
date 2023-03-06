@@ -328,7 +328,8 @@ class BayesianDynamicsModel(DynamicsModel):
 
     @staticmethod
     def _train(train_fn, predict_fn, calibrate_fn, tran: Transition, model_params, model_opt_state, val: Transition = None):
-        alpha = 1.0
+        alpha = jnp.ones(tran.obs.shape[-1])
+        best_score = 0.0
         x = jnp.concatenate([tran.obs, tran.action], axis=-1)
         new_model_params, new_model_opt_state, likelihood, grad_norm = train_fn(
             params=model_params,
@@ -364,8 +365,8 @@ class BayesianDynamicsModel(DynamicsModel):
             val_mse=val_mse.astype(float),
             val_al_std=std.mean().astype(float),
             val_eps_std=eps_std.mean().astype(float),
-            calibration_alpha=alpha.astype(float),
-            calibration_error=best_score.astype(float),
+            calibration_alpha=alpha.mean().astype(float),
+            calibration_error=best_score.mean().astype(float),
         )
 
         return new_model_params, new_model_opt_state, alpha, summary

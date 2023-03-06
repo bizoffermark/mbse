@@ -167,7 +167,7 @@ class ProbabilisticEnsembleModel(object):
         indices = jnp.argmin(errors, axis=0)
         best_alpha = test_alpha[indices]
         assert best_alpha.shape == (output_dim,)
-        return best_alpha, errors[indices]
+        return best_alpha, jnp.diag(errors[indices])
 
     @staticmethod
     def _calibration_errors(calibration_score_fn, params, xs, ys, ps, alpha, output_dim) -> jax.Array:

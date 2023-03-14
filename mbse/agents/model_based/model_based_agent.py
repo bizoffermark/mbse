@@ -30,17 +30,12 @@ class ModelBasedAgent(DummyAgent):
         self.action_space = action_space
         self.observation_space = observation_space
         self.dynamics_model = dynamics_model
-        self.policy_optimzer = policy_optimizer
+        self.policy_optimizer = policy_optimizer
         self.discount = discount
         self.n_particles = n_particles
         self.reset_model = reset_model
         self.calibrate_model = calibrate_model
         self._init_fn()
-
-        # self.optimize = lambda rewards, key: self.policy_optimzer.optimize(
-        #        rewards,
-        #        key
-        #    )
 
     def _init_fn(self):
         def _optimize(
@@ -57,9 +52,9 @@ class ModelBasedAgent(DummyAgent):
                 scale_out):
             return self._optimize(
                 eval_fn=self.dynamics_model.evaluate,
-                optimize_fn=self.policy_optimzer.optimize,
+                optimize_fn=self.policy_optimizer.optimize,
                 n_particles=self.n_particles,
-                horizon=self.policy_optimzer.action_dim[-2],
+                horizon=self.policy_optimizer.action_dim[-2],
                 params=params,
                 init_state=init_state,
                 key=key,

@@ -115,18 +115,18 @@ class ActiveLearningModel(HUCRLModel):
         self.evaluate_for_exploration = jax.jit(evaluate_for_exploration)
 
         def predict_without_optimism(parameters,
-                    obs,
-                    action,
-                    rng,
-                    alpha: Union[jnp.ndarray, float] = 1.0,
-                    bias_obs: Union[jnp.ndarray, float] = 0.0,
-                    bias_act: Union[jnp.ndarray, float] = 0.0,
-                    bias_out: Union[jnp.ndarray, float] = 0.0,
-                    scale_obs: Union[jnp.ndarray, float] = 1.0,
-                    scale_act: Union[jnp.ndarray, float] = 1.0,
-                    scale_out: Union[jnp.ndarray, float] = 1.0,
-                    sampling_idx: Optional[int] = None,
-                    ):
+                                     obs,
+                                     action,
+                                     rng,
+                                     alpha: Union[jnp.ndarray, float] = 1.0,
+                                     bias_obs: Union[jnp.ndarray, float] = 0.0,
+                                     bias_act: Union[jnp.ndarray, float] = 0.0,
+                                     bias_out: Union[jnp.ndarray, float] = 0.0,
+                                     scale_obs: Union[jnp.ndarray, float] = 1.0,
+                                     scale_act: Union[jnp.ndarray, float] = 1.0,
+                                     scale_out: Union[jnp.ndarray, float] = 1.0,
+                                     sampling_idx: Optional[int] = None,
+                                     ):
             return self._predict(
                 predict_fn=self.model._predict,
                 parameters=parameters,
@@ -232,12 +232,14 @@ class ActiveLearningModel(HUCRLModel):
                 rng,
                 batch_size
             )
-            next_obs, next_obs_eps_std, al_uncertainty = jax.vmap(get_epistemic_estimate, in_axes=(1, 1, 0, 0), out_axes=0)(
-                mean,
-                std,
-                eta,
-                sample_rng
-            )
+            next_obs, next_obs_eps_std, al_uncertainty = jax.vmap(get_epistemic_estimate,
+                                                                  in_axes=(1, 1, 0, 0), out_axes=0) \
+                    (
+                    mean,
+                    std,
+                    eta,
+                    sample_rng
+                )
         next_obs = next_obs * scale_out + bias_out + pred_diff * obs
         return next_obs, next_obs_eps_std * scale_out, al_uncertainty * scale_out
 
@@ -277,7 +279,7 @@ class ActiveLearningModel(HUCRLModel):
         )
         if use_log_uncertainties:
             if use_al_uncertainties:
-                frac = eps_uncertainty/(al_uncertainty + 1e-6)
+                frac = eps_uncertainty / (al_uncertainty + 1e-6)
                 reward = jnp.sum(jnp.log(1 + jnp.square(frac)), axis=-1)
             else:
                 reward = jnp.sum(jnp.log(1 + jnp.square(eps_uncertainty)), axis=-1)

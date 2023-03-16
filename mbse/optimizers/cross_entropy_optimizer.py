@@ -48,7 +48,7 @@ class CrossEntropyOptimizer(DummyOptimizer):
         mean = jnp.zeros(self.action_dim)
         std = jnp.ones(self.action_dim)*self.init_var
         best_sequence = mean
-        get_best_action = lambda best_val, best_seq, val, seq: [val[0].squeeze(), seq[0]]
+        get_best_action = lambda best_val, best_seq, val, seq: [val[-1].squeeze(), seq[-1]]
         get_curr_best_action = lambda best_val, best_seq, val, seq: [best_val, best_seq]
         if rng is None:
             rng = jax.random.PRNGKey(self.seed)
@@ -63,7 +63,7 @@ class CrossEntropyOptimizer(DummyOptimizer):
             elites, elite_values = self.step(func, mu, sig, sample_key)
             mean = jnp.mean(elites, axis=0)
             std = jnp.std(elites, axis=0)
-            best_elite = elite_values[0].squeeze()
+            best_elite = elite_values[-1].squeeze()
             bests = jax.lax.cond(best_val <= best_elite,
                                  get_best_action,
                                  get_curr_best_action,

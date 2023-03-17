@@ -1,13 +1,13 @@
 import gym
 from gym import spaces
 from gym import Env
-from gym.envs.classic_control.pendulum import PendulumEnv
 from typing import Optional
 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from gym.wrappers.record_video import RecordVideo
+
 
 class TrajectoryGraph:
     """A stock trading visualization using matplotlib made to render
@@ -19,6 +19,8 @@ class TrajectoryGraph:
         self.pos = []
         self.fig, self.pos_axis = plt.subplots()
         self.fig.suptitle(title)
+        self.pos_axis.set_xticks([])
+        self.pos_axis.set_yticks([])
         self.rectangle_size = 0.05
         self.canvas = self.fig.canvas
         self._bg = None
@@ -33,8 +35,8 @@ class TrajectoryGraph:
             animated=True,
         )
         (self.ln,) = self.pos_axis.plot(0.0, 0.0, animated=True)
-        (self.pn, ) = self.pos_axis.plot(0.0, 0.0, 'ro', animated=True)
-
+        (self.pn,) = self.pos_axis.plot(0.0, 0.0, 'ro', animated=True)
+        (self.gn,) = self.pos_axis.plot(0.0, 0.0, 'o', animated=True, color='gold')
         self.car_pos = self.pos_axis.annotate(f'x_pos: {0:.2f}, y_pos: {0:.2f}'.format(0.0, 0.0),
                                               (0, 1),
                                               xycoords="axes fraction",
@@ -46,8 +48,9 @@ class TrajectoryGraph:
         self._artists = []
         self.add_artist(self.fr_number)
         self.add_artist(self.ln)
-        self.add_artist(self.car_pos)
         self.add_artist(self.pn)
+        self.add_artist(self.gn)
+        self.add_artist(self.car_pos)
         self.cid = self.canvas.mpl_connect("draw_event", self.on_draw)
         # Show the graph without blocking the rest of the program
         plt.show(block=False)
@@ -119,42 +122,40 @@ class TrajectoryGraph:
         data = data.reshape(cv.get_width_height()[::-1] + (3,))
         return data
 
-    def render(self, current_step, car_pos, window_size=40):
+    def render(self, current_step, car_pos, goal_pos, window_size=40):
         self.pos.append(car_pos)
         pos = np.asarray(self.pos)
         self.pos_axis.clear()
         window_start = 0
-        step_range = range(window_start, current_step)
+        step_range = range(window_start, current_step + 1)
+        theta, v_x, v_y = car_pos[2], car_pos[3], car_pos[4]
+        p_x_dot = v_x * np.cos(theta) - v_y * np.sin(theta)
+        p_y_dot = v_x * np.sin(theta) + v_y * np.cos(theta)
         self.pn.set_data(car_pos[0], car_pos[1])
-        self.pn.set_marker(marker=[3, 0, car_pos[2] * np.pi / 180.0])
+        self.pn.set_marker(marker=[3, 0, car_pos[2] * 180.0/np.pi - 90.0])
+        self.gn.set_data(goal_pos[0], goal_pos[1])
         self.fr_number.set_text("frame: {j}".format(j=current_step))
         self.car_pos.set_text("x_pos: {x}, y_pos: {y}".format(x=np.around(car_pos[0], 2), y=np.around(car_pos[1], 2)))
         self.ln.set_data(pos[step_range, 0], pos[step_range, 1])
+        min_y = min(min(pos[:, 1]), goal_pos[1])
+        y_lim_min = min_y / 1.25 if min_y >= 0 else min_y * 1.25
+        max_y = max(max(pos[:, 1]), goal_pos[1])
+        y_lim_max = max_y / 1.25 if max_y < 0 else max_y * 1.25
         self.pos_axis.set_ylim(
-            min(pos[:, 1]) / 1.25,
-            max(pos[:, 1]) * 1.25)
+            y_lim_min,
+            y_lim_max)
+        min_x = min(min(pos[:, 0]), goal_pos[0])
+        x_lim_min = min_x / 1.25 if min_x >= 0 else min_x * 1.25
+        max_x = max(max(pos[:, 0]), goal_pos[0])
+        x_lim_max = max_x / 1.25 if max_x < 0 else max_x * 1.25
         self.pos_axis.set_xlim(
-            min(pos[:, 0]) / 1.25,
-            max(pos[:, 0]) * 1.25)
+            x_lim_min,
+            x_lim_max)
+        self.pos_axis.set_xticks([])
+        self.pos_axis.set_yticks([])
         data = self.update()
 
         return data
-        # self.pos_axis.plot(
-        #    pos[step_range, 0], pos[step_range, 1],
-        #    label='Car Trajectory',
-        #    animated=True,
-        # )
-        # self.pos_axis.annotate(f'x_pos: {0:.2f}, y_pos: {0:.2f}'.format(car_pos[0], car_pos[1]),
-        #                        (car_pos[0], car_pos[1]),
-        #                        xytext=(car_pos[0], car_pos[1]),
-        #                        bbox=dict(boxstyle='round', fc='w', ec='k', lw=1),
-        #                        color="black",
-        #                        fontsize="small",
-        #                        animated=True,)
-        # # Hide duplicate net worth date labels
-        # plt.setp(self.pos_axis.get_xticklabels(), visible=False)
-
-        # Necessary to view frames before they are unrendered
 
 
 class BicycleEnv(Env):
@@ -326,7 +327,7 @@ class BicycleEnv(Env):
 
         delta, d = u[0], u[1]
 
-        d_0 = (c_rr + c_d * v_x * v_x  - c_m_2 * v_x) / (c_m_1 - c_m_2 * v_x)
+        d_0 = (c_rr + c_d * v_x * v_x - c_m_2 * v_x) / (c_m_1 - c_m_2 * v_x)
         d_slow = np.maximum(d, d_0)
         d_fast = d
         slow_ind = v_x <= 0.1
@@ -365,8 +366,8 @@ class BicycleEnv(Env):
             # beta = np.arctan(l_r * np.tan(delta) / l)
             beta = l_r * np.tan(delta) / l
             v_x_state = dxkin[3]
-            v_y_state = dxkin[3] * beta# V*sin(beta)
-            #w = v_x_state * np.arctan(delta) / l
+            v_y_state = dxkin[3] * beta  # V*sin(beta)
+            # w = v_x_state * np.arctan(delta) / l
             w = v_x_state * np.tan(delta) / l
             dx_kin_full = np.asarray([dxkin[0], dxkin[1], dxkin[2], v_x_state, v_y_state, w])
 
@@ -443,7 +444,8 @@ class BicycleEnv(Env):
         if self.visualization is None:
             self.visualization = TrajectoryGraph()
 
-        return self.visualization.render(self.current_step, self.state, window_size=min(self.current_step, self.window_size))
+        return self.visualization.render(self.current_step, self.state, self.goal_pos,
+                                         window_size=min(self.current_step, self.window_size))
 
 
 if __name__ == "__main__":
@@ -458,11 +460,8 @@ if __name__ == "__main__":
             goal_direction = np.arctan2(pos_error[1], pos_error[0])
             goal_dist = np.sqrt(pos_error[0] ** 2 + pos_error[1] ** 2)
             velocity = np.sqrt(x[3] ** 2 + x[4] ** 2)
-            s = np.clip(0.1 * goal_direction, a_min=-0.3, a_max=0.3)
-            if h < horizon / 2:
-                d = np.clip(k_p * goal_dist - k_d * velocity, a_min=-1, a_max=1)
-            else:
-                d = -0.2
+            s = np.clip(0.01 * goal_direction, a_min=-0.3, a_max=0.3)
+            d = np.clip(k_p * goal_dist - k_d * velocity, a_min=-1, a_max=1)
             u = np.asarray([s, d])
             x, reward, _, _, _ = env.step(u)
             # env.render()

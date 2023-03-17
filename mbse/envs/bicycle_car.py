@@ -1,12 +1,13 @@
 import gym
 from gym import spaces
 from gym import Env
+from gym.envs.classic_control.pendulum import PendulumEnv
 from typing import Optional
 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-
+from gym.wrappers.record_video import RecordVideo
 
 class TrajectoryGraph:
     """A stock trading visualization using matplotlib made to render
@@ -114,6 +115,9 @@ class TrajectoryGraph:
             cv.blit(fig.bbox)
         # let the GUI event loop process anything it has to do
         cv.flush_events()
+        data = np.frombuffer(cv.tostring_rgb(), dtype=np.uint8)
+        data = data.reshape(cv.get_width_height()[::-1] + (3,))
+        return data
 
     def render(self, current_step, car_pos, window_size=40):
         self.pos.append(car_pos)
@@ -121,18 +125,20 @@ class TrajectoryGraph:
         self.pos_axis.clear()
         window_start = 0
         step_range = range(window_start, current_step)
-        self.ln.set_data(pos[step_range, 0], pos[step_range, 1])
         self.pn.set_data(car_pos[0], car_pos[1])
-        self.pn.set_marker(marker=[3, 0, car_pos[2]*np.pi/180.0])
+        self.pn.set_marker(marker=[3, 0, car_pos[2] * np.pi / 180.0])
         self.fr_number.set_text("frame: {j}".format(j=current_step))
         self.car_pos.set_text("x_pos: {x}, y_pos: {y}".format(x=np.around(car_pos[0], 2), y=np.around(car_pos[1], 2)))
+        self.ln.set_data(pos[step_range, 0], pos[step_range, 1])
         self.pos_axis.set_ylim(
             min(pos[:, 1]) / 1.25,
             max(pos[:, 1]) * 1.25)
         self.pos_axis.set_xlim(
             min(pos[:, 0]) / 1.25,
             max(pos[:, 0]) * 1.25)
-        self.update()
+        data = self.update()
+
+        return data
         # self.pos_axis.plot(
         #    pos[step_range, 0], pos[step_range, 1],
         #    label='Car Trajectory',
@@ -437,12 +443,13 @@ class BicycleEnv(Env):
         if self.visualization is None:
             self.visualization = TrajectoryGraph()
 
-        self.visualization.render(self.current_step, self.state, window_size=min(self.current_step, self.window_size))
+        return self.visualization.render(self.current_step, self.state, window_size=min(self.current_step, self.window_size))
 
 
 if __name__ == "__main__":
     def simulate_car(k_p=1, k_d=0.6, horizon=500):
         env = BicycleEnv()
+        env = RecordVideo(env, video_folder='./', episode_trigger=lambda x: True)
         x, _ = env.reset()
         goal = env.goal_pos
         x_traj = np.zeros([horizon, 2])
@@ -458,8 +465,7 @@ if __name__ == "__main__":
                 d = -0.2
             u = np.asarray([s, d])
             x, reward, _, _, _ = env.step(u)
-            env.render()
-            print(x[3:])
+            # env.render()
         return x_traj
 
 

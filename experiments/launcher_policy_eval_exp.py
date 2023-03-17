@@ -9,7 +9,7 @@ import itertools
 
 applicable_configs = {
     'general': ['use_wandb'],
-    'env': ['env_name', 'time_limit', 'n_envs'],
+    'env': ['env_name', 'time_limit', 'n_envs', 'time_limit_eval'],
     'optimizer': ['num_samples', 'num_elites', 'num_steps', 'horizon'],
     'agent': ['discount', 'n_particles', 'reset_model'],
     'dynamics_model': ['num_ensembles', 'hidden_layers', 'num_neurons', 'pred_diff'],
@@ -22,6 +22,7 @@ default_configs = {
     'use_wandb': True,
     'env_name': 'Pendulum-v1',
     'time_limit': 200,
+    'time_limit_eval': 200,
     'n_envs': 5,
     'num_samples': 500,
     'num_elites': 50,
@@ -34,15 +35,15 @@ default_configs = {
     'hidden_layers': 2,
     'num_neurons': 128,
     'pred_diff': True,
-    'batch_size': 128,
-    'eval_freq': 1000,
-    'max_train_steps': 2500,
+    'batch_size': 256,
+    'eval_freq': 1,
+    'max_train_steps': 10000,
     'buffer_size': 1000000,
     'exploration_steps': 0,
     'eval_episodes': 1,
     'train_freq': 1,
-    'train_steps': 5,
-    'rollout_steps': 1,
+    'train_steps': 5000,
+    'rollout_steps': 200,
     'validate': True,
     'normalize': True,
     'action_normalize': True,
@@ -108,6 +109,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_seeds_per_hparam', type=int, default=3)
     parser.add_argument('--use_log', default=False, action="store_true")
     parser.add_argument('--use_al', default=False, action="store_true")
+    parser.add_argument('--beta', type=float, default=20.0)
 
     args = parser.parse_args()
     main(args)

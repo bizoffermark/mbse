@@ -2,13 +2,14 @@ import os
 
 import jax
 from mbse.utils.replay_buffer import Transition, ReplayBuffer
-from typing import Callable
+from typing import Callable, Optional, Union
 import wandb
 from copy import deepcopy
 import numpy as np
 from mbse.utils.vec_env import VecEnv
 from tqdm import tqdm
 from gym.wrappers.record_video import RecordVideo
+from gym import Env
 import glob
 from datetime import datetime
 
@@ -35,6 +36,7 @@ class DummyTrainer(object):
                  learn_deltas: bool = False,
                  record_test_video: bool = False,
                  video_prefix: str = "",
+                 test_env: Optional[Union[VecEnv, Env]] = None,
                  ):
         self.env = env
         self.num_envs = max(env.num_envs, 1)
@@ -67,7 +69,10 @@ class DummyTrainer(object):
             test_env_wrapper = lambda x: RecordVideo(x, video_folder='./' + self.video_dir_name, episode_trigger=lambda x: True)
         else:
             test_env_wrapper = lambda x: x
-        self.test_env = test_env_wrapper(deepcopy(self.env.envs[0]))
+        if test_env is None:
+            self.test_env = test_env_wrapper(deepcopy(self.env.envs[0]))
+        else:
+            self.test_env = test_env_wrapper(deepcopy(test_env))
         self.agent = agent_fn(
             self.use_wandb,
             validate,

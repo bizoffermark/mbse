@@ -32,9 +32,9 @@ class MBActiveExplorationAgent(ModelBasedAgent):
                 scale_out):
             return self._optimize(
                 eval_fn=self.dynamics_model.evaluate,
-                optimize_fn=self.policy_optimzer.optimize,
+                optimize_fn=self.policy_optimizer.optimize,
                 n_particles=self.n_particles,
-                horizon=self.policy_optimzer.action_dim[-2],
+                horizon=self.policy_optimizer.action_dim[-2],
                 params=params,
                 init_state=init_state,
                 key=key,
@@ -64,9 +64,9 @@ class MBActiveExplorationAgent(ModelBasedAgent):
                 scale_out):
             return self._optimize(
                 eval_fn=self.dynamics_model.evaluate_for_exploration,
-                optimize_fn=self.policy_optimzer.optimize,
+                optimize_fn=self.policy_optimizer.optimize,
                 n_particles=self.n_particles,
-                horizon=self.policy_optimzer.action_dim[-2],
+                horizon=self.policy_optimizer.action_dim[-2],
                 params=params,
                 init_state=init_state,
                 key=key,

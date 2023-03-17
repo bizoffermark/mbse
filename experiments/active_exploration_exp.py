@@ -13,6 +13,7 @@ import sys
 import argparse
 from experiments.util import Logger, hash_dict, NumpyArrayEncoder, DATA_DIR
 import wandb
+from typing import Optional
 
 
 def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n_envs: int,
@@ -22,7 +23,7 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
                exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int, rollout_steps: int,
                normalize: bool, action_normalize: bool, validate: bool, record_test_video: bool,
                validation_buffer_size: int,
-               seed: int, exploration_strategy: str, use_log: bool, use_al: bool):
+               seed: int, exploration_strategy: str, use_log: bool, use_al: bool, time_limit_eval: Optional[int] = None):
     """ Run experiment for a given method and environment. """
 
     """ Environment """
@@ -31,14 +32,29 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
         min_action=-1,
         max_action=1,
     )
+    wrapper_cls_test = wrapper_cls
+    if time_limit_eval is not None:
+        lambda x: RescaleAction(
+            TimeLimit(x, max_episode_steps=time_limit_eval),
+            min_action=-1,
+            max_action=1,
+        )
+
     if env_name == "Pendulum-v1":
         env = make_vec_env(env_id=CustomPendulumEnv, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed)
+        test_env = make_vec_env(env_id=CustomPendulumEnv, wrapper_class=wrapper_cls_test, n_envs=1, seed=seed)
+        test_env = test_env.envs[0]
 
     else:
         env = make_vec_env(env_id=env_name, wrapper_class=wrapper_cls, seed=seed, n_envs=n_envs, env_kwargs={
             'render_mode': 'rgb_array'
         }
                            )
+        test_env = make_vec_env(env_id=env_name, wrapper_class=wrapper_cls_test, seed=seed, n_envs=1, env_kwargs={
+            'render_mode': 'rgb_array'
+        }
+                           )
+        test_env = test_env.envs[0]
 
     features = [num_neurons] * hidden_layers
     reward_model = PendulumReward(action_space=env.action_space)
@@ -86,6 +102,7 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
         agent_fn=model_based_agent_fn,
         # model_free_agent=model_free_agent,
         env=env,
+        test_env=test_env,
         buffer_size=buffer_size,
         max_train_steps=max_train_steps,
         exploration_steps=exploration_steps,
@@ -177,6 +194,7 @@ def main(args):
         exploration_strategy=args.exploration_strategy,
         use_log=args.use_log,
         use_al=args.use_al,
+        time_limit_eval=args.time_limit_eval,
     )
 
     t_end = time.time()
@@ -243,8 +261,9 @@ if __name__ == '__main__':
     parser.add_argument('--record_test_video', default=True, action="store_true")
     parser.add_argument('--validation_buffer_size', type=int, default=100000)
     parser.add_argument('--exploration_strategy', type=str, default='Optimistic')
-    parser.add_argument('--use_log', default=False, action="store_true")
-    parser.add_argument('--use_al', default=False, action="store_true")
+    parser.add_argument('--use_log', default=True, action="store_true")
+    parser.add_argument('--use_al', default=True, action="store_true")
+    parser.add_argument('--time_limit_eval', type=int, default=200)
 
     # general args
     parser.add_argument('--exp_result_folder', type=str, default=None)

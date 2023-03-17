@@ -23,7 +23,8 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
                exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int, rollout_steps: int,
                normalize: bool, action_normalize: bool, validate: bool, record_test_video: bool,
                validation_buffer_size: int,
-               seed: int, exploration_strategy: str, use_log: bool, use_al: bool, time_limit_eval: Optional[int] = None):
+               seed: int, exploration_strategy: str, use_log: bool, use_al: bool,
+               time_limit_eval: Optional[int] = None):
     """ Run experiment for a given method and environment. """
 
     """ Environment """
@@ -34,7 +35,7 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
     )
     wrapper_cls_test = wrapper_cls
     if time_limit_eval is not None:
-        lambda x: RescaleAction(
+        wrapper_cls_test = lambda x: RescaleAction(
             TimeLimit(x, max_episode_steps=time_limit_eval),
             min_action=-1,
             max_action=1,
@@ -53,7 +54,7 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
         test_env = make_vec_env(env_id=env_name, wrapper_class=wrapper_cls_test, seed=seed, n_envs=1, env_kwargs={
             'render_mode': 'rgb_array'
         }
-                           )
+                                )
         test_env = test_env.envs[0]
 
     features = [num_neurons] * hidden_layers

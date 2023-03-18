@@ -285,8 +285,8 @@ if __name__ == '__main__':
     parser.add_argument('--record_test_video', default=True, action="store_true")
     parser.add_argument('--validation_buffer_size', type=int, default=100000)
     parser.add_argument('--exploration_strategy', type=str, default='Optimistic')
-    parser.add_argument('--use_log', default=True, action="store_true")
-    parser.add_argument('--use_al', default=True, action="store_true")
+    parser.add_argument('--use_log', default=False, action="store_true")
+    parser.add_argument('--use_al', default=False, action="store_true")
     parser.add_argument('--time_limit_eval', type=int, default=200)
 
     # general args

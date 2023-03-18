@@ -160,7 +160,7 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
         next_obs_tot = predict_fn(parameters, obs_action)
         mean, std = jnp.split(next_obs_tot, 2, axis=-1)
         epistemic_uncertainty = jnp.std(mean, axis=0)
-        aleatoric_uncertainty = jnp.mean(std, axis=0)
+        aleatoric_uncertainty = jnp.sqrt(jnp.mean(jnp.square(std), axis=0))
 
         sampling_scheme = 'mean' if rng is None \
             else sampling_type.name

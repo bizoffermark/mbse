@@ -10,7 +10,7 @@ from gym.wrappers.rescale_action import RescaleAction
 from mbse.models.environment_models.pendulum_swing_up import PendulumSwingUpEnv, PendulumDynamicsModel
 from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
 from mbse.utils.vec_env.env_util import make_vec_env
-from mbse.models.active_learning_model import ActiveLearningModel
+from mbse.models.active_learning_model import ActiveLearningHUCRLModel
 
 OptState = Any
 
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     reward_model = env.envs[0].reward_model()
     reward_model.set_bounds(max_action=1.0)
     dynamics_model = PendulumDynamicsModel(env=env.envs[0])
-    dynamics_model = ActiveLearningModel(
+    dynamics_model = ActiveLearningHUCRLModel(
         action_space=env.action_space,
         observation_space=env.observation_space,
         num_ensemble=5,

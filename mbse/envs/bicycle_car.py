@@ -36,7 +36,7 @@ class TrajectoryGraph:
         )
         (self.ln,) = self.pos_axis.plot(0.0, 0.0, animated=True)
         (self.pn,) = self.pos_axis.plot(0.0, 0.0, 'ro', animated=True)
-        (self.gn,) = self.pos_axis.plot(0.0, 0.0, 'o', animated=True, color='gold')
+        (self.gn,) = self.pos_axis.plot(0.0, 0.0, 'o', animated=True, color='gold', label='Goal Destination')
         self.car_pos = self.pos_axis.annotate(f'x_pos: {0:.2f}, y_pos: {0:.2f}'.format(0.0, 0.0),
                                               (0, 1),
                                               xycoords="axes fraction",
@@ -45,12 +45,15 @@ class TrajectoryGraph:
                                               va="top",
                                               animated=True, )
 
+        self.legend = self.fig.legend()
+
         self._artists = []
         self.add_artist(self.fr_number)
         self.add_artist(self.ln)
         self.add_artist(self.pn)
         self.add_artist(self.gn)
         self.add_artist(self.car_pos)
+        self.add_artist(self.legend)
         self.cid = self.canvas.mpl_connect("draw_event", self.on_draw)
         # Show the graph without blocking the rest of the program
         plt.show(block=False)
@@ -153,6 +156,7 @@ class TrajectoryGraph:
             x_lim_max)
         self.pos_axis.set_xticks([])
         self.pos_axis.set_yticks([])
+
         data = self.update()
 
         return data

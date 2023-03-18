@@ -1,7 +1,7 @@
 from gym.wrappers import RescaleAction, TimeLimit
 from mbse.utils.vec_env.env_util import make_vec_env
 from mbse.models.environment_models.pendulum_swing_up import PendulumReward, CustomPendulumEnv
-from mbse.models.active_learning_model import ActiveLearningModel
+from mbse.models.active_learning_model import ActiveLearningHUCRLModel, ActiveLearningPETSModel
 from mbse.agents.model_based.mb_active_exploration_agent import MBActiveExplorationAgent
 from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
 from mbse.trainer.model_based.model_based_trainer import ModelBasedTrainer as Trainer
@@ -62,18 +62,47 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
     reward_model.set_bounds(max_action=1.0)
     if exploration_strategy == 'Mean':
         beta = 0.0
-    dynamics_model = ActiveLearningModel(
-        action_space=env.action_space,
-        observation_space=env.observation_space,
-        num_ensemble=num_ensembles,
-        reward_model=reward_model,
-        features=features,
-        pred_diff=pred_diff,
-        beta=beta,
-        seed=seed,
-        use_log_uncertainties=use_log,
-        use_al_uncertainties=use_al,
-    )
+    if exploration_strategy == 'PETS':
+        dynamics_model = ActiveLearningPETSModel(
+            action_space=env.action_space,
+            observation_space=env.observation_space,
+            num_ensemble=num_ensembles,
+            reward_model=reward_model,
+            features=features,
+            pred_diff=pred_diff,
+            beta=beta,
+            seed=seed,
+            use_log_uncertainties=use_log,
+            use_al_uncertainties=use_al,
+        )
+        policy_optimizer = CrossEntropyOptimizer(
+            upper_bound=1,
+            num_samples=num_samples,
+            num_elites=num_elites,
+            num_steps=num_steps,
+            action_dim=(horizon, env.action_space.shape[0])
+        )
+    else:
+        dynamics_model = ActiveLearningHUCRLModel(
+            action_space=env.action_space,
+            observation_space=env.observation_space,
+            num_ensemble=num_ensembles,
+            reward_model=reward_model,
+            features=features,
+            pred_diff=pred_diff,
+            beta=beta,
+            seed=seed,
+            use_log_uncertainties=use_log,
+            use_al_uncertainties=use_al,
+        )
+        policy_optimizer = CrossEntropyOptimizer(
+                upper_bound=1,
+                num_samples=num_samples,
+                num_elites=num_elites,
+                num_steps=num_steps,
+                action_dim=(horizon, env.action_space.shape[0] +
+                            env.observation_space.shape[0])
+        )
 
     model_based_agent_fn = lambda x, y, z, v: \
         MBActiveExplorationAgent(
@@ -86,13 +115,7 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
             dynamics_model=dynamics_model,
             n_particles=n_particles,
             reset_model=reset_model,
-            # policy_optimizer=policy_optimizer,
-            policy_optimizer=CrossEntropyOptimizer(
-                upper_bound=1,
-                num_samples=num_samples,
-                num_elites=num_elites,
-                num_steps=num_steps,
-                action_dim=(horizon, env.action_space.shape[0] + env.observation_space.shape[0])),
+            policy_optimizer=policy_optimizer,
         )
 
     USE_WANDB = use_wandb

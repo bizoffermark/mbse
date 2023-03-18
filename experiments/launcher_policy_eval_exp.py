@@ -54,7 +54,7 @@ default_configs = {
 search_ranges = {
 }
 
-EXPLORATION_STRATEGY = ['Uniform', 'Optimistic', 'Mean']
+EXPLORATION_STRATEGY = ['Uniform', 'Optimistic', 'Mean', 'PETS']
 # check consistency of configuration dicts
 assert set(itertools.chain(*list(applicable_configs.values()))) == {*default_configs.keys(), *search_ranges.keys()}
 

@@ -69,10 +69,12 @@ class PendulumReward(RewardModel):
 
 
 class CustomPendulumEnv(PendulumEnv):
-    def __init__(self, render_mode='rgb_array', *args, **kwargs):
+    def __init__(self, ctrl_cost=0.1, render_mode='rgb_array', *args, **kwargs):
         self.state = None
         super(CustomPendulumEnv, self).__init__(render_mode=render_mode, *args, **kwargs)
         self.observation_space.sample = self.sample_obs
+        self.standard_ctrl_cost = 0.001
+        self.ctrl_cost = ctrl_cost
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed, options=options)
@@ -85,6 +87,14 @@ class CustomPendulumEnv(PendulumEnv):
         theta, thetadot = self.np_random.uniform(low=low, high=high)
         obs = np.asarray([np.cos(theta), np.sin(theta), thetadot], dtype=np.float32)
         return obs
+
+    def step(self, u):
+        next_obs, reward, terminate, truncate, output_dict = super().step(u)
+        action_reward = (-self.ctrl_cost + self.standard_ctrl_cost) * (u**2)
+        reward = reward + action_reward
+        return next_obs, reward, terminate, truncate, output_dict
+
+
 
 
 class PendulumSwingUpEnv(PendulumEnv):

@@ -22,7 +22,7 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
                pred_diff: bool, batch_size: int, eval_freq: int, max_train_steps: int, buffer_size: int,
                exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int, rollout_steps: int,
                normalize: bool, action_normalize: bool, validate: bool, record_test_video: bool,
-               validation_buffer_size: int,
+               validation_buffer_size: int, validation_batch_size: int,
                seed: int, exploration_strategy: str, use_log: bool, use_al: bool,
                time_limit_eval: Optional[int] = None):
     """ Run experiment for a given method and environment. """
@@ -212,6 +212,7 @@ def main(args):
         validate=args.validate,
         record_test_video=args.record_test_video,
         validation_buffer_size=args.validation_buffer_size,
+        validation_batch_size=args.validation_batch_size,
         seed=args.seed,
         hidden_layers=args.hidden_layers,
         num_neurons=args.num_neurons,
@@ -284,6 +285,7 @@ if __name__ == '__main__':
     parser.add_argument('--validate', default=True, action="store_true")
     parser.add_argument('--record_test_video', default=True, action="store_true")
     parser.add_argument('--validation_buffer_size', type=int, default=100000)
+    parser.add_argument('--validation_batch_size', type=int, default=4096)
     parser.add_argument('--exploration_strategy', type=str, default='Optimistic')
     parser.add_argument('--use_log', default=False, action="store_true")
     parser.add_argument('--use_al', default=False, action="store_true")

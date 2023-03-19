@@ -20,7 +20,7 @@ class SamplingType:
         ['All', 'DS', 'TS1', 'TSInf', 'mean']
 
     def set_type(self, name):
-        assert name not in self.name_types, \
+        assert name in self.name_types, \
             'name must be in ' + ' '.join(map(str, self.name_types))
 
         self.name = name
@@ -93,7 +93,7 @@ class BayesianDynamicsModel(DynamicsModel):
             sig_min=sig_min,
             sig_max=sig_max,
         )
-        self.sampling_type = SamplingType
+        self.sampling_type = SamplingType()
         self.sampling_idx = jnp.zeros(1)
         self.obs_dim = obs_dim
         self.act_dim = act_dim
@@ -285,8 +285,21 @@ class BayesianDynamicsModel(DynamicsModel):
             else sampling_type.name
 
         if sampling_scheme == 'mean':
-            mean, _ = jnp.split(next_obs_tot, 2, axis=-1)
-            next_obs = jnp.mean(mean, axis=0)
+            mean, al_uncertainty = jnp.split(next_obs_tot, 2, axis=-1)
+            mean = jnp.mean(mean, axis=0)
+            al_uncertainty = jnp.sqrt(jnp.mean(jnp.square(al_uncertainty), axis=0))
+            if rng is not None:
+                sample_rng = jax.random.split(
+                    rng,
+                    batch_size
+                )
+                next_obs = jax.vmap(sample_normal_dist, in_axes=(0, 0, 0), out_axes=0)(
+                    mean,
+                    al_uncertainty,
+                    sample_rng,
+                )
+            else:
+                next_obs = mean
 
         elif sampling_scheme == 'TS1':
             model_rng, sample_rng = jax.random.split(rng, 2)

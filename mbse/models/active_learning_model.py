@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 from mbse.utils.utils import sample_normal_dist
 from mbse.models.hucrl_model import HUCRLModel
-from mbse.models.bayesian_dynamics_model import BayesianDynamicsModel, sample
+from mbse.models.bayesian_dynamics_model import BayesianDynamicsModel, sample, SamplingType
 
 
 def evaluate_for_exploration(
@@ -65,6 +65,7 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
 
     def _init_fn(self):
         super()._init_fn()
+
         def predict_with_uncertainty(
                 parameters,
                 obs,
@@ -98,6 +99,7 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
                 scale_out=scale_out,
                 pred_diff=self.pred_diff,
             )
+
         self.predict_with_uncertainty = jax.jit(predict_with_uncertainty)
 
         def _evaluate_for_exploration(
@@ -133,6 +135,76 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
             )
 
         self.evaluate_for_exploration = jax.jit(_evaluate_for_exploration)
+        sampling_type = SamplingType()
+        sampling_type.set_type('mean')
+        def predict_with_mean(
+                parameters,
+                obs,
+                action,
+                rng,
+                alpha: Union[jnp.ndarray, float] = 1.0,
+                bias_obs: Union[jnp.ndarray, float] = 0.0,
+                bias_act: Union[jnp.ndarray, float] = 0.0,
+                bias_out: Union[jnp.ndarray, float] = 0.0,
+                scale_obs: Union[jnp.ndarray, float] = 1.0,
+                scale_act: Union[jnp.ndarray, float] = 1.0,
+                scale_out: Union[jnp.ndarray, float] = 1.0,
+                sampling_idx: int = 0,
+        ):
+            return self._predict(
+                predict_fn=self.model._predict,
+                parameters=parameters,
+                obs=obs,
+                action=action,
+                rng=rng,
+                sampling_type=sampling_type,
+                num_ensembles=self.model.num_ensembles,
+                sampling_idx=sampling_idx,
+                batch_size=obs.shape[0],
+                alpha=alpha,
+                bias_obs=bias_obs,
+                bias_act=bias_act,
+                bias_out=bias_out,
+                scale_obs=scale_obs,
+                scale_act=scale_act,
+                scale_out=scale_out,
+                pred_diff=self.pred_diff,
+            )
+
+        self.predict_with_mean = jax.jit(predict_with_mean)
+
+        def evaluate(
+                parameters,
+                obs,
+                action,
+                rng,
+                alpha: Union[jnp.ndarray, float] = 1.0,
+                bias_obs: Union[jnp.ndarray, float] = 0.0,
+                bias_act: Union[jnp.ndarray, float] = 0.0,
+                bias_out: Union[jnp.ndarray, float] = 0.0,
+                scale_obs: Union[jnp.ndarray, float] = 1.0,
+                scale_act: Union[jnp.ndarray, float] = 1.0,
+                scale_out: Union[jnp.ndarray, float] = 1.0,
+                sampling_idx: Optional[int] = None,
+        ):
+            return self._evaluate(
+                pred_fn=self.predict_with_mean,
+                reward_fn=self.reward_model.predict,
+                parameters=parameters,
+                obs=obs,
+                action=action,
+                rng=rng,
+                alpha=alpha,
+                bias_obs=bias_obs,
+                bias_act=bias_act,
+                bias_out=bias_out,
+                scale_obs=scale_obs,
+                scale_act=scale_act,
+                scale_out=scale_out,
+                sampling_idx=sampling_idx,
+            )
+
+        self.evaluate = jax.jit(evaluate)
 
     @staticmethod
     def _predict_with_uncertainty(

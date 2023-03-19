@@ -76,11 +76,17 @@ class ModelBasedTrainer(DummyTrainer):
                 batch_size=self.validation_batch_size,
             )
             mean_pred, std_pred = self.agent.predict_next_state(val_tran)
-            eps_uncertainty = jnp.sum(jnp.std(mean_pred, axis=0), axis=-1)
+            eps_uncertainty = jnp.std(mean_pred, axis=0)
+            al_uncertainty = jnp.sqrt(jnp.mean(jnp.square(std_pred), axis=0))
+            frac = eps_uncertainty / (al_uncertainty + 1e-6)
+            information_gain = jnp.sum(jnp.log(1 + jnp.square(frac)), axis=-1)
+            max_info_gain = jnp.max(information_gain)
+            mean_info_gain = jnp.mean(information_gain)
+            eps_uncertainty = jnp.sum(eps_uncertainty, axis=-1)
             mean_eps_uncertainty = jnp.mean(eps_uncertainty)
             max_eps_uncertainty = jnp.max(eps_uncertainty)
             std_eps_uncertainty = jnp.std(eps_uncertainty)
-            std_pred = jnp.mean(jnp.sum(jnp.sqrt(jnp.mean(jnp.square(std_pred), axis=0)), axis=-1))
+            std_pred = jnp.mean(jnp.sum(al_uncertainty, axis=-1))
             # y_true = val_tran.next_obs
             # mse = jnp.mean(jnp.sum(jnp.square(y_true - mean_pred), axis=-1))
             model_log = {
@@ -89,6 +95,8 @@ class ModelBasedTrainer(DummyTrainer):
                 'validation_eps_std_mean': mean_eps_uncertainty.astype(float).item(),
                 'validation_eps_std_max': max_eps_uncertainty.astype(float).item(),
                 'validation_eps_std_std': std_eps_uncertainty.astype(float).item(),
+                'max_info_gain': max_info_gain.astype(float).item(),
+                'mean_info_gain': mean_info_gain.astype(float).item(),
             }
         return model_log
 

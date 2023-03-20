@@ -47,7 +47,11 @@ def evaluate_for_exploration(
         else:
             reward = jnp.sum(jnp.log(1 + jnp.square(eps_uncertainty)), axis=-1)
     else:
-        reward = jnp.sum(jnp.square(eps_uncertainty), axis=-1)
+        if use_al_uncertainties:
+            frac = eps_uncertainty / (al_uncertainty + 1e-6)
+            reward = jnp.sum(jnp.square(frac), axis=-1)
+        else:
+            reward = jnp.sum(jnp.square(eps_uncertainty), axis=-1)
     return next_obs, reward
 
 

@@ -20,7 +20,7 @@ required = [
     'seaborn',
     'cloudpickle',
     'pandas',
-    'jaxopt'
+    'dm_control',
 ]
 
 extras = {'dev': ['seaborn', 'control>=0.9.2']}

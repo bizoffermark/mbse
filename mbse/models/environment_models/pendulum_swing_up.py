@@ -12,7 +12,7 @@ from typing import Union, Optional, Any
 class PendulumReward(RewardModel):
     """Get Pendulum Reward."""
 
-    def __init__(self, action_space, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
+    def __init__(self, action_space, ctrl_cost_weight=0.1, sparse=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.ctrl_cost_weight = ctrl_cost_weight
         self.sparse = sparse
@@ -62,7 +62,7 @@ class PendulumReward(RewardModel):
             low = self.action_space.low
             high = self.action_space.high
             action = low + (high - low) * (
-                (action - self.min_action) / (self.max_action - self.min_action)
+                    (action - self.min_action) / (self.max_action - self.min_action)
             )
             action = jnp.clip(action, low, high)
         return action
@@ -90,11 +90,9 @@ class CustomPendulumEnv(PendulumEnv):
 
     def step(self, u):
         next_obs, reward, terminate, truncate, output_dict = super().step(u)
-        action_reward = (-self.ctrl_cost + self.standard_ctrl_cost) * (u**2)
+        action_reward = (-self.ctrl_cost + self.standard_ctrl_cost) * (u ** 2)
         reward = reward + action_reward
         return next_obs, reward, terminate, truncate, output_dict
-
-
 
 
 class PendulumSwingUpEnv(PendulumEnv):
@@ -110,7 +108,7 @@ class PendulumSwingUpEnv(PendulumEnv):
         self._reward_model = PendulumReward(
             action_space=self.action_space,
             ctrl_cost_weight=ctrl_cost_weight,
-            sparse=sparse
+            sparse=sparse,
         )
 
     def reset(self, seed=None):
@@ -137,7 +135,7 @@ class PendulumSwingUpEnv(PendulumEnv):
         dt = self.dt
         th, omega = self.state
 
-        omega_dot = (3 * g / (2 * l) * np.sin(th) + 3.0 / (m * l**2) * u)
+        omega_dot = (3 * g / (2 * l) * np.sin(th) + 3.0 / (m * l ** 2) * u)
 
         new_omega = omega + omega_dot * dt
         new_theta = th + new_omega * dt  # Simplectic integration new_omega.
@@ -155,7 +153,7 @@ class PendulumSwingUpEnv(PendulumEnv):
 
 class PendulumDynamicsModel(DynamicsModel):
     def __init__(self, env: PendulumEnv, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
-        super(PendulumDynamicsModel).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.env = env
         reward_model = PendulumReward(
             action_space=self.env.action_space,
@@ -163,6 +161,7 @@ class PendulumDynamicsModel(DynamicsModel):
             sparse=sparse
         )
         self.reward_model = reward_model
+        self.pred_diff = False
 
     @partial(jax.jit, static_argnums=0)
     def predict(self, obs, action, rng=None):
@@ -192,6 +191,7 @@ class PendulumDynamicsModel(DynamicsModel):
                  action,
                  rng,
                  sampling_idx=None,
+                 alpha: Union[jnp.ndarray, float] = 1.0,
                  bias_obs: Union[jnp.ndarray, float] = 0.0,
                  bias_act: Union[jnp.ndarray, float] = 0.0,
                  bias_out: Union[jnp.ndarray, float] = 0.0,
@@ -230,7 +230,7 @@ class PendulumDynamicsModel(DynamicsModel):
         low = self.env.action_space.low
         high = self.env.action_space.high
         action = low + (high - low) * (
-            (action - self.env.min_action) / (self.env.max_action - self.env.min_action)
+                (action - self.env.min_action) / (self.env.max_action - self.env.min_action)
         )
         action = jnp.clip(action, low, high)
         return action

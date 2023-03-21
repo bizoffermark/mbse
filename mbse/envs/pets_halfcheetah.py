@@ -70,85 +70,12 @@ class HalfCheetahEnv(DeepMindBridge):
         return task.get_observation(physics)
 
 
-# class HalfCheetahEnv(MujocoHalfCheetah):
-#     def __init__(self, reward_model: HalfCheetahReward, *args, **kwargs):
-#         self.prev_qpos = None
-#
-#         super().__init__(*args, **kwargs)
-#         self.reward_model = reward_model
-#         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(18,), dtype=np.float64)
-#
-#     def step(self, action):
-#         self.prev_qpos = np.copy(self.data.qpos.flat)
-#         prev_obs = self._get_obs()
-#         self.do_simulation(action, self.frame_skip)
-#         ob = self._get_obs()
-#         reward = self.reward_model.predict(obs=prev_obs, action=action, next_obs=ob)
-#         terminated = False
-#         truncated = False
-#         return ob, reward, terminated, truncated, {}
-#
-#     def _get_obs(self):
-#         return np.concatenate(
-#             [
-#                 (self.data.qpos[:1] - self.prev_qpos[:1]) / self.dt,
-#                 self.data.qpos[1:],
-#                 self.data.qvel,
-#             ]
-#         )
-#
-#     def reset_model(self):
-#         qpos = self.init_qpos + self.np_random.uniform(
-#             low=-0.1, high=0.1, size=self.model.nq
-#         )
-#         qvel = self.init_qvel + self.np_random.standard_normal(self.model.nv) * 0.1
-#         self.set_state(qpos, qvel)
-#         self.prev_qpos = np.copy(self.data.qpos)
-#         return self._get_obs()
-#
-#     def sample_obs(self, mask: Optional[Any] = None):
-#         qpos = self.init_qpos + np.random.normal(loc=0, scale=0.1, size=self.model.nq)
-#         qvel = self.init_qvel + np.random.normal(loc=0, scale=0.1, size=self.model.nv)
-#         self.set_state(qpos, qvel)
-#         return self._get_obs()
-#
-#     @staticmethod
-#     def _preprocess_state_np(state):
-#         assert isinstance(state, np.ndarray)
-#         assert state.ndim in (1, 2, 3)
-#         d1 = state.ndim == 1
-#         if d1:
-#             # if input is 1d, expand it to 2d
-#             state = np.expand_dims(state, 0)
-#         # [0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 11., 12., 13., 14., 15., 16., 17.] ->
-#         # [1., sin(2), cos(2)., 4., 5., 6., 7., 8., 9., 10., 11., 12., 13., 14., 15., 16., 17.]
-#         ret = np.concatenate(
-#             [
-#                 state[..., 1:2],
-#                 np.sin(state[..., 2:3]),
-#                 np.cos(state[..., 2:3]),
-#                 state[..., 3:],
-#             ],
-#             axis=state.ndim - 1,
-#         )
-#         if d1:
-#             # and squeeze it back afterwards
-#             ret = ret.squeeze()
-#         return ret
-#
-#     @staticmethod
-#     def preprocess_fn(state):
-#         if isinstance(state, np.ndarray):
-#             return HalfCheetahEnv._preprocess_state_np(state)
-#         raise ValueError("Invalid state type (must be np.ndarray).")
-
-
 if __name__ == "__main__":
     from gym.wrappers.record_video import RecordVideo
     env = HalfCheetahEnv(reward_model=HalfCheetahReward(), render_mode="rgb_array")
-    # env = RecordVideo(env, video_folder='./cheetah/', episode_trigger=lambda x: True)
+    env = RecordVideo(env, video_folder='./cheetah/', episode_trigger=lambda x: True)
     obs, _ = env.reset()
-
-    for i in range(100):
+    for i in range(1000):
         obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
+    env.close()
 

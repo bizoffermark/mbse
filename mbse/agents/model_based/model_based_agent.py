@@ -11,13 +11,16 @@ import wandb
 from typing import Union
 
 
+Model_list = list[DynamicsModel]
+
+
 class ModelBasedAgent(DummyAgent):
 
     def __init__(
             self,
             action_space: gym.spaces.box,
             observation_space: gym.spaces.box,
-            dynamics_model: DynamicsModel,
+            dynamics_model: Union[DynamicsModel, Model_list],
             policy_optimizer: DummyOptimizer,
             discount: float = 0.99,
             n_particles: int = 10,
@@ -29,7 +32,12 @@ class ModelBasedAgent(DummyAgent):
         super(ModelBasedAgent, self).__init__(*args, **kwargs)
         self.action_space = action_space
         self.observation_space = observation_space
-        self.dynamics_model = dynamics_model
+        if isinstance(dynamics_model, DynamicsModel):
+            self.dynamics_model_list = [dynamics_model]
+            self.num_dynamics_models = 1
+        else:
+            self.dynamics_model_list = dynamics_model
+            self.num_dynamics_models = len(dynamics_model)
         self.policy_optimizer = policy_optimizer
         self.discount = discount
         self.n_particles = n_particles
@@ -38,38 +46,45 @@ class ModelBasedAgent(DummyAgent):
         self._init_fn()
 
     def _init_fn(self):
-        def _optimize(
-                params,
-                init_state,
-                key,
-                optimizer_key,
-                alpha,
-                bias_obs,
-                bias_act,
-                bias_out,
-                scale_obs,
-                scale_act,
-                scale_out):
-            return self._optimize(
-                eval_fn=self.dynamics_model.evaluate,
-                optimize_fn=self.policy_optimizer.optimize,
-                n_particles=self.n_particles,
-                horizon=self.policy_optimizer.action_dim[-2],
-                params=params,
-                init_state=init_state,
-                key=key,
-                optimizer_key=optimizer_key,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
-            )
 
-        self.optimize = jax.jit(_optimize)
-        self.optimize_for_eval = self.optimize
+        self.optimize_for_eval_fns = []
+        for i, dynamics_model in enumerate(self.dynamics_model_list):
+            def _optimize(
+                    params,
+                    init_state,
+                    key,
+                    optimizer_key,
+                    alpha,
+                    bias_obs,
+                    bias_act,
+                    bias_out,
+                    scale_obs,
+                    scale_act,
+                    scale_out):
+                return self._optimize(
+                    eval_fn=dynamics_model.evaluate,
+                    optimize_fn=self.policy_optimizer.optimize,
+                    n_particles=self.n_particles,
+                    horizon=self.policy_optimizer.action_dim[-2],
+                    params=params,
+                    init_state=init_state,
+                    key=key,
+                    optimizer_key=optimizer_key,
+                    alpha=alpha,
+                    bias_obs=bias_obs,
+                    bias_act=bias_act,
+                    bias_out=bias_out,
+                    scale_obs=scale_obs,
+                    scale_act=scale_act,
+                    scale_out=scale_out,
+                )
+
+            optimize = jax.jit(_optimize)
+            if i == 0:
+                self.optimize = optimize
+            self.optimize_for_eval_fns.append(optimize)
+
+        # self.optimize_for_eval = self.optimize
 
         def step(carry, ins):
             rng = carry[0]
@@ -153,11 +168,12 @@ class ModelBasedAgent(DummyAgent):
         )
         return action_seq, reward
 
-    def act_in_jax(self, obs, rng, eval=False):
+    def act_in_jax(self, obs, rng, eval=False, eval_idx: int = 0):
 
         if eval:
             def optimize_for_eval(init_state, key, optimizer_key):
-                action_seq, reward = self.optimize_for_eval(
+                optimize_fn = self.optimize_for_eval_fns[eval_idx]
+                action_seq, reward = optimize_fn(
                     params=self.dynamics_model.model_params,
                     init_state=init_state,
                     key=key,
@@ -250,7 +266,8 @@ class ModelBasedAgent(DummyAgent):
         carry, outs = jax.lax.scan(self.step, carry, xs=None, length=self.train_steps)
         if self.calibrate_model:
             alpha = carry[1]
-        self.dynamics_model.update_model(model_params=carry[2], model_opt_state=carry[3], alpha=alpha)
+
+        self.update_models(model_params=carry[2], model_opt_state=carry[3], alpha=alpha)
         summary = outs[0].dict()
         if self.use_wandb:
             for log_dict in summary:
@@ -264,14 +281,15 @@ class ModelBasedAgent(DummyAgent):
                        scale_act: Union[jnp.ndarray, float] = 1.0,
                        scale_out: Union[jnp.ndarray, float] = 1.0,
                        ):
-        self.dynamics_model.set_transforms(
-            bias_obs=bias_obs,
-            bias_act=bias_act,
-            bias_out=bias_out,
-            scale_obs=scale_obs,
-            scale_act=scale_act,
-            scale_out=scale_out,
-        )
+        for i in range(len(self.dynamics_model_list)):
+            self.dynamics_model_list[i].set_transforms(
+                bias_obs=bias_obs,
+                bias_act=bias_act,
+                bias_out=bias_out,
+                scale_obs=scale_obs,
+                scale_act=scale_act,
+                scale_out=scale_out,
+            )
 
     def predict_next_state(self,
                            tran: Transition,
@@ -287,3 +305,15 @@ class ModelBasedAgent(DummyAgent):
             scale_act=self.dynamics_model.scale_act,
             scale_out=self.dynamics_model.scale_out,
         )
+
+    def update_models(self, model_params, model_opt_state, alpha: float=1.0):
+        for i in range(len(self.dynamics_model_list)):
+            self.dynamics_model_list[i].update_model(
+                model_params=model_params,
+                model_opt_state=model_opt_state,
+                alpha=alpha,
+            )
+
+    @property
+    def dynamics_model(self):
+        return self.dynamics_model_list[0]

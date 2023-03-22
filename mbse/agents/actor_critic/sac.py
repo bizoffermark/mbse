@@ -508,7 +508,7 @@ class SACAgent(DummyAgent):
 
         self.step = step
 
-    def act_in_jax(self, obs, rng=None, eval=False):
+    def act_in_jax(self, obs, rng=None, eval=False, eval_idx=0):
         if eval:
             return self.get_eval_action(
                 actor_params=self.actor_params,

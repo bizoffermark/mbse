@@ -19,12 +19,35 @@ class PendulumReward(RewardModel):
         self.min_action = None
         self.max_action = None
         self.action_space = action_space
+        self._init_fn()
+
+    def _init_fn(self):
+        self.rescale_action = jax.jit(lambda action: self._rescale_action(action=action,
+                                                                          min_action=self.min_action,
+                                                                          max_action=self.max_action,
+                                                                          low=self.action_space.low,
+                                                                          high=self.action_space.high,
+                                                                          ))
+        self.input_cost = jax.jit(lambda u: self._input_cost(ctrl_cost_weight=self.ctrl_cost_weight, u=u))
+
+        def predict(obs, action, next_obs=None, rng=None):
+            return self._predict(
+                state_reward_fn=self.state_reward,
+                input_cost_fn=self.input_cost,
+                action_transform_fn=self.rescale_action,
+                obs=obs,
+                action=action,
+                next_obs=next_obs,
+                rng=rng,
+            )
+        self.predict = jax.jit(predict)
 
     def set_bounds(self, max_action, min_action=None):
         self.max_action = max_action
         if min_action is None:
             min_action = - max_action
         self.min_action = min_action
+        self._init_fn()
 
     @staticmethod
     @jax.jit
@@ -33,23 +56,25 @@ class PendulumReward(RewardModel):
         theta = angle_normalize(theta)
         return -(theta ** 2 + 0.1 * omega ** 2)
 
-    @partial(jax.jit, static_argnums=0)
-    def input_cost(self, u):
-        return self.ctrl_cost_weight * (jnp.sum(jnp.square(u), axis=-1))
+    @staticmethod
+    def _input_cost(ctrl_cost_weight, u):
+        return ctrl_cost_weight * (jnp.sum(jnp.square(u), axis=-1))
 
-    @partial(jax.jit, static_argnums=0)
-    def state_reward(self, state):
+    @staticmethod
+    @jax.jit
+    def state_reward(state):
         """Compute reward associated with state dynamics."""
         theta, omega = jnp.arctan2(state[..., 1], state[..., 0]), state[..., 2]
-        return self.state_non_sparse_reward(theta, omega)
+        theta = angle_normalize(theta)
+        return -(theta ** 2 + 0.1 * omega ** 2)
 
-    @partial(jax.jit, static_argnums=0)
-    def predict(self, obs, action, next_obs=None, rng=None):
-        action = self.rescale_action(action)
-        return self.state_reward(state=obs) - self.input_cost(action)
+    @staticmethod
+    def _predict(state_reward_fn, input_cost_fn, action_transform_fn, obs, action, next_obs=None, rng=None):
+        action = action_transform_fn(action)
+        return state_reward_fn(state=obs) - input_cost_fn(action)
 
-    @partial(jax.jit, static_argnums=0)
-    def rescale_action(self, action):
+    @staticmethod
+    def _rescale_action(action, min_action, max_action, low, high):
         """
         Args:
             action: The action to rescale
@@ -57,12 +82,10 @@ class PendulumReward(RewardModel):
         Returns:
             The rescaled action
         """
-        if self.min_action is not None and self.max_action is not None:
-            action = jnp.clip(action, self.min_action, self.max_action)
-            low = self.action_space.low
-            high = self.action_space.high
+        if min_action is not None and max_action is not None:
+            action = jnp.clip(action, min_action, max_action)
             action = low + (high - low) * (
-                    (action - self.min_action) / (self.max_action - self.min_action)
+                    (action - min_action) / (max_action - min_action)
             )
             action = jnp.clip(action, low, high)
         return action

@@ -19,15 +19,16 @@ class ModelFreeTrainer(DummyTrainer):
             wandb.define_metric('train_steps')
         self.rng, eval_rng = random.split(self.rng, 2)
         eval_rng, curr_eval = random.split(eval_rng, 2)
-        average_reward = self.eval_policy(rng=curr_eval)
-        best_performance = average_reward
-        reward_log = {
-            'env_steps': 0,
-            'average_reward': average_reward
-        }
+        reward_log = self.eval_policy(rng=curr_eval)
+        best_performance = reward_log['reward_task_0']
+        reward_log['env_steps'] = 0
+        reward_log['learning_step'] = 0
+        reward_log['train_steps'] = 0
         train_steps = 0
         self.save_agent(0)
         if self.use_wandb:
+            wandb.define_metric("env_steps")
+            wandb.define_metric("train_steps")
             wandb.log(reward_log)
         policy = lambda x, y: self.env.action_space.sample()
         transitions = self.rollout_policy(self.exploration_steps, policy, self.rng)
@@ -53,15 +54,11 @@ class ModelFreeTrainer(DummyTrainer):
             # Evaluate episode
             if train_steps % self.eval_freq == 0:
                 eval_rng, curr_eval = random.split(eval_rng, 2)
-                eval_reward = self.eval_policy(rng=eval_rng, step=train_steps)
-                reward_log = {
-                    'env_steps': train_steps,
-                    'average_reward': eval_reward
-                }
+                reward_log = self.eval_policy(rng=curr_eval, step=train_steps)
                 if self.use_wandb:
                     wandb.log(reward_log)
-                if eval_reward > best_performance:
-                    best_performance = eval_reward
+                if reward_log['reward_task_0'] > best_performance:
+                    best_performance = reward_log['reward_task_0']
                     self.save_agent(step)
 
             step += 1

@@ -62,6 +62,12 @@ class DummyTrainer(object):
         self.eval_freq = eval_freq
         self.exploration_steps = exploration_steps
         self.rollout_steps = rollout_steps
+        self.agent = agent_fn(
+            self.use_wandb,
+            validate,
+            self.train_steps,
+            self.batch_size,
+        )
         now = datetime.now()
         dt_string = now.strftime("%d_%m_%Y_%H_%M_%S")
         self.video_dir_name = 'video' + str(seed) + video_prefix + dt_string
@@ -70,15 +76,17 @@ class DummyTrainer(object):
         else:
             test_env_wrapper = lambda x: x
         if test_env is None:
-            self.test_env = test_env_wrapper(deepcopy(self.env.envs[0]))
+            self.test_env = [
+                test_env_wrapper(deepcopy(self.env.envs[0]))
+            ]
         else:
-            self.test_env = test_env_wrapper(deepcopy(test_env))
-        self.agent = agent_fn(
-            self.use_wandb,
-            validate,
-            self.train_steps,
-            self.batch_size,
-        )
+            if isinstance(test_env, list):
+                self.test_env = [test_env_wrapper(deepcopy(env)) for env in test_env]
+            else:
+                self.test_env = [test_env_wrapper(deepcopy(test_env))]
+        assert len(self.test_env) == self.num_reward_models, "number of reward models must be the same as number of " \
+                                                             "envs"
+
         self.record_test_video = record_test_video
 
     def train(self):
@@ -205,31 +213,41 @@ class DummyTrainer(object):
         return transitions
 
     def eval_policy(self, step=0, rng=None) -> float:
-        avg_reward = 0.0
-        for e in range(self.eval_episodes):
-            obs, _ = self.test_env.reset(seed=e)
-            done = False
-            steps = 0
+        reward_log = {
+
+        }
+        for i, env in enumerate(self.test_env):
             pbar = tqdm(total=1000)
-            while not done:
-                action = self.agent.act(obs, rng=rng, eval=True)
-                next_obs, reward, terminate, truncate, info = self.test_env.step(action)
-                done = terminate or truncate
-                avg_reward += reward
-                obs = next_obs
-                steps += 1
-                pbar.update(1)
-                # print(steps)
-                if done:
-                    obs, _ = self.test_env.reset(seed=e)
-        avg_reward /= self.eval_episodes
-        pbar.close()
-        if self.use_wandb and self.record_test_video:
-            mp4list = glob.glob(self.video_dir_name + '/*.mp4')
-            if len(mp4list) > 0:
-                mp4 = mp4list[-1]
-                # log gameplay video in wandb
-                wandb.log({"gameplays":
-                               wandb.Video(mp4, caption='episode: '+str(step), fps=4, format="gif"),
-                           "step": step})
-        return avg_reward
+            avg_reward = 0.0
+            for e in range(self.eval_episodes):
+                obs, _ = env.reset(seed=e)
+                done = False
+                steps = 0
+                while not done:
+                    action = self.agent.act(obs, rng=rng, eval=True, eval_idx=i)
+                    next_obs, reward, terminate, truncate, info = env.step(action)
+                    done = terminate or truncate
+                    avg_reward += reward
+                    obs = next_obs
+                    steps += 1
+                    pbar.update(1)
+                    # print(steps)
+                    if done:
+                        obs, _ = env.reset(seed=e)
+            avg_reward /= self.eval_episodes
+            reward_log['reward_task_' + str(i)] = avg_reward
+            pbar.close()
+            if self.use_wandb and self.record_test_video:
+                mp4list = glob.glob(self.video_dir_name + '/*.mp4')
+                if len(mp4list) > 0:
+                    mp4 = mp4list[-1]
+                    # log gameplay video in wandb
+                    wandb.log({"gameplays":
+                                   wandb.Video(mp4, caption='episode/task: '+str(step) + '/' + str(i),
+                                               fps=4, format="gif"),
+                               "step": step})
+        return reward_log
+
+    @property
+    def num_reward_models(self):
+        return 1

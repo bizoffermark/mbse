@@ -118,21 +118,18 @@ class ModelBasedTrainer(DummyTrainer):
         )
         curr_eval, eval_val_rng = jax.random.split(curr_eval, 2)
         model_log = self.validate_model(eval_val_rng)
-        average_reward = self.eval_policy(rng=curr_eval)
-        best_performance = average_reward
-        initial_log = {
-            'env_steps': 0,
-            'learning_step': 0,
-            'train_steps': 0,
-            'average_reward': average_reward
-        }
+        reward_log = self.eval_policy(rng=curr_eval)
+        best_performance = reward_log['reward_task_0']
+        reward_log['env_steps'] = 0
+        reward_log['learning_step'] = 0
+        reward_log['train_steps'] = 0
         train_steps = 0
         self.save_agent(0)
         if self.use_wandb:
             wandb.define_metric("env_steps")
             wandb.define_metric("train_steps")
-            initial_log.update(model_log)
-            wandb.log(initial_log)
+            reward_log.update(model_log)
+            wandb.log(reward_log)
 
         exploration_policy = lambda x, y: np.concatenate([self.env.action_space.sample().reshape(1, -1)
                                                           for s in range(self.num_envs)], axis=0)
@@ -153,6 +150,7 @@ class ModelBasedTrainer(DummyTrainer):
             minval=0,
             maxval=int(learning_steps * self.rollout_steps)).item()
         obs, _ = self.env.reset(seed=reset_seed)
+        step = 0
         for step in tqdm(range(learning_steps)):
             actor_rng, train_rng = random.split(rng_keys[step], 2)
             self.agent.set_transforms(
@@ -168,7 +166,7 @@ class ModelBasedTrainer(DummyTrainer):
             actor_rng, val_rng = random.split(actor_rng, 2)
             transitions, obs, done = self.step_env(obs, policy, self.rollout_steps, actor_rng)
             self.buffer.add(transitions)
-            reward_log = {}
+            # reward_log = {}
             train_step_log = {}
             model_log = {}
             env_step_log = {
@@ -190,12 +188,9 @@ class ModelBasedTrainer(DummyTrainer):
             # Evaluate episode
             if step % self.eval_freq == 0 and train_steps > 0:
                 eval_rng, curr_eval = random.split(eval_rng, 2)
-                eval_reward = self.eval_policy(rng=curr_eval, step=train_steps)
-                reward_log = {
-                    'average_reward': eval_reward
-                }
-                if eval_reward > best_performance:
-                    best_performance = eval_reward
+                reward_log = self.eval_policy(rng=curr_eval, step=train_steps)
+                if reward_log['reward_task_0'] > best_performance:
+                    best_performance = reward_log['reward_task_0']
                     self.save_agent(step)
             if self.use_wandb:
                 train_log = env_step_log
@@ -214,3 +209,7 @@ class ModelBasedTrainer(DummyTrainer):
                 wandb.log(train_log)
             # step += 1
         self.save_agent(step, agent_name="final_agent")
+
+    @property
+    def num_reward_models(self):
+        return self.agent.num_dynamics_models

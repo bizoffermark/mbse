@@ -72,10 +72,16 @@ class HalfCheetahEnv(DeepMindBridge):
 
 if __name__ == "__main__":
     from gym.wrappers.record_video import RecordVideo
+    from gym.wrappers.time_limit import TimeLimit
     env = HalfCheetahEnv(reward_model=HalfCheetahReward(), render_mode="rgb_array")
+    env = TimeLimit(env, max_episode_steps=1000)
     env = RecordVideo(env, video_folder='./cheetah/', episode_trigger=lambda x: True)
     obs, _ = env.reset()
-    for i in range(1000):
+    for i in range(1999):
         obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
+        if terminated or truncated:
+            obs, _ = env.reset()
     env.close()
+
+
 

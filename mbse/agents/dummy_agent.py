@@ -14,10 +14,10 @@ class DummyAgent(object):
         self.act_in_train = lambda obs, rng: self.act(obs, rng, eval=False)
         pass
 
-    def act(self, obs: np.ndarray, rng=None, eval=False):
-        return np.asarray(self.act_in_jax(jnp.asarray(obs), rng, eval=eval))
+    def act(self, obs: np.ndarray, rng=None, eval: bool = False, eval_idx: int = 0):
+        return np.asarray(self.act_in_jax(jnp.asarray(obs), rng, eval=eval, eval_idx=eval_idx))
 
-    def act_in_jax(self, obs: jnp.ndarray, rng=None, eval=False):
+    def act_in_jax(self, obs: jnp.ndarray, rng=None, eval: bool = False, eval_idx: int = 0):
         NotImplementedError
 
     def train_step(self,

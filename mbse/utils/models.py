@@ -81,43 +81,43 @@ class ProbabilisticEnsembleModel(object):
                 y=y,
             ))
 
-            def calculate_calibration_score(params, xs, ys, ps, alpha):
-                return self._calculate_calibration_score(
-                    predict_fn=self._predict,
-                    params=params,
-                    xs=xs,
-                    ys=ys,
-                    ps=ps,
-                    alpha=alpha,
-                    output_dim=self.output_dim,
-                )
+        def calculate_calibration_score(params, xs, ys, ps, alpha):
+            return self._calculate_calibration_score(
+                predict_fn=self._predict,
+                params=params,
+                xs=xs,
+                ys=ys,
+                ps=ps,
+                alpha=alpha,
+                output_dim=self.output_dim,
+            )
 
-            self.calculate_calibration_score_fn = calculate_calibration_score
+        self.calculate_calibration_score_fn = calculate_calibration_score
 
-            def calibration_errors(params, xs, ys, ps, alpha):
-                return self._calibration_errors(
-                    calibration_score_fn=self.calculate_calibration_score_fn,
-                    params=params,
-                    xs=xs,
-                    ys=ys,
-                    ps=ps,
-                    alpha=alpha,
-                    output_dim=self.output_dim,
-                )
+        def calibration_errors(params, xs, ys, ps, alpha):
+            return self._calibration_errors(
+                calibration_score_fn=self.calculate_calibration_score_fn,
+                params=params,
+                xs=xs,
+                ys=ys,
+                ps=ps,
+                alpha=alpha,
+                output_dim=self.output_dim,
+            )
 
-            self.calibration_errors = calibration_errors
+        self.calibration_errors = calibration_errors
 
-            def calculate_calibration_alpha(params, xs, ys):
-                return self._calculate_calibration_alpha(
-                    calibration_error_fn=self.calibration_errors,
-                    params=params,
-                    xs=xs,
-                    ys=ys,
-                    num_ps=self.num_ps,
-                    output_dim=self.output_dim,
-                )
+        def calculate_calibration_alpha(params, xs, ys):
+            return self._calculate_calibration_alpha(
+                calibration_error_fn=self.calibration_errors,
+                params=params,
+                xs=xs,
+                ys=ys,
+                num_ps=self.num_ps,
+                output_dim=self.output_dim,
+            )
 
-            self.calculate_calibration_alpha = jax.jit(calculate_calibration_alpha)
+        self.calculate_calibration_alpha = jax.jit(calculate_calibration_alpha)
 
     @property
     def params(self):

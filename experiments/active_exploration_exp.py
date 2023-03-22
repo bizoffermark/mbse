@@ -143,6 +143,7 @@ def experiment(use_wandb: bool, exp_name: str, env_name: str, time_limit: int, n
         validate=validate,
         record_test_video=record_test_video,
         validation_buffer_size=validation_buffer_size,
+        validation_batch_size=validation_batch_size,
         seed=seed,
         uniform_exploration=uniform_exploration,
     )

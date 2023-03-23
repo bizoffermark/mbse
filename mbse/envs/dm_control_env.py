@@ -5,7 +5,7 @@ from dm_control.rl.control import Environment, flatten_observation
 
 
 class DeepMindBridge(gym.Env):
-    def __init__(self, env: Environment, render_mode):
+    def __init__(self, env: Environment, render_mode: str = 'rgb_array'):
         self._env = env
         self._env._flat_observation = True
         super().__init__()

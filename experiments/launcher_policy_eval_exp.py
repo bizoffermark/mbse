@@ -1,6 +1,6 @@
 from experiments.util import generate_base_command, generate_run_commands, hash_dict, sample_flag, RESULT_DIR
 
-import experiments.active_exploration_exp
+import yaml
 import argparse
 import numpy as np
 import copy
@@ -9,58 +9,68 @@ import itertools
 
 applicable_configs = {
     'general': ['use_wandb'],
-    'env': ['env_name', 'time_limit', 'n_envs', 'time_limit_eval'],
+    'env': ['time_limit', 'n_envs', 'time_limit_eval'],
     'optimizer': ['num_samples', 'num_elites', 'num_steps', 'horizon'],
     'agent': ['discount', 'n_particles', 'reset_model'],
     'dynamics_model': ['num_ensembles', 'hidden_layers', 'num_neurons', 'pred_diff'],
     'trainer': ['batch_size', 'eval_freq', 'max_train_steps', 'buffer_size',
                 'exploration_steps', 'eval_episodes', 'train_freq', 'train_steps', 'rollout_steps',
-                'validate', 'normalize', 'action_normalize', 'record_test_video', 'validation_buffer_size', 'validation_batch_size'],
+                'validate', 'normalize', 'action_normalize', 'record_test_video', 'validation_buffer_size',
+                'validation_batch_size'],
 }
 
-default_configs = {
-    'use_wandb': True,
-    'env_name': 'Pendulum-v1',
-    'time_limit': 200,
-    'time_limit_eval': 200,
-    'n_envs': 5,
-    'num_samples': 500,
-    'num_elites': 50,
-    'num_steps': 10,
-    'horizon': 20,
-    'discount': 1.0,
-    'n_particles': 10,
-    'reset_model': True,
-    'num_ensembles': 5,
-    'hidden_layers': 2,
-    'num_neurons': 128,
-    'pred_diff': True,
-    'batch_size': 256,
-    'eval_freq': 1,
-    'max_train_steps': 10000,
-    'buffer_size': 1000000,
-    'exploration_steps': 0,
-    'eval_episodes': 1,
-    'train_freq': 1,
-    'train_steps': 5000,
-    'rollout_steps': 200,
-    'validate': True,
-    'normalize': True,
-    'action_normalize': True,
-    'record_test_video': True,
-    'validation_buffer_size': 100000,
-    'validation_batch_size': 4096,
-}
+# default_configs = {
+#     'use_wandb': True,
+#     'time_limit': 200,
+#     'time_limit_eval': 200,
+#     'n_envs': 5,
+#     'num_samples': 500,
+#     'num_elites': 50,
+#     'num_steps': 10,
+#     'horizon': 20,
+#     'discount': 1.0,
+#     'n_particles': 10,
+#     'reset_model': True,
+#     'num_ensembles': 5,
+#     'hidden_layers': 2,
+#     'num_neurons': 128,
+#     'pred_diff': True,
+#     'batch_size': 256,
+#     'eval_freq': 1,
+#     'max_train_steps': 10000,
+#     'buffer_size': 1000000,
+#     'exploration_steps': 0,
+#     'eval_episodes': 1,
+#     'train_freq': 1,
+#     'train_steps': 5000,
+#     'rollout_steps': 200,
+#     'validate': True,
+#     'normalize': True,
+#     'action_normalize': True,
+#     'record_test_video': True,
+#     'validation_buffer_size': 100000,
+#     'validation_batch_size': 4096,
+# }
 
 search_ranges = {
 }
 
-EXPLORATION_STRATEGY = ['Uniform', 'Optimistic', 'Mean', 'PETS']
-# check consistency of configuration dicts
-assert set(itertools.chain(*list(applicable_configs.values()))) == {*default_configs.keys(), *search_ranges.keys()}
-
 
 def main(args):
+    env_name = args.env_name
+    file_path = os.path.dirname(os.path.abspath(__file__))
+    assert env_name in ['Pendulum', 'Cheetah'], "Only cheetah and pendulum environment work"
+    if env_name == 'Pendulum':
+        EXPLORATION_STRATEGY = ['Uniform', 'Optimistic', 'Mean', 'PETS', 'true_model']
+        import experiments.pendulum_exp.active_exploration_exp_pendulum as active_exploration_exp
+        default_configs = yaml.safe_load(open(file_path + '/pendulum_exp/hyperparams.yaml', 'r'))
+    else:
+        EXPLORATION_STRATEGY = ['Uniform', 'Optimistic', 'Mean', 'PETS', 'HUCRL']
+        import experiments.half_cheetah_exp.active_exploration_cheetah as active_exploration_exp
+        default_configs = yaml.safe_load(open(file_path + '/half_cheetah_exp/hyperparams.yaml', 'r'))
+
+    # check consistency of configuration dicts
+    assert set(itertools.chain(*list(applicable_configs.values()))) == {*default_configs.keys(), *search_ranges.keys()}
     rds = np.random.RandomState(args.seed)
     assert args.num_seeds_per_hparam < 100
     init_seeds = list(rds.randint(0, 10 ** 6, size=(100,)))
@@ -73,8 +83,13 @@ def main(args):
     for _ in range(args.num_hparam_samples):
         # transfer flags from the args
         flags = copy.deepcopy(args.__dict__)
+        if flags['launch_mode'] == 'euler':
+            logs_dir = '/cluster/scratch/'
+            logs_dir += flags['user_name']
+        else:
+            logs_dir = './'
         [flags.pop(key) for key in ['seed', 'num_hparam_samples', 'num_seeds_per_hparam', 'num_cpus',
-                                    'num_gpus', 'launch_mode']]
+                                    'num_gpus', 'launch_mode', 'env_name', 'user_name']]
 
         # randomly sample flags
         for flag in default_configs:
@@ -82,6 +97,7 @@ def main(args):
                 flags[flag] = sample_flag(sample_spec=search_ranges[flag], rds=rds)
             else:
                 flags[flag] = default_configs[flag]
+        flags['logs_dir'] = logs_dir
         for exploration_strategy in EXPLORATION_STRATEGY:
             # determine subdir which holds the repetitions of the exp
             flags_hash = hash_dict(flags)
@@ -90,7 +106,7 @@ def main(args):
 
             for j in range(args.num_seeds_per_hparam):
                 seed = init_seeds[j]
-                cmd = generate_base_command(experiments.active_exploration_exp, flags=dict(**flags, **{'seed': seed}))
+                cmd = generate_base_command(active_exploration_exp, flags=dict(**flags, **{'seed': seed}))
                 command_list.append(cmd)
 
     # submit jobs
@@ -103,9 +119,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=834, help='random number generator seed')
     parser.add_argument('--exp_name', type=str, required=True, default='Pendulum-ActiveExploration')
+    parser.add_argument('--env_name', type=str, default='Pendulum', help='Name of the environment')
     parser.add_argument('--num_cpus', type=int, default=8, help='number of cpus to use')
     parser.add_argument('--num_gpus', type=int, default=1, help='number of gpus to use')
     parser.add_argument('--launch_mode', type=str, default='euler', help='how to launch the experiments')
+    parser.add_argument('--user_name', type=str, default='sukhijab', help='name of user launching experiments')
     parser.add_argument('--num_hparam_samples', type=int, default=1)
     parser.add_argument('--num_seeds_per_hparam', type=int, default=3)
     parser.add_argument('--use_log', default=False, action="store_true")

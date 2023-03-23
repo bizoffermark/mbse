@@ -11,6 +11,8 @@ import wandb
 from gym.wrappers.time_limit import TimeLimit
 from gym.wrappers.rescale_action import RescaleAction
 from mbse.utils.vec_env.env_util import make_vec_env
+from mbse.models.environment_models.pendulum_swing_up import CustomPendulumEnv
+
 
 OptState = Any
 # from jax.config import config
@@ -35,7 +37,8 @@ if __name__ == "__main__":
         min_action=-1,
         max_action=1,
     )
-    env = make_vec_env(kwargs['env_id'], wrapper_class=wrapper_cls, n_envs=10)
+    # env = make_vec_env(kwargs['env_id'], wrapper_class=wrapper_cls, n_envs=10)
+    env = make_vec_env(CustomPendulumEnv, wrapper_class=wrapper_cls, n_envs=10)
 
 
     agent_fn = \

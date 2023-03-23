@@ -11,9 +11,9 @@ from mbse.models.environment_models.pendulum_swing_up import PendulumSwingUpEnv,
 from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
 from mbse.utils.vec_env.env_util import make_vec_env
 from mbse.models.hucrl_model import HUCRLModel
-
 OptState = Any
-
+from jax.config import config
+config.update("jax_log_compiles", 1)
 
 @dataclass
 class Experiment:
@@ -34,12 +34,12 @@ if __name__ == "__main__":
         max_action=1,
     )
     n_envs = 4
-    horizon = 30
+    horizon = 20
     env = make_vec_env(PendulumSwingUpEnv, wrapper_class=wrapper_cls, n_envs=n_envs)
 
     reward_model = env.envs[0].reward_model()
     reward_model.set_bounds(max_action=1.0)
-    dynamics_model = PendulumDynamicsModel(env=env.envs[0])
+    # dynamics_model = PendulumDynamicsModel(env=env.envs[0])
     dynamics_model = HUCRLModel(
         action_space=env.action_space,
         observation_space=env.observation_space,
@@ -62,7 +62,7 @@ if __name__ == "__main__":
             train_steps=z,
             batch_size=v,
             action_space=env.action_space,
-            observation_space=env.action_space,
+            observation_space=env.observation_space,
             dynamics_model=dynamics_model,
             n_particles=10,
             # policy_optimizer=policy_optimizer,

@@ -12,7 +12,7 @@ from typing import Union, Optional, Any
 class PendulumReward(RewardModel):
     """Get Pendulum Reward."""
 
-    def __init__(self, action_space, ctrl_cost_weight=0.1, sparse=False, *args, **kwargs):
+    def __init__(self, action_space, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.ctrl_cost_weight = ctrl_cost_weight
         self.sparse = sparse
@@ -92,7 +92,7 @@ class PendulumReward(RewardModel):
 
 
 class CustomPendulumEnv(PendulumEnv):
-    def __init__(self, ctrl_cost=0.1, render_mode='rgb_array', *args, **kwargs):
+    def __init__(self, ctrl_cost=0.001, render_mode='rgb_array', *args, **kwargs):
         self.state = None
         super(CustomPendulumEnv, self).__init__(render_mode=render_mode, *args, **kwargs)
         self.observation_space.sample = self.sample_obs

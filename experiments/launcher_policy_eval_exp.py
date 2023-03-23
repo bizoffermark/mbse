@@ -85,7 +85,7 @@ def main(args):
         flags = copy.deepcopy(args.__dict__)
         if flags['launch_mode'] == 'euler':
             logs_dir = '/cluster/scratch/'
-            logs_dir += flags['user_name']
+            logs_dir += flags['user_name'] + '/'
         else:
             logs_dir = './'
         [flags.pop(key) for key in ['seed', 'num_hparam_samples', 'num_seeds_per_hparam', 'num_cpus',

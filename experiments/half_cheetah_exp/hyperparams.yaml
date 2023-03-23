@@ -4,7 +4,7 @@ time_limit_eval: 1000
 n_envs: 10
 num_samples: 500
 num_elites: 50
-num_steps: 5
+num_steps: 10
 horizon: 30
 discount: 1.0
 n_particles: 10

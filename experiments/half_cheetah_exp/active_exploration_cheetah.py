@@ -46,12 +46,19 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     reward_model_backward = HalfCheetahReward(forward_velocity_weight=-1.0, ctrl_cost_weight=0.1)
     env_kwargs_forward = {
         'reward_model': reward_model_forward,
+        'render_mode': 'rgb_array'
+    }
+    env_kwargs_backward = {
+        'reward_model': reward_model_backward,
+        'render_mode': 'rgb_array'
     }
     from mbse.envs.pets_halfcheetah import HalfCheetahEnv
     env = make_vec_env(env_id=HalfCheetahEnv, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed,
                        env_kwargs=env_kwargs_forward)
-    test_env_forward = HalfCheetahEnv(render_mode='rgb_array', reward_model=reward_model_forward)
-    test_env_backward = HalfCheetahEnv(render_mode='rgb_array', reward_model=reward_model_backward)
+    test_env_forward = make_vec_env(HalfCheetahEnv, wrapper_class=wrapper_cls_test, seed=seed,
+                                    env_kwargs=env_kwargs_forward, n_envs=1)
+    test_env_backward = make_vec_env(HalfCheetahEnv, wrapper_class=wrapper_cls_test, seed=seed,
+                                     env_kwargs=env_kwargs_backward, n_envs=1)
     test_env = [test_env_forward, test_env_backward]
     features = [num_neurons] * hidden_layers
     if exploration_strategy == 'Mean':

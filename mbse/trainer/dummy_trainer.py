@@ -1,7 +1,6 @@
-import os
-
 import jax
 from mbse.utils.replay_buffer import Transition, ReplayBuffer
+from mbse.utils.vec_env import VecEnv
 from typing import Callable, Optional, Union
 import wandb
 from copy import deepcopy
@@ -83,9 +82,27 @@ class DummyTrainer(object):
             ]
         else:
             if isinstance(test_env, list):
-                self.test_env = [test_env_wrapper(deepcopy(env)) for env in test_env]
+                self.test_env = []
+                for env in test_env:
+                    if isinstance(env, VecEnv):
+                        for e in env.envs:
+                            self.test_env.append(
+                                test_env_wrapper(e)
+                            )
+                    else:
+                        self.test_env.append(
+                            test_env_wrapper(env)
+                        )
             else:
-                self.test_env = [test_env_wrapper(deepcopy(test_env))]
+                if isinstance(test_env, VecEnv):
+                    for e in test_env.envs:
+                        self.test_env.append(
+                            test_env_wrapper(e)
+                        )
+                else:
+                    self.test_env.append(
+                        test_env_wrapper(test_env)
+                    )
         assert len(self.test_env) == self.num_reward_models, "number of reward models must be the same as number of " \
                                                              "envs"
 

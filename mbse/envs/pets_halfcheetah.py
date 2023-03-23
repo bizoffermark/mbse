@@ -62,6 +62,7 @@ class HalfCheetahEnv(DeepMindBridge):
     def step(self, action):
         obs, reward, terminate, truncate, info = super().step(action)
         reward = self.reward_model.predict(obs=obs,action=action, next_obs=obs)
+        reward = reward.astype(float).item()
         return obs, reward, terminate, truncate, info
 
     def sample_obs(self):

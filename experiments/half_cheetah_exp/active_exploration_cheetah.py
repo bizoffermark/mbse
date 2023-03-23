@@ -354,7 +354,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_train_steps', type=int, default=10000)
     parser.add_argument('--buffer_size', type=int, default=1000000)
     parser.add_argument('--exploration_steps', type=int, default=0)
-    parser.add_argument('--eval_episodes', type=int, default=10)
+    parser.add_argument('--eval_episodes', type=int, default=1)
     parser.add_argument('--train_freq', type=int, default=1)
     parser.add_argument('--train_steps', type=int, default=5000)
     parser.add_argument('--rollout_steps', type=int, default=1000)

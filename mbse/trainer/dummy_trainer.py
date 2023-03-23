@@ -70,9 +70,9 @@ class DummyTrainer(object):
         )
         now = datetime.now()
         dt_string = now.strftime("%d_%m_%Y_%H_%M_%S")
-        self.video_dir_name = 'video' + str(seed) + video_prefix + dt_string
+        self.video_dir_name = video_folder + 'video' + str(seed) + video_prefix + dt_string
         if record_test_video:
-            test_env_wrapper = lambda x: RecordVideo(x, video_folder=video_folder + self.video_dir_name,
+            test_env_wrapper = lambda x: RecordVideo(x, video_folder=self.video_dir_name,
                                                      episode_trigger=lambda x: True)
         else:
             test_env_wrapper = lambda x: x
@@ -236,7 +236,7 @@ class DummyTrainer(object):
 
         }
         for i, env in enumerate(self.test_env):
-            pbar = tqdm(total=1000)
+            pbar = tqdm()
             avg_reward = 0.0
             for e in range(self.eval_episodes):
                 obs, _ = env.reset(seed=e)

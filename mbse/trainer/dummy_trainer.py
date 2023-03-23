@@ -81,8 +81,8 @@ class DummyTrainer(object):
                 test_env_wrapper(deepcopy(self.env.envs[0]))
             ]
         else:
+            self.test_env = []
             if isinstance(test_env, list):
-                self.test_env = []
                 for env in test_env:
                     if isinstance(env, VecEnv):
                         for e in env.envs:

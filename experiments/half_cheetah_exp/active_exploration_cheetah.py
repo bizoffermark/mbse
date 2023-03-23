@@ -14,7 +14,6 @@ import argparse
 from experiments.util import Logger, hash_dict, NumpyArrayEncoder, DATA_DIR
 import wandb
 from typing import Optional
-from mbse.envs.pets_halfcheetah import HalfCheetahEnv
 from mbse.models.hucrl_model import HUCRLModel
 from mbse.models.environment_models.halfcheetah_reward_model import HalfCheetahReward
 
@@ -48,6 +47,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     env_kwargs_forward = {
         'reward_model': reward_model_forward,
     }
+    from mbse.envs.pets_halfcheetah import HalfCheetahEnv
     env = make_vec_env(env_id=HalfCheetahEnv, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed,
                        env_kwargs=env_kwargs_forward)
     test_env_forward = HalfCheetahEnv(render_mode='rgb_array', reward_model=reward_model_forward)
@@ -214,6 +214,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         validation_batch_size=validation_batch_size,
         seed=seed,
         uniform_exploration=uniform_exploration,
+        video_folder=logs_dir,
     )
     group_name = exploration_strategy
     if use_log:

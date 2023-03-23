@@ -36,6 +36,7 @@ class DummyTrainer(object):
                  learn_deltas: bool = False,
                  record_test_video: bool = False,
                  video_prefix: str = "",
+                 video_folder: str = "./",
                  test_env: Optional[Union[VecEnv, Env]] = None,
                  ):
         self.env = env
@@ -72,7 +73,8 @@ class DummyTrainer(object):
         dt_string = now.strftime("%d_%m_%Y_%H_%M_%S")
         self.video_dir_name = 'video' + str(seed) + video_prefix + dt_string
         if record_test_video:
-            test_env_wrapper = lambda x: RecordVideo(x, video_folder='./' + self.video_dir_name, episode_trigger=lambda x: True)
+            test_env_wrapper = lambda x: RecordVideo(x, video_folder=video_folder + self.video_dir_name,
+                                                     episode_trigger=lambda x: True)
         else:
             test_env_wrapper = lambda x: x
         if test_env is None:

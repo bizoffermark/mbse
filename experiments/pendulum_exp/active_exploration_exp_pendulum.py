@@ -142,6 +142,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         validation_batch_size=validation_batch_size,
         seed=seed,
         uniform_exploration=uniform_exploration,
+        video_folder=logs_dir,
     )
     group_name = exploration_strategy
     if use_log:

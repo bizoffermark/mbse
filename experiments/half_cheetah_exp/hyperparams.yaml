@@ -2,8 +2,8 @@ use_wandb: True
 time_limit: 1000
 time_limit_eval: 1000
 n_envs: 10
-num_samples: 750
-num_elites: 75
+num_samples: 500
+num_elites: 50
 num_steps: 5
 horizon: 30
 discount: 1.0
@@ -11,7 +11,7 @@ n_particles: 10
 reset_model: True
 num_ensembles: 5
 hidden_layers: 4
-num_neurons: 256
+num_neurons: 200
 pred_diff: True
 batch_size: 256
 eval_freq: 10

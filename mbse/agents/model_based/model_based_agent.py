@@ -232,41 +232,41 @@ class ModelBasedAgent(DummyAgent):
                    rng,
                    buffer: ReplayBuffer,
                    ):
-        # @partial(jax.jit, static_argnums=(0, 2, 3))
-        transitions = buffer.sample(rng, batch_size=int(self.batch_size * self.train_steps))
-        transitions = transitions.reshape(self.train_steps, self.batch_size)
-        val_transitions = None
-        if self.validate:
-            rng, val_rng = jax.random.split(rng, 2)
-            val_transitions = buffer.sample(val_rng, batch_size=int(self.batch_size * self.train_steps))
-            val_transitions = val_transitions.reshape(self.train_steps, self.batch_size)
-            alpha = jnp.ones(self.observation_space.shape)
+        max_train_steps_per_iter = 1000
+        train_steps = min(max_train_steps_per_iter, self.train_steps)
+        train_loops = int(train_steps/max_train_steps_per_iter)
         if self.reset_model:
-            carry = [
-                rng,
-                alpha,
-                self.dynamics_model.init_model_params,
-                self.dynamics_model.init_model_opt_state,
-                ModelSummary(),
-                0,
-                transitions,
-                val_transitions,
-            ]
+            model_params = self.dynamics_model.init_model_params
+            model_opt_state = self.dynamics_model.init_model_opt_state
         else:
+            model_params = self.dynamics_model.model_params
+            model_opt_state = self.dynamics_model.model_opt_state
+        alpha = jnp.ones(self.observation_space.shape)
+        for i in range(train_loops):
+            train_rng, rng = jax.random.split(rng, 2)
+            transitions = buffer.sample(train_rng, batch_size=int(self.batch_size * train_steps))
+            transitions = transitions.reshape(train_steps, self.batch_size)
+            val_transitions = None
+            if self.validate:
+                train_rng, val_rng = jax.random.split(train_rng, 2)
+                val_transitions = buffer.sample(val_rng, batch_size=int(self.batch_size * train_steps))
+                val_transitions = val_transitions.reshape(train_steps, self.batch_size)
             carry = [
-                rng,
+                train_rng,
                 alpha,
-                self.dynamics_model.model_params,
-                self.dynamics_model.model_opt_state,
+                model_params,
+                model_opt_state,
                 ModelSummary(),
                 0,
                 transitions,
-                val_transitions,
+                val_transitions
             ]
-        carry, outs = jax.lax.scan(self.step, carry, xs=None, length=self.train_steps)
+            carry, outs = jax.lax.scan(self.step, carry, xs=None, length=train_steps)
+            model_params = carry[2]
+            model_opt_state = carry[3]
+            alpha = carry[1]
         if self.calibrate_model:
             alpha = carry[1]
-
         self.update_models(model_params=carry[2], model_opt_state=carry[3], alpha=alpha)
         summary = outs[0].dict()
         if self.use_wandb:
@@ -306,7 +306,7 @@ class ModelBasedAgent(DummyAgent):
             scale_out=self.dynamics_model.scale_out,
         )
 
-    def update_models(self, model_params, model_opt_state, alpha: float=1.0):
+    def update_models(self, model_params, model_opt_state, alpha: float = 1.0):
         for i in range(len(self.dynamics_model_list)):
             self.dynamics_model_list[i].update_model(
                 model_params=model_params,

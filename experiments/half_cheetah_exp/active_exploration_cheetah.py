@@ -11,7 +11,7 @@ import json
 import os
 import sys
 import argparse
-from experiments.util import Logger, hash_dict, NumpyArrayEncoder, DATA_DIR
+from experiments.util import Logger, hash_dict, NumpyArrayEncoder
 import wandb
 from typing import Optional
 from mbse.models.hucrl_model import HUCRLModel

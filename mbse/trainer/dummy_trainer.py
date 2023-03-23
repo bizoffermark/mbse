@@ -262,7 +262,7 @@ class DummyTrainer(object):
                     mp4 = mp4list[-1]
                     # log gameplay video in wandb
                     wandb.log({"gameplays":
-                                   wandb.Video(mp4, caption='episode/task: '+str(step) + '/' + str(i),
+                                   wandb.Video(mp4, caption='episode/step: '+str(step) + '/task:' + str(i),
                                                fps=4, format="gif"),
                                "step": step})
         return reward_log

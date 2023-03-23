@@ -16,11 +16,10 @@ class ModelBasedTrainer(DummyTrainer):
                  validation_batch_size: int = 1024,
                  uniform_exploration: bool = False,
                  *args,
-                 **kwargs
+                 **kwargs,
                  ):
 
-        video_prefix = "Uniform" if uniform_exploration else "Learning"
-        super(ModelBasedTrainer, self).__init__(agent_name=agent_name, video_prefix=video_prefix, *args, **kwargs)
+        super(ModelBasedTrainer, self).__init__(agent_name=agent_name, *args, **kwargs)
         assert isinstance(self.agent, ModelBasedAgent), "Only Model based agents are allowed"
         self.validation_buffer = None
         self.validation_batch_size = validation_batch_size

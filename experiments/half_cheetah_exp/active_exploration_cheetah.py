@@ -61,8 +61,10 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                                      env_kwargs=env_kwargs_backward, n_envs=1)
     test_env = [test_env_forward, test_env_backward]
     features = [num_neurons] * hidden_layers
+    video_prefix = ""
     if exploration_strategy == 'Mean':
         beta = 0.0
+        video_prefix += 'Mean'
     if exploration_strategy == 'PETS':
         dynamics_model_forward = ActiveLearningPETSModel(
             action_space=env.action_space,
@@ -99,9 +101,8 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             num_steps=num_steps,
             action_dim=(horizon, env.action_space.shape[0])
         )
-
+        video_prefix += 'PETS'
     else:
-
         if exploration_strategy == 'HUCRL':
             dynamics_model_forward = HUCRLModel(
                 action_space=env.action_space,
@@ -124,7 +125,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                 beta=beta,
                 seed=seed,
             )
-
+            video_prefix += 'HUCRL'
         else:
             dynamics_model_forward = ActiveLearningHUCRLModel(
                 action_space=env.action_space,
@@ -162,7 +163,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             action_dim=(horizon, env.action_space.shape[0] +
                         env.observation_space.shape[0])
         )
-
+        video_prefix += 'Optimistic'
     if exploration_strategy == 'HUCRL':
         model_based_agent_fn = lambda x, y, z, v: \
             ModelBasedAgent(
@@ -222,6 +223,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         seed=seed,
         uniform_exploration=uniform_exploration,
         video_folder=logs_dir,
+        video_prefix=video_prefix,
     )
     group_name = exploration_strategy
     if use_log:

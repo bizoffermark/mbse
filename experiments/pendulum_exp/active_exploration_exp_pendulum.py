@@ -46,8 +46,11 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
     features = [num_neurons] * hidden_layers
     reward_model = PendulumReward(action_space=env.action_space)
     reward_model.set_bounds(max_action=1.0)
+    video_prefix = ""
     if exploration_strategy == 'Mean':
         beta = 0.0
+        video_prefix += 'Mean'
+
     if exploration_strategy == 'PETS':
         dynamics_model = ActiveLearningPETSModel(
             action_space=env.action_space,
@@ -68,6 +71,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             num_steps=num_steps,
             action_dim=(horizon, env.action_space.shape[0])
         )
+        video_prefix += 'PETS'
     elif exploration_strategy == 'true_model':
         dynamics_model = PendulumDynamicsModel()
         policy_optimizer = CrossEntropyOptimizer(
@@ -77,7 +81,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             num_steps=num_steps,
             action_dim=(horizon, env.action_space.shape[0])
         )
-
+        video_prefix += 'true_model'
     else:
         dynamics_model = ActiveLearningHUCRLModel(
             action_space=env.action_space,
@@ -99,6 +103,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
                 action_dim=(horizon, env.action_space.shape[0] +
                             env.observation_space.shape[0])
         )
+        video_prefix += 'Optimistic'
 
     model_based_agent_fn = lambda x, y, z, v: \
         MBActiveExplorationAgent(
@@ -142,6 +147,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         validation_batch_size=validation_batch_size,
         seed=seed,
         uniform_exploration=uniform_exploration,
+        video_prefix=video_prefix,
         video_folder=logs_dir,
     )
     group_name = exploration_strategy

@@ -16,6 +16,8 @@ class MBActiveExplorationAgent(ModelBasedAgent):
         self._init_fn()
 
     def _init_fn(self):
+        super()._init_fn()
+
         def _optimize_for_exploration(
                 params,
                 init_state,

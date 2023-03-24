@@ -73,7 +73,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         )
         video_prefix += 'PETS'
     elif exploration_strategy == 'true_model':
-        dynamics_model = PendulumDynamicsModel()
+        dynamics_model = PendulumDynamicsModel(env=test_env)
         policy_optimizer = CrossEntropyOptimizer(
             upper_bound=1,
             num_samples=num_samples,

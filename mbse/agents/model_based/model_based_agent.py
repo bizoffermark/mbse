@@ -1,5 +1,7 @@
-import jax
+import functools
 
+import jax
+import copy
 from mbse.models.dynamics_model import DynamicsModel, ModelSummary
 from mbse.optimizers.dummy_optimizer import DummyOptimizer
 import gym
@@ -47,44 +49,42 @@ class ModelBasedAgent(DummyAgent):
 
     def _init_fn(self):
 
+        def _optimize(
+                model_index,
+                params,
+                init_state,
+                key,
+                optimizer_key,
+                alpha,
+                bias_obs,
+                bias_act,
+                bias_out,
+                scale_obs,
+                scale_act,
+                scale_out):
+            return self._optimize(
+                eval_fn=self.dynamics_model_list[model_index].evaluate,
+                optimize_fn=self.policy_optimizer.optimize,
+                n_particles=self.n_particles,
+                horizon=self.policy_optimizer.action_dim[-2],
+                params=params,
+                init_state=init_state,
+                key=key,
+                optimizer_key=optimizer_key,
+                alpha=alpha,
+                bias_obs=bias_obs,
+                bias_act=bias_act,
+                bias_out=bias_out,
+                scale_obs=scale_obs,
+                scale_act=scale_act,
+                scale_out=scale_out,
+            )
         self.optimize_for_eval_fns = []
-        for i, dynamics_model in enumerate(self.dynamics_model_list):
-            def _optimize(
-                    params,
-                    init_state,
-                    key,
-                    optimizer_key,
-                    alpha,
-                    bias_obs,
-                    bias_act,
-                    bias_out,
-                    scale_obs,
-                    scale_act,
-                    scale_out):
-                return self._optimize(
-                    eval_fn=dynamics_model.evaluate,
-                    optimize_fn=self.policy_optimizer.optimize,
-                    n_particles=self.n_particles,
-                    horizon=self.policy_optimizer.action_dim[-2],
-                    params=params,
-                    init_state=init_state,
-                    key=key,
-                    optimizer_key=optimizer_key,
-                    alpha=alpha,
-                    bias_obs=bias_obs,
-                    bias_act=bias_act,
-                    bias_out=bias_out,
-                    scale_obs=scale_obs,
-                    scale_act=scale_act,
-                    scale_out=scale_out,
-                )
-
-            optimize = jax.jit(_optimize)
-            if i == 0:
-                self.optimize = optimize
-            self.optimize_for_eval_fns.append(optimize)
-
-        # self.optimize_for_eval = self.optimize
+        for i in range(len(self.dynamics_model_list)):
+            self.optimize_for_eval_fns.append(jax.jit(functools.partial(
+                _optimize, model_index=i
+            )))
+        self.optimize = self.optimize_for_eval_fns[0]
 
         def step(carry, ins):
             rng = carry[0]

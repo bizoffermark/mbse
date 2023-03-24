@@ -1,8 +1,7 @@
-from functools import partial
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax import jit, vmap
+from jax import vmap
 from mbse.optimizers.dummy_optimizer import DummyOptimizer
 
 
@@ -10,10 +9,11 @@ class CrossEntropyOptimizer(DummyOptimizer):
 
     def __init__(
             self,
-            num_samples=500,
-            num_elites=50,
-            seed=0,
-            init_var=5,
+            num_samples: int = 500,
+            num_elites: int = 50,
+            seed: int = 0,
+            init_std: float = 5,
+            alpha: float = 0.0,
             *args,
             **kwargs,
     ):
@@ -21,7 +21,9 @@ class CrossEntropyOptimizer(DummyOptimizer):
         self.num_samples = num_samples
         self.num_elites = num_elites
         self.seed = seed
-        self.init_var = init_var
+        self.init_std = init_std
+        assert 0 <= alpha < 1, "alpha must be between [0, 1]"
+        self.alpha = alpha
 
     # @partial(jit, static_argnums=(0, 1))
     def step(self, func, mean, std, key):
@@ -31,7 +33,7 @@ class CrossEntropyOptimizer(DummyOptimizer):
             key=key,
             mean=jnp.zeros_like(mean),
             cov=jnp.diag(jnp.ones_like(mean)),
-            shape=(self.num_samples, ))*std
+            shape=(self.num_samples, )) * std
         samples = samples.reshape((self.num_samples,) + self.action_dim)
         samples = self.clip_action(samples)
         values = vmap(func)(samples)
@@ -46,7 +48,7 @@ class CrossEntropyOptimizer(DummyOptimizer):
     def optimize(self, func, rng=None):
         best_value = -jnp.inf
         mean = jnp.zeros(self.action_dim)
-        std = jnp.ones(self.action_dim)*self.init_var
+        std = jnp.ones(self.action_dim)*self.init_std
         best_sequence = mean
         get_best_action = lambda best_val, best_seq, val, seq: [val[-1].squeeze(), seq[-1]]
         get_curr_best_action = lambda best_val, best_seq, val, seq: [best_val, best_seq]
@@ -61,8 +63,11 @@ class CrossEntropyOptimizer(DummyOptimizer):
             best_seq = carry[4]
             key, sample_key = jax.random.split(key, 2)
             elites, elite_values = self.step(func, mu, sig, sample_key)
-            mean = jnp.mean(elites, axis=0)
-            std = jnp.std(elites, axis=0)
+            elite_mean = jnp.mean(elites, axis=0)
+            elite_var = jnp.var(elites, axis=0)
+            mean = mu * self.alpha + (1 - self.alpha) * elite_mean
+            var = jnp.square(sig) * self.alpha + (1 - self.alpha) * elite_var
+            std = jnp.sqrt(var)
             best_elite = elite_values[-1].squeeze()
             bests = jax.lax.cond(best_val <= best_elite,
                                  get_best_action,

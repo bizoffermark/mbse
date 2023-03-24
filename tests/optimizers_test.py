@@ -1,14 +1,19 @@
 from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
 from mbse.optimizers.gradient_based_optimizer import GradientBasedOptimizer
 import jax.numpy as jnp
-
+import jax
 EPS = 5e-2
 
-
+from jax.config import config
+config.update("jax_log_compiles", 1)
 def loss_function(x, bias):
     return -jnp.sum(jnp.square(x-bias))
 
-
+@jax.jit
+def optimize_for_bias(bias):
+    func = lambda x: loss_function(x, bias)
+    sequence, value = optimizer.optimize(func)
+    return sequence, value
 opt_cls = CrossEntropyOptimizer
 num_steps = 25
 action_dim = (10, 2)
@@ -18,8 +23,7 @@ for bias in jnp.linspace(-5, 5, 10):
         num_steps=num_steps,
         lr=0.1,
     )
-    func = lambda x: loss_function(x, bias)
-    sequence, value = optimizer.optimize(func)
+    sequence, value = optimize_for_bias(bias)
     if jnp.max(jnp.abs(sequence-bias)) > EPS:
         print("Optimizer needs to be fixed")
         print("bias: ", bias)

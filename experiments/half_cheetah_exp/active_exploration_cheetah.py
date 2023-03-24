@@ -19,7 +19,8 @@ from mbse.models.environment_models.halfcheetah_reward_model import HalfCheetahR
 
 
 def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp_name: str,
-               num_samples: int, num_elites: int, num_steps: int, horizon: int, n_particles: int, reset_model: bool,
+               num_samples: int, num_elites: int, num_steps: int, horizon: int, alpha: float,
+               n_particles: int, reset_model: bool,
                num_ensembles: int, hidden_layers: int, num_neurons: int, beta: float,
                pred_diff: bool, batch_size: int, eval_freq: int, max_train_steps: int, buffer_size: int,
                exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int, rollout_steps: int,
@@ -99,7 +100,8 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             num_samples=num_samples,
             num_elites=num_elites,
             num_steps=num_steps,
-            action_dim=(horizon, env.action_space.shape[0])
+            alpha=alpha,
+            action_dim=(horizon, env.action_space.shape[0]),
         )
         video_prefix += 'PETS'
     else:
@@ -160,6 +162,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             num_samples=num_samples,
             num_elites=num_elites,
             num_steps=num_steps,
+            alpha=alpha,
             action_dim=(horizon, env.action_space.shape[0] +
                         env.observation_space.shape[0])
         )
@@ -273,6 +276,7 @@ def main(args):
         num_elites=args.num_elites,
         num_steps=args.num_steps,
         horizon=args.horizon,
+        alpha=args.alpha,
         n_particles=args.n_particles,
         reset_model=args.reset_model,
         beta=args.beta,
@@ -329,23 +333,24 @@ if __name__ == '__main__':
     parser.add_argument('--logs_dir', type=str, default='./')
     parser.add_argument('--use_wandb', default=True, action="store_true")
     # env experiment args
-    parser.add_argument('--time_limit', type=int, default=200)
-    parser.add_argument('--n_envs', type=int, default=10)
+    parser.add_argument('--time_limit', type=int, default=1000)
+    parser.add_argument('--n_envs', type=int, default=1)
 
     # optimizer experiment args
-    parser.add_argument('--num_samples', type=int, default=1000)
-    parser.add_argument('--num_elites', type=int, default=100)
-    parser.add_argument('--num_steps', type=int, default=10)
+    parser.add_argument('--num_samples', type=int, default=500)
+    parser.add_argument('--num_elites', type=int, default=50)
+    parser.add_argument('--num_steps', type=int, default=5)
     parser.add_argument('--horizon', type=int, default=30)
+    parser.add_argument('--alpha', type=float, default=0.1)
 
     # agent experiment args
     parser.add_argument('--discount', type=float, default=1.0)
-    parser.add_argument('--n_particles', type=int, default=10)
+    parser.add_argument('--n_particles', type=int, default=5)
     parser.add_argument('--reset_model', default=True, action="store_true")
 
     # dynamics_model experiment args
     parser.add_argument('--num_ensembles', type=int, default=5)
-    parser.add_argument('--hidden_layers', type=int, default=2)
+    parser.add_argument('--hidden_layers', type=int, default=4)
     parser.add_argument('--num_neurons', type=int, default=256)
     parser.add_argument('--pred_diff', default=True, action="store_true")
     parser.add_argument('--beta', type=float, default=1.0)
@@ -369,7 +374,7 @@ if __name__ == '__main__':
     parser.add_argument('--exploration_strategy', type=str, default='Optimistic')
     parser.add_argument('--use_log', default=False, action="store_true")
     parser.add_argument('--use_al', default=False, action="store_true")
-    parser.add_argument('--time_limit_eval', type=int, default=1000)
+    parser.add_argument('--time_limit_eval', type=int, default=1)
 
     # general args
     parser.add_argument('--exp_result_folder', type=str, default=None)

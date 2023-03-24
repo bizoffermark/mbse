@@ -16,40 +16,6 @@ class MBActiveExplorationAgent(ModelBasedAgent):
         self._init_fn()
 
     def _init_fn(self):
-        super()._init_fn()
-
-        def _optimize(
-                params,
-                init_state,
-                key,
-                optimizer_key,
-                alpha,
-                bias_obs,
-                bias_act,
-                bias_out,
-                scale_obs,
-                scale_act,
-                scale_out):
-            return self._optimize(
-                eval_fn=self.dynamics_model.evaluate,
-                optimize_fn=self.policy_optimizer.optimize,
-                n_particles=self.n_particles,
-                horizon=self.policy_optimizer.action_dim[-2],
-                params=params,
-                init_state=init_state,
-                key=key,
-                optimizer_key=optimizer_key,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
-            )
-
-        self.optimize_for_eval = jax.jit(_optimize)
-
         def _optimize_for_exploration(
                 params,
                 init_state,

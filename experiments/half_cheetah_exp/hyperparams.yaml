@@ -4,8 +4,9 @@ time_limit_eval: 1000
 n_envs: 1
 num_samples: 500
 num_elites: 50
-num_steps: 10
+num_steps: 5
 horizon: 30
+alpha: 0.1
 discount: 1.0
 n_particles: 10
 reset_model: True

@@ -1,7 +1,7 @@
 import functools
 
 import jax
-import copy
+import math
 from mbse.models.dynamics_model import DynamicsModel, ModelSummary
 from mbse.optimizers.dummy_optimizer import DummyOptimizer
 import gym
@@ -234,7 +234,7 @@ class ModelBasedAgent(DummyAgent):
                    ):
         max_train_steps_per_iter = 1000
         train_steps = min(max_train_steps_per_iter, self.train_steps)
-        train_loops = max(int(self.train_steps/max_train_steps_per_iter), 1)
+        train_loops = max(int(math.ceil(self.train_steps/max_train_steps_per_iter)), 1)
         if self.reset_model:
             model_params = self.dynamics_model.init_model_params
             model_opt_state = self.dynamics_model.init_model_opt_state
@@ -265,13 +265,13 @@ class ModelBasedAgent(DummyAgent):
             model_params = carry[2]
             model_opt_state = carry[3]
             alpha = carry[1]
+            summary = outs[0].dict()
+            if self.use_wandb:
+                for log_dict in summary:
+                    wandb.log(log_dict)
         if self.calibrate_model:
             alpha = carry[1]
-        self.update_models(model_params=carry[2], model_opt_state=carry[3], alpha=alpha)
-        summary = outs[0].dict()
-        if self.use_wandb:
-            for log_dict in summary:
-                wandb.log(log_dict)
+        self.update_models(model_params=model_params, model_opt_state=model_opt_state, alpha=alpha)
 
     def set_transforms(self,
                        bias_obs: Union[jnp.ndarray, float] = 0.0,

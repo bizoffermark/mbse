@@ -234,7 +234,8 @@ class ModelBasedAgent(DummyAgent):
                    ):
         max_train_steps_per_iter = 1000
         train_steps = min(max_train_steps_per_iter, self.train_steps)
-        train_loops = max(int(math.ceil(self.train_steps/max_train_steps_per_iter)), 1)
+        train_loops = math.ceil(self.train_steps/max_train_steps_per_iter)
+        train_loops = max(train_loops, 1)
         if self.reset_model:
             model_params = self.dynamics_model.init_model_params
             model_opt_state = self.dynamics_model.init_model_opt_state

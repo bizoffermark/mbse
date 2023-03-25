@@ -262,6 +262,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_elites', type=int, default=50)
     parser.add_argument('--num_steps', type=int, default=10)
     parser.add_argument('--horizon', type=int, default=20)
+    parser.add_argument('--alpha', type=float, default=0.0)
 
     # agent experiment args
     parser.add_argument('--discount', type=float, default=1.0)

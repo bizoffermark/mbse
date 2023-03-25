@@ -6,6 +6,7 @@ num_samples: 500
 num_elites: 50
 num_steps: 10
 horizon: 20
+alpha: 0.0
 discount: 1.0
 n_particles: 10
 reset_model: True

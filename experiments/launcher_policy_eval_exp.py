@@ -10,7 +10,7 @@ import itertools
 applicable_configs = {
     'general': ['use_wandb'],
     'env': ['time_limit', 'n_envs', 'time_limit_eval'],
-    'optimizer': ['num_samples', 'num_elites', 'num_steps', 'horizon'],
+    'optimizer': ['num_samples', 'num_elites', 'num_steps', 'horizon', 'alpha'],
     'agent': ['discount', 'n_particles', 'reset_model'],
     'dynamics_model': ['num_ensembles', 'hidden_layers', 'num_neurons', 'pred_diff'],
     'trainer': ['batch_size', 'eval_freq', 'max_train_steps', 'buffer_size',
@@ -61,7 +61,7 @@ def main(args):
     file_path = os.path.dirname(os.path.abspath(__file__))
     assert env_name in ['Pendulum', 'Cheetah'], "Only cheetah and pendulum environment work"
     if env_name == 'Pendulum':
-        EXPLORATION_STRATEGY = ['Uniform', 'Optimistic', 'Mean', 'PETS', 'true_model']
+        EXPLORATION_STRATEGY = ['Uniform', 'Optimistic', 'Mean', 'PETS']
         import experiments.pendulum_exp.active_exploration_exp_pendulum as active_exploration_exp
         default_configs = yaml.safe_load(open(file_path + '/pendulum_exp/hyperparams.yaml', 'r'))
     else:
@@ -89,7 +89,7 @@ def main(args):
         else:
             logs_dir = './'
         [flags.pop(key) for key in ['seed', 'num_hparam_samples', 'num_seeds_per_hparam', 'num_cpus',
-                                    'num_gpus', 'launch_mode', 'env_name', 'user_name']]
+                                    'num_gpus', 'launch_mode', 'env_name', 'user_name', 'long_run']]
 
         # randomly sample flags
         for flag in default_configs:
@@ -111,6 +111,7 @@ def main(args):
 
     # submit jobs
     generate_run_commands(command_list, num_cpus=args.num_cpus, num_gpus=args.num_gpus, mode=args.launch_mode,
+                          long=args.long_run,
                           promt=True,
                           mem=16000)
 
@@ -129,6 +130,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_log', default=False, action="store_true")
     parser.add_argument('--use_al', default=False, action="store_true")
     parser.add_argument('--beta', type=float, default=20.0)
+    parser.add_argument('--long_run', default=False, action="store_true")
 
     args = parser.parse_args()
     main(args)

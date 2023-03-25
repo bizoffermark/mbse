@@ -165,7 +165,7 @@ class ModelBasedTrainer(DummyTrainer):
             actor_rng, val_rng = random.split(actor_rng, 2)
             transitions, obs, done = self.step_env(obs, policy, self.rollout_steps, actor_rng)
             self.buffer.add(transitions)
-            # reward_log = {}
+            reward_log = {}
             train_step_log = {}
             model_log = {}
             env_step_log = {

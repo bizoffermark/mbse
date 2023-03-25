@@ -16,6 +16,7 @@ import wandb
 from typing import Optional
 from mbse.models.hucrl_model import HUCRLModel
 from mbse.models.environment_models.halfcheetah_reward_model import HalfCheetahReward
+from mbse.envs.wrappers.action_repeat import ActionRepeat
 
 
 def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp_name: str,
@@ -31,15 +32,23 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     """ Run experiment for a given method and environment. """
 
     """ Environment """
+    action_repeat = 4
+    import math
+    time_lim = math.ceil(time_limit / action_repeat)
     wrapper_cls = lambda x: RescaleAction(
-        TimeLimit(x, max_episode_steps=time_limit),
+        TimeLimit(
+            ActionRepeat(x, repeat=action_repeat),
+            max_episode_steps=time_lim),
         min_action=-1,
         max_action=1,
     )
     wrapper_cls_test = wrapper_cls
     if time_limit_eval is not None:
+        time_lim_eval = math.ceil(time_limit_eval / action_repeat)
         wrapper_cls_test = lambda x: RescaleAction(
-            TimeLimit(x, max_episode_steps=time_limit_eval),
+            TimeLimit(
+                ActionRepeat(x, repeat=action_repeat),
+                max_episode_steps=time_lim_eval),
             min_action=-1,
             max_action=1,
         )

@@ -65,11 +65,11 @@ class OffPolicyTrainer(DummyTrainer):
                 wandb.log({'env_steps':  step})
             if step % self.train_freq == 0:
                 train_rng, agent_rng = random.split(train_rng, 2)
-                self.agent.train_step(
+                total_train_steps = self.agent.train_step(
                     rng=agent_rng,
                     buffer=self.buffer,
                 )
-                train_steps += self.train_steps
+                train_steps += total_train_steps
                 # for _ in range(self.train_steps):
                 #    train_rng, agent_rng, buffer_rng = random.split(train_rng, 3)
                 #    batch = self.buffer.sample(buffer_rng, self.batch_size)

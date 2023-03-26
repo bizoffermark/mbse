@@ -658,6 +658,7 @@ class SACAgent(DummyAgent):
         summary = carry[8]
         if self.use_wandb:
             wandb.log(summary.dict())
+        return self.train_steps
 
     # def train_step(
     #         self,

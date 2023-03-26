@@ -45,11 +45,11 @@ class ModelFreeTrainer(DummyTrainer):
 
             if step % self.train_freq == 0:
                 train_rng, agent_rng = random.split(train_rng, 2)
-                self.agent.train_step(
+                total_train_steps = self.agent.train_step(
                     rng=agent_rng,
                     buffer=self.buffer,
                 )
-                train_steps += self.train_steps
+                train_steps += total_train_steps
 
             # Evaluate episode
             if train_steps % self.eval_freq == 0:

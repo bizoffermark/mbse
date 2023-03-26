@@ -20,8 +20,8 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
                num_samples: int, num_elites: int, num_steps: int, horizon: int, n_particles: int, reset_model: bool,
                num_ensembles: int, hidden_layers: int, num_neurons: int, beta: float,
                pred_diff: bool, batch_size: int, eval_freq: int, max_train_steps: int, buffer_size: int,
-               exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int, rollout_steps: int,
-               normalize: bool, action_normalize: bool, validate: bool, record_test_video: bool,
+               exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int, num_epochs: int,
+               rollout_steps: int, normalize: bool, action_normalize: bool, validate: bool, record_test_video: bool,
                validation_buffer_size: int, validation_batch_size: int,
                seed: int, exploration_strategy: str, use_log: bool, use_al: bool,
                time_limit_eval: Optional[int] = None):
@@ -111,6 +111,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             validate=y,
             train_steps=z,
             batch_size=v,
+            num_epochs=num_epochs,
             action_space=env.action_space,
             observation_space=env.observation_space,
             dynamics_model=dynamics_model,
@@ -211,6 +212,7 @@ def main(args):
         eval_episodes=args.eval_episodes,
         train_freq=args.train_freq,
         train_steps=args.train_steps,
+        num_epochs=args.num_epochs,
         rollout_steps=args.rollout_steps,
         normalize=args.normalize,
         action_normalize=args.action_normalize,
@@ -252,7 +254,7 @@ if __name__ == '__main__':
     # general experiment args
     parser.add_argument('--exp_name', type=str, required=True, default='active_exploration')
     parser.add_argument('--logs_dir', type=str, default='./')
-    parser.add_argument('--use_wandb', default=True, action="store_true")
+    parser.add_argument('--use_wandb', default=False, action="store_true")
     # env experiment args
     parser.add_argument('--time_limit', type=int, default=200)
     parser.add_argument('--n_envs', type=int, default=1)
@@ -284,12 +286,13 @@ if __name__ == '__main__':
     parser.add_argument('--exploration_steps', type=int, default=0)
     parser.add_argument('--eval_episodes', type=int, default=1)
     parser.add_argument('--train_freq', type=int, default=1)
-    parser.add_argument('--train_steps', type=int, default=5)
+    parser.add_argument('--train_steps', type=int, default=5000)
+    parser.add_argument('--num_epochs', type=int, default=-1)
     parser.add_argument('--rollout_steps', type=int, default=1)
     parser.add_argument('--normalize', default=True, action="store_true")
     parser.add_argument('--action_normalize', default=True, action="store_true")
     parser.add_argument('--validate', default=True, action="store_true")
-    parser.add_argument('--record_test_video', default=True, action="store_true")
+    parser.add_argument('--record_test_video', default=False, action="store_true")
     parser.add_argument('--validation_buffer_size', type=int, default=100000)
     parser.add_argument('--validation_batch_size', type=int, default=4096)
     parser.add_argument('--exploration_strategy', type=str, default='Optimistic')

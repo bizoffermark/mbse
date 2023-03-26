@@ -233,8 +233,12 @@ class ModelBasedAgent(DummyAgent):
                    buffer: ReplayBuffer,
                    ):
         max_train_steps_per_iter = 1000
-        train_steps = min(max_train_steps_per_iter, self.train_steps)
-        train_loops = math.ceil(self.train_steps/max_train_steps_per_iter)
+        if self.num_epochs > 0:
+            total_train_steps = math.ceil(buffer.size * self.num_epochs/self.batch_size)
+        else:
+            total_train_steps = self.train_steps
+        train_loops = math.ceil(total_train_steps / max_train_steps_per_iter)
+        train_steps = min(max_train_steps_per_iter, total_train_steps)
         train_loops = max(train_loops, 1)
         if self.reset_model:
             model_params = self.dynamics_model.init_model_params
@@ -273,6 +277,7 @@ class ModelBasedAgent(DummyAgent):
         if self.calibrate_model:
             alpha = carry[1]
         self.update_models(model_params=model_params, model_opt_state=model_opt_state, alpha=alpha)
+        return total_train_steps
 
     def set_transforms(self,
                        bias_obs: Union[jnp.ndarray, float] = 0.0,

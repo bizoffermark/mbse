@@ -56,9 +56,9 @@ class DummyTrainer(object):
         self.use_wandb = use_wandb
 
         self.max_train_steps = max_train_steps
-        self.batch_size = batch_size
         self.train_freq = train_freq
-        self.train_steps = int(train_steps*self.num_envs)
+        self.train_steps = train_steps
+        self.batch_size = batch_size
         self.eval_freq = eval_freq
         self.exploration_steps = exploration_steps
         self.rollout_steps = rollout_steps

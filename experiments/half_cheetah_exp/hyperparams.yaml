@@ -22,6 +22,7 @@ exploration_steps: 0
 eval_episodes: 1
 train_freq: 1
 train_steps: 6000
+num_epochs: 500
 rollout_steps: 250
 validate: True
 normalize: True

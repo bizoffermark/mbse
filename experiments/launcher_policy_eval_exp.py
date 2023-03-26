@@ -14,7 +14,7 @@ applicable_configs = {
     'agent': ['discount', 'n_particles', 'reset_model'],
     'dynamics_model': ['num_ensembles', 'hidden_layers', 'num_neurons', 'pred_diff'],
     'trainer': ['batch_size', 'eval_freq', 'max_train_steps', 'buffer_size',
-                'exploration_steps', 'eval_episodes', 'train_freq', 'train_steps', 'rollout_steps',
+                'exploration_steps', 'eval_episodes', 'train_freq', 'train_steps', 'num_epochs', 'rollout_steps',
                 'validate', 'normalize', 'action_normalize', 'record_test_video', 'validation_buffer_size',
                 'validation_batch_size'],
 }

@@ -172,13 +172,13 @@ class ModelBasedTrainer(DummyTrainer):
                 'env_steps': step * self.rollout_steps * self.num_envs,
                 'learning_step': step,
             }
-            if step % self.train_freq == 0 and self.buffer.size >= self.batch_size:
+            if step % self.train_freq == 0 and self.buffer.size >= self.agent.batch_size:
                 train_rng, agent_rng = random.split(train_rng, 2)
-                self.agent.train_step(
+                total_train_steps = self.agent.train_step(
                     rng=agent_rng,
                     buffer=self.buffer,
                 )
-                train_steps += self.train_steps
+                train_steps += total_train_steps
                 train_step_log = {
                     'train_steps': train_steps
                 }

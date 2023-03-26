@@ -1,7 +1,7 @@
 use_wandb: True
 time_limit: 200
 time_limit_eval: 200
-n_envs: 5
+n_envs: 1
 num_samples: 500
 num_elites: 50
 num_steps: 10
@@ -22,6 +22,7 @@ exploration_steps: 0
 eval_episodes: 1
 train_freq: 1
 train_steps: 5000
+num_epochs: 500
 rollout_steps: 200
 validate: True
 normalize: True

@@ -122,7 +122,7 @@ class ModelBasedAgent(DummyAgent):
             outs = [summary]
             return carry, outs
 
-        self.step = step
+        self.step = jax.jit(step)
 
     @staticmethod
     def _optimize(eval_fn,

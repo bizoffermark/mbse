@@ -195,6 +195,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                     train_steps=train_steps,
                     batch_size=batch_size,
                     max_train_steps=max_train_steps,
+                    num_epochs=num_epochs,
                     action_space=env.action_space,
                     observation_space=env.observation_space,
                     dynamics_model=dynamics_model,

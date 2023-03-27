@@ -14,7 +14,7 @@ num_ensembles: 5
 hidden_layers: 2
 num_neurons: 128
 pred_diff: True
-batch_size: 256
+batch_size: 64
 max_train_steps: 5000
 eval_freq: 1
 total_train_steps: 5000
@@ -23,7 +23,7 @@ exploration_steps: 0
 eval_episodes: 1
 train_freq: 1
 train_steps: 5000
-num_epochs: 50
+num_epochs: 100
 rollout_steps: 200
 validate: True
 normalize: True

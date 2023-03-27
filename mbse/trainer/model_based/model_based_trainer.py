@@ -137,10 +137,10 @@ class ModelBasedTrainer(DummyTrainer):
         if self.exploration_steps > 0:
             transitions = self.rollout_policy(self.exploration_steps, policy, explore_rng)
             self.buffer.add(transitions)
-        rng_keys = random.split(self.rng, self.max_train_steps + 1)
+        rng_keys = random.split(self.rng, self.total_train_steps + 1)
         self.rng = rng_keys[0]
         rng_keys = rng_keys[1:]
-        learning_steps = int(self.max_train_steps / (self.rollout_steps * self.num_envs))
+        learning_steps = int(self.total_train_steps / (self.rollout_steps * self.num_envs))
         rng_key, reset_rng = random.split(rng_keys[0], 2)
         rng_keys = rng_keys.at[0].set(rng_key)
         reset_seed = random.randint(
@@ -177,6 +177,8 @@ class ModelBasedTrainer(DummyTrainer):
                 total_train_steps = self.agent.train_step(
                     rng=agent_rng,
                     buffer=self.buffer,
+                    validate=self.validate,
+                    log_results=self.use_wandb,
                 )
                 train_steps += total_train_steps
                 train_step_log = {

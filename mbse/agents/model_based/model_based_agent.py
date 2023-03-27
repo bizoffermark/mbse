@@ -231,12 +231,15 @@ class ModelBasedAgent(DummyAgent):
     def train_step(self,
                    rng,
                    buffer: ReplayBuffer,
+                   validate: bool = True,
+                   log_results: bool = True,
                    ):
         max_train_steps_per_iter = 1000
         if self.num_epochs > 0:
             total_train_steps = math.ceil(buffer.size * self.num_epochs/self.batch_size)
         else:
             total_train_steps = self.train_steps
+        total_train_steps = min(total_train_steps, self.max_train_steps)
         train_loops = math.ceil(total_train_steps / max_train_steps_per_iter)
         train_steps = min(max_train_steps_per_iter, total_train_steps)
         train_loops = max(train_loops, 1)
@@ -252,7 +255,7 @@ class ModelBasedAgent(DummyAgent):
             transitions = buffer.sample(train_rng, batch_size=int(self.batch_size * train_steps))
             transitions = transitions.reshape(train_steps, self.batch_size)
             val_transitions = None
-            if self.validate:
+            if validate:
                 train_rng, val_rng = jax.random.split(train_rng, 2)
                 val_transitions = buffer.sample(val_rng, batch_size=int(self.batch_size * train_steps))
                 val_transitions = val_transitions.reshape(train_steps, self.batch_size)
@@ -271,7 +274,7 @@ class ModelBasedAgent(DummyAgent):
             model_opt_state = carry[3]
             alpha = carry[1]
             summary = outs[0].dict()
-            if self.use_wandb:
+            if log_results:
                 for log_dict in summary:
                     wandb.log(log_dict)
         if self.calibrate_model:

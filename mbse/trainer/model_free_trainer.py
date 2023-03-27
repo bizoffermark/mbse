@@ -33,10 +33,10 @@ class ModelFreeTrainer(DummyTrainer):
         policy = lambda x, y: self.env.action_space.sample()
         transitions = self.rollout_policy(self.exploration_steps, policy, self.rng)
         self.buffer.add(transition=transitions)
-        rng_keys = random.split(self.rng, self.max_train_steps+1)
+        rng_keys = random.split(self.rng, self.total_train_steps+1)
         self.rng = rng_keys[0]
         rng_keys = rng_keys[1:]
-        learning_steps = int(self.max_train_steps/(self.rollout_steps*self.num_envs))
+        learning_steps = int(self.total_train_steps/(self.rollout_steps*self.num_envs))
         for step in tqdm(range(learning_steps)):
             actor_rng, train_rng = random.split(rng_keys[step], 2)
             policy = self.agent.act_in_train
@@ -48,6 +48,8 @@ class ModelFreeTrainer(DummyTrainer):
                 total_train_steps = self.agent.train_step(
                     rng=agent_rng,
                     buffer=self.buffer,
+                    validate=self.validate,
+                    log_results=self.use_wandb,
                 )
                 train_steps += total_train_steps
 

@@ -506,7 +506,7 @@ class SACAgent(DummyAgent):
             outs = [summary]
             return carry, outs
 
-        self.step = step
+        self.step = jax.jit(step)
 
     def act_in_jax(self, obs, rng=None, eval=False, eval_idx=0):
         if eval:
@@ -587,29 +587,27 @@ class SACAgent(DummyAgent):
             alpha_loss = jnp.zeros(1)
             alpha_grad_norm = jnp.zeros(1)
 
-        summary = SACModelSummary()
-        if self.use_wandb:
-            log_alpha = self.log_alpha_apply(new_alpha_params)
-            _, std = self.actor_apply(new_actor_params, tran.obs)
+        log_alpha = self.log_alpha_apply(new_alpha_params)
+        _, std = self.actor_apply(new_actor_params, tran.obs)
 
-            summary = SACModelSummary(
-                actor_loss=actor_loss.astype(float),
-                entropy=-log_a.mean().astype(float),
-                actor_std=std.mean().astype(float),
-                critic_loss=critic_loss.astype(float),
-                v_loss=v_loss.astype(float),
-                q_loss=q_loss.astype(float),
-                alpha_loss=alpha_loss.astype(float),
-                log_alpha=log_alpha.astype(float),
-                critic_grad_norm=critic_grad_norm.astype(float),
-                actor_grad_norm=actor_grad_norm.astype(float),
-                alpha_grad_norm=alpha_grad_norm.astype(float),
-                target_v_term=target_v_term.astype(float),
-                target_q_term=target_q_term.astype(float),
-                entropy_term=entropy_term.astype(float),
-                max_reward=jnp.max(tran.reward).astype(float),
-                min_reward=jnp.min(tran.reward).astype(float),
-            )
+        summary = SACModelSummary(
+            actor_loss=actor_loss.astype(float),
+            entropy=-log_a.mean().astype(float),
+            actor_std=std.mean().astype(float),
+            critic_loss=critic_loss.astype(float),
+            v_loss=v_loss.astype(float),
+            q_loss=q_loss.astype(float),
+            alpha_loss=alpha_loss.astype(float),
+            log_alpha=log_alpha.astype(float),
+            critic_grad_norm=critic_grad_norm.astype(float),
+            actor_grad_norm=actor_grad_norm.astype(float),
+            alpha_grad_norm=alpha_grad_norm.astype(float),
+            target_v_term=target_v_term.astype(float),
+            target_q_term=target_q_term.astype(float),
+            entropy_term=entropy_term.astype(float),
+            max_reward=jnp.max(tran.reward).astype(float),
+            min_reward=jnp.min(tran.reward).astype(float),
+        )
 
         return (
             new_alpha_params,
@@ -625,6 +623,8 @@ class SACAgent(DummyAgent):
     def train_step(self,
                    rng,
                    buffer: ReplayBuffer,
+                   validate: bool = True,
+                   log_results: bool = True,
                    ):
 
         # @partial(jit, static_argnums=(0, 2))
@@ -656,7 +656,7 @@ class SACAgent(DummyAgent):
         self.target_critic_params = carry[6]
         self.critic_opt_state = carry[7]
         summary = carry[8]
-        if self.use_wandb:
+        if log_results:
             wandb.log(summary.dict())
         return self.train_steps
 

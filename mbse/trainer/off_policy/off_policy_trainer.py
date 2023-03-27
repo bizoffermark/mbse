@@ -36,10 +36,10 @@ class OffPolicyTrainer(DummyTrainer):
                                               for s in range(self.num_envs)], axis=0)
         transitions = self.rollout_policy(self.exploration_steps, policy, self.rng)
         self.buffer.add(transition=transitions)
-        rng_keys = random.split(self.rng, self.max_train_steps + 1)
+        rng_keys = random.split(self.rng, self.total_train_steps + 1)
         self.rng = rng_keys[0]
         rng_keys = rng_keys[1:]
-        learning_steps = int(self.max_train_steps/(self.rollout_steps*self.num_envs))
+        learning_steps = int(self.total_train_steps/(self.rollout_steps*self.num_envs))
         rng_key, reset_rng = random.split(rng_keys[0], 2)
         rng_keys = rng_keys.at[0].set(rng_key)
         reset_seed = random.randint(
@@ -68,17 +68,10 @@ class OffPolicyTrainer(DummyTrainer):
                 total_train_steps = self.agent.train_step(
                     rng=agent_rng,
                     buffer=self.buffer,
+                    validate=self.validate,
+                    log_results=self.use_wandb,
                 )
                 train_steps += total_train_steps
-                # for _ in range(self.train_steps):
-                #    train_rng, agent_rng, buffer_rng = random.split(train_rng, 3)
-                #    batch = self.buffer.sample(buffer_rng, self.batch_size)
-                #    summary = self.agent.train_step(
-                #        agent_rng,
-                #        batch,
-                #    )
-                #    train_steps += 1
-                #    train_log = summary
             # Evaluate episode
             if train_steps % self.eval_freq == 0:
                 eval_rng, curr_eval = random.split(eval_rng, 2)

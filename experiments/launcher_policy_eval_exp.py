@@ -11,10 +11,10 @@ applicable_configs = {
     'general': ['use_wandb'],
     'env': ['time_limit', 'n_envs', 'time_limit_eval'],
     'optimizer': ['num_samples', 'num_elites', 'num_steps', 'horizon', 'alpha'],
-    'agent': ['discount', 'n_particles', 'reset_model'],
+    'agent': ['discount', 'n_particles', 'reset_model', 'batch_size', 'train_steps', 'num_epochs', 'max_train_steps'],
     'dynamics_model': ['num_ensembles', 'hidden_layers', 'num_neurons', 'pred_diff'],
-    'trainer': ['batch_size', 'eval_freq', 'max_train_steps', 'buffer_size',
-                'exploration_steps', 'eval_episodes', 'train_freq', 'train_steps', 'num_epochs', 'rollout_steps',
+    'trainer': ['eval_freq', 'total_train_steps', 'buffer_size',
+                'exploration_steps', 'eval_episodes', 'train_freq', 'rollout_steps',
                 'validate', 'normalize', 'action_normalize', 'record_test_video', 'validation_buffer_size',
                 'validation_batch_size'],
 }

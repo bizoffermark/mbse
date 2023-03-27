@@ -59,12 +59,9 @@ if __name__ == "__main__":
     #    action_dim=(horizon, env.action_space.shape[0])
     #)
 
-    model_based_agent_fn = lambda x, y, z, v: \
-        ModelBasedAgent(
-            use_wandb=x,
-            validate=y,
-            train_steps=z,
-            batch_size=v,
+    agent = ModelBasedAgent(
+            train_steps=kwargs['agent']['train_steps'],
+            batch_size=kwargs['trainer']['batch_size'],
             action_space=env.action_space,
             observation_space=env.action_space,
             dynamics_model=dynamics_model,
@@ -81,24 +78,22 @@ if __name__ == "__main__":
     USE_WANDB = True
 
     trainer = Trainer(
-        agent_fn=model_based_agent_fn,
+        agent=agent,
         # model_free_agent=model_free_agent,
         env=env,
         buffer_size=kwargs['trainer']['buffer_size'],
-        max_train_steps=kwargs['trainer']['max_train_steps'],
+        total_train_steps=kwargs['trainer']['total_train_steps'],
         exploration_steps=kwargs['trainer']['exploration_steps'],
-        batch_size=kwargs['trainer']['batch_size'],
         use_wandb=USE_WANDB,
         eval_episodes=kwargs['trainer']['eval_episodes'],
         eval_freq=kwargs['trainer']['eval_freq'],
         train_freq=kwargs['trainer']['train_freq'],
-        train_steps=kwargs['trainer']['train_steps'],
         rollout_steps=kwargs['trainer']['rollout_steps'],
         normalize=True,
         action_normalize=True,
         learn_deltas=dynamics_model.pred_diff,
         validate=True,
-        record_test_video=True,
+        record_test_video=False,
     )
     if USE_WANDB:
         wandb.init(

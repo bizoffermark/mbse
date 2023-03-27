@@ -1,6 +1,6 @@
 import jax
 from mbse.utils.replay_buffer import Transition, ReplayBuffer
-from mbse.utils.vec_env import VecEnv
+from mbse.agents.dummy_agent import DummyAgent
 from typing import Callable, Optional, Union
 import wandb
 from copy import deepcopy
@@ -16,12 +16,10 @@ from datetime import datetime
 class DummyTrainer(object):
     def __init__(self,
                  env: VecEnv,
-                 agent_fn: Callable,
+                 agent: DummyAgent,
                  buffer_size: int = int(1e6),
-                 max_train_steps: int = int(1e6),
-                 batch_size: int = 256,
+                 total_train_steps: int = int(1e6),
                  train_freq: int = 100,
-                 train_steps: int = 100,
                  eval_freq: int = 1000,
                  seed: int = 0,
                  exploration_steps: int = int(1e4),
@@ -54,20 +52,13 @@ class DummyTrainer(object):
         self.agent_name = agent_name
         self.rng = jax.random.PRNGKey(seed)
         self.use_wandb = use_wandb
-
-        self.max_train_steps = max_train_steps
+        self.validate = validate
+        self.total_train_steps = total_train_steps
         self.train_freq = train_freq
-        self.train_steps = train_steps
-        self.batch_size = batch_size
         self.eval_freq = eval_freq
         self.exploration_steps = exploration_steps
         self.rollout_steps = rollout_steps
-        self.agent = agent_fn(
-            self.use_wandb,
-            validate,
-            self.train_steps,
-            self.batch_size,
-        )
+        self.agent = agent
         now = datetime.now()
         dt_string = now.strftime("%d_%m_%Y_%H_%M_%S")
         self.video_dir_name = video_folder + 'video' + str(seed) + video_prefix + dt_string

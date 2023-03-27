@@ -18,8 +18,8 @@ from typing import Optional
 
 def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n_envs: int,
                num_samples: int, num_elites: int, num_steps: int, horizon: int, n_particles: int, reset_model: bool,
-               num_ensembles: int, hidden_layers: int, num_neurons: int, beta: float,
-               pred_diff: bool, batch_size: int, eval_freq: int, max_train_steps: int, buffer_size: int,
+               num_ensembles: int, hidden_layers: int, num_neurons: int, beta: float, max_train_steps: int,
+               pred_diff: bool, batch_size: int, eval_freq: int, total_train_steps: int, buffer_size: int,
                exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int, num_epochs: int,
                rollout_steps: int, normalize: bool, action_normalize: bool, validate: bool, record_test_video: bool,
                validation_buffer_size: int, validation_batch_size: int,
@@ -105,12 +105,10 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         )
         video_prefix += 'Optimistic'
 
-    model_based_agent_fn = lambda x, y, z, v: \
-        MBActiveExplorationAgent(
-            use_wandb=x,
-            validate=y,
-            train_steps=z,
-            batch_size=v,
+    agent = MBActiveExplorationAgent(
+            train_steps=train_steps,
+            batch_size=batch_size,
+            max_train_steps=max_train_steps,
             num_epochs=num_epochs,
             action_space=env.action_space,
             observation_space=env.observation_space,
@@ -125,19 +123,16 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
     if exploration_strategy == 'Uniform':
         uniform_exploration = True
     trainer = Trainer(
-        agent_fn=model_based_agent_fn,
-        # model_free_agent=model_free_agent,
+        agent=agent,
         env=env,
         test_env=test_env,
         buffer_size=buffer_size,
-        max_train_steps=max_train_steps,
+        total_train_steps=total_train_steps,
         exploration_steps=exploration_steps,
-        batch_size=batch_size,
         use_wandb=USE_WANDB,
         eval_episodes=eval_episodes,
         eval_freq=eval_freq,
         train_freq=train_freq,
-        train_steps=train_steps,
         rollout_steps=rollout_steps,
         normalize=normalize,
         action_normalize=action_normalize,
@@ -205,8 +200,9 @@ def main(args):
         num_ensembles=args.num_ensembles,
         pred_diff=args.pred_diff,
         batch_size=args.batch_size,
-        eval_freq=args.eval_freq,
         max_train_steps=args.max_train_steps,
+        eval_freq=args.eval_freq,
+        total_train_steps=args.total_train_steps,
         buffer_size=args.buffer_size,
         exploration_steps=args.exploration_steps,
         eval_episodes=args.eval_episodes,
@@ -280,8 +276,9 @@ if __name__ == '__main__':
 
     # trainer experiment args
     parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--max_train_steps', type=int, default=5000)
     parser.add_argument('--eval_freq', type=int, default=1)
-    parser.add_argument('--max_train_steps', type=int, default=2500)
+    parser.add_argument('--total_train_steps', type=int, default=2500)
     parser.add_argument('--buffer_size', type=int, default=1000000)
     parser.add_argument('--exploration_steps', type=int, default=0)
     parser.add_argument('--eval_episodes', type=int, default=1)

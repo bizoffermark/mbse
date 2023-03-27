@@ -40,14 +40,9 @@ if __name__ == "__main__":
     # env = make_vec_env(kwargs['env_id'], wrapper_class=wrapper_cls, n_envs=10)
     env = make_vec_env(CustomPendulumEnv, wrapper_class=wrapper_cls, n_envs=10)
 
-
-    agent_fn = \
-        lambda x, y, z, v:\
-            SACAgent(
-                use_wandb=x,
-                validate=y,
-                train_steps=z,
-                batch_size=v,
+    agent = SACAgent(
+                train_steps=kwargs['agent']['train_steps'],
+                batch_size=kwargs['agent']['batch_size'],
                 action_space=env.action_space,
                 observation_space=env.observation_space,
                 discount=kwargs['agent']['discount'],
@@ -65,16 +60,14 @@ if __name__ == "__main__":
     USE_WANDB = True
     trainer = Trainer(
         env=env,
-        agent_fn=agent_fn,
+        agent=agent,
         buffer_size=kwargs['trainer']['buffer_size'],
-        max_train_steps=kwargs['trainer']['max_train_steps'],
+        total_train_steps=kwargs['trainer']['total_train_steps'],
         exploration_steps=kwargs['trainer']['exploration_steps'],
-        batch_size=kwargs['trainer']['batch_size'],
         use_wandb=USE_WANDB,
         eval_episodes=kwargs['trainer']['eval_episodes'],
         eval_freq=kwargs['trainer']['eval_freq'],
         train_freq=kwargs['trainer']['train_freq'],
-        train_steps=kwargs['trainer']['train_steps'],
         rollout_steps=kwargs['trainer']['rollout_steps'],
     )
     if USE_WANDB:

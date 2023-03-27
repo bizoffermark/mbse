@@ -1,3 +1,5 @@
+import functools
+
 import jax
 from mbse.utils.replay_buffer import Transition, ReplayBuffer
 from mbse.agents.dummy_agent import DummyAgent
@@ -62,19 +64,31 @@ class DummyTrainer(object):
         now = datetime.now()
         dt_string = now.strftime("%d_%m_%Y_%H_%M_%S")
         self.video_dir_name = video_folder + 'video' + str(seed) + video_prefix + dt_string
-        if record_test_video:
-            test_env_wrapper = lambda x: RecordVideo(x, video_folder=self.video_dir_name,
-                                                     episode_trigger=lambda x: True)
-        else:
-            test_env_wrapper = lambda x: x
+        self.record_test_video = record_test_video
+
+        def get_test_env_wrapper(env_num):
+            video_dir_name = self.video_dir_name
+            if self.record_test_video:
+                video_dir_name = self.video_dir_name + '/env_id_' + str(env_num)
+                test_env_wrapper = lambda x: RecordVideo(x, video_folder=video_dir_name,
+                                                         episode_trigger=lambda x: True)
+            else:
+                test_env_wrapper = lambda x: x
+            return test_env_wrapper, video_dir_name
+
         if test_env is None:
+            test_env_wrapper, video_dir_name = get_test_env_wrapper(env_num=0)
             self.test_env = [
                 test_env_wrapper(deepcopy(self.env.envs[0]))
             ]
+            self.video_dirs = [video_dir_name]
         else:
             self.test_env = []
+            self.video_dirs = []
             if isinstance(test_env, list):
-                for env in test_env:
+                for env_id, env in enumerate(test_env):
+                    test_env_wrapper, video_dir_name = get_test_env_wrapper(env_num=env_id)
+                    self.video_dirs.append(video_dir_name)
                     if isinstance(env, VecEnv):
                         for e in env.envs:
                             self.test_env.append(
@@ -85,6 +99,8 @@ class DummyTrainer(object):
                             test_env_wrapper(env)
                         )
             else:
+                test_env_wrapper, video_dir_name = get_test_env_wrapper(env_num=0)
+                self.video_dirs = [video_dir_name]
                 if isinstance(test_env, VecEnv):
                     for e in test_env.envs:
                         self.test_env.append(
@@ -96,8 +112,6 @@ class DummyTrainer(object):
                     )
         assert len(self.test_env) == self.num_reward_models, "number of reward models must be the same as number of " \
                                                              "envs"
-
-        self.record_test_video = record_test_video
 
     def train(self):
         pass
@@ -248,7 +262,7 @@ class DummyTrainer(object):
             reward_log['reward_task_' + str(i)] = avg_reward
             pbar.close()
             if self.use_wandb and self.record_test_video:
-                mp4list = glob.glob(self.video_dir_name + '/*.mp4')
+                mp4list = glob.glob(self.video_dirs[i] + '/*.mp4')
                 if len(mp4list) > 0:
                     mp4 = mp4list[-1]
                     # log gameplay video in wandb

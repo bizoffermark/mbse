@@ -138,11 +138,21 @@ class ReplayBuffer(object):
         size = transition.shape[0]
         start = self.current_ptr
         end = self.current_ptr + size
-        self.obs[start:end] = transition.obs
-        self.action[start:end] = transition.action
-        self.next_obs[start:end] = transition.next_obs
-        self.reward[start:end] = transition.reward.reshape(-1, 1)
-        self.done[start:end] = transition.done.reshape(-1, 1)
+        if end > self.max_size:
+            idx_range = list(range(start, self.max_size))
+            idx_range += list(range(0, end-self.max_size))
+        else:
+            idx_range = list(range(start, end))
+        self.obs[idx_range] = transition.obs
+        self.action[idx_range] = transition.action
+        self.next_obs[idx_range] = transition.next_obs
+        self.reward[idx_range] = transition.reward.reshape(-1, 1)
+        self.done[idx_range] = transition.done.reshape(-1, 1)
+        # self.obs[start:end] = transition.obs
+        # self.action[start:end] = transition.action
+        # self.next_obs[start:end] = transition.next_obs
+        # self.reward[start:end] = transition.reward.reshape(-1, 1)
+        # self.done[start:end] = transition.done.reshape(-1, 1)
         # self.obs = self.obs.at[start:end].set(transition.obs)
         # self.action = self.action.at[start:end].set(transition.action)
         # self.next_obs = self.next_obs.at[start:end].set(transition.next_obs)
@@ -150,14 +160,14 @@ class ReplayBuffer(object):
         # self.done = self.done.at[start:end].set(transition.done.reshape(-1, 1))
         self.size = min(self.size + size, self.max_size)
         if self.normalize:
-            self.state_normalizer.update(self.obs[start:end])
+            self.state_normalizer.update(self.obs[idx_range])
             if self.action_normalize:
-                self.action_normalizer.update(self.action[start:end])
+                self.action_normalizer.update(self.action[idx_range])
             if self.learn_deltas:
-                self.next_state_normalizer.update(self.next_obs[start:end] - self.obs[start:end])
+                self.next_state_normalizer.update(self.next_obs[idx_range] - self.obs[idx_range])
             else:
                 self.next_state_normalizer = deepcopy(self.state_normalizer)
-            self.reward_normalizer.update(self.reward[start:end])
+            self.reward_normalizer.update(self.reward[idx_range])
         self.current_ptr = end % self.max_size
 
     def sample(self, rng, batch_size: int = 256):

@@ -122,6 +122,7 @@ class ModelBasedTrainer(DummyTrainer):
         reward_log['env_steps'] = 0
         reward_log['learning_step'] = 0
         reward_log['train_steps'] = 0
+        reward_log['update_steps_per_iter'] = 0
         train_steps = 0
         self.save_agent(0)
         if self.use_wandb:
@@ -182,14 +183,15 @@ class ModelBasedTrainer(DummyTrainer):
                 )
                 train_steps += total_train_steps
                 train_step_log = {
-                    'train_steps': train_steps
+                    'train_steps': train_steps,
+                    'update_steps_per_iter': total_train_steps,
                 }
                 eval_rng, eval_val_rng = jax.random.split(eval_rng, 2)
                 model_log = self.validate_model(eval_val_rng)
             # Evaluate episode
             if step % self.eval_freq == 0 and train_steps > 0:
                 eval_rng, curr_eval = random.split(eval_rng, 2)
-                reward_log = self.eval_policy(rng=curr_eval, step=train_steps)
+                reward_log = self.eval_policy(rng=curr_eval, step=step)
                 if reward_log['reward_task_0'] > best_performance:
                     best_performance = reward_log['reward_task_0']
                     self.save_agent(step)

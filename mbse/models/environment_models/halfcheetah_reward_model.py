@@ -19,7 +19,7 @@ class HalfCheetahReward(RewardModel):
         # reward_ctrl = -self.ctrl_cost_weight * jnp.square(action).sum(axis=-1)
         # reward_run = self.forward_velocity_weight * (next_obs[..., 0] - 0.0 * jnp.square(next_obs[..., 2]))
         # reward = reward_run + reward_ctrl
-        speed = next_obs[..., 0]
+        speed = self.forward_velocity_weight * next_obs[..., 0]
         reward = tolerance(speed,
                            bounds=(_RUN_SPEED, float('inf')),
                            margin=_RUN_SPEED,

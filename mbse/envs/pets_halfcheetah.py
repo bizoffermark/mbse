@@ -11,14 +11,15 @@ from dm_control.utils import containers
 
 SUITE = containers.TaggedTasks()
 
+
 @SUITE.add('benchmarking')
 def run(time_limit=_DEFAULT_TIME_LIMIT, random=None, environment_kwargs=None):
-  """Returns the run task."""
-  physics = Physics.from_xml_string(*get_model_and_assets())
-  task = PetsCheetah(random=random)
-  environment_kwargs = environment_kwargs or {}
-  return Environment(physics, task, time_limit=time_limit,
-                             **environment_kwargs)
+    """Returns the run task."""
+    physics = Physics.from_xml_string(*get_model_and_assets())
+    task = PetsCheetah(random=random)
+    environment_kwargs = environment_kwargs or {}
+    return Environment(physics, task, time_limit=time_limit,
+                       **environment_kwargs)
 
 
 class PetsCheetah(Cheetah):
@@ -61,7 +62,7 @@ class HalfCheetahEnv(DeepMindBridge):
 
     def step(self, action):
         obs, reward, terminate, truncate, info = super().step(action)
-        reward = self.reward_model.predict(obs=obs,action=action, next_obs=obs)
+        reward = self.reward_model.predict(obs=obs, action=action, next_obs=obs)
         reward = reward.astype(float).item()
         return obs, reward, terminate, truncate, info
 
@@ -74,6 +75,7 @@ class HalfCheetahEnv(DeepMindBridge):
 if __name__ == "__main__":
     from gym.wrappers.record_video import RecordVideo
     from gym.wrappers.time_limit import TimeLimit
+
     env = HalfCheetahEnv(reward_model=HalfCheetahReward(), render_mode="rgb_array")
     env = TimeLimit(env, max_episode_steps=1000)
     env = RecordVideo(env, video_folder='./cheetah/', episode_trigger=lambda x: True)
@@ -83,6 +85,3 @@ if __name__ == "__main__":
         if terminated or truncated:
             obs, _ = env.reset()
     env.close()
-
-
-

@@ -82,6 +82,8 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             action_dim=(horizon, env.action_space.shape[0])
         )
         video_prefix += 'true_model'
+        validation_buffer_size = 0
+        total_train_steps = 1
     else:
         dynamics_model = ActiveLearningHUCRLModel(
             action_space=env.action_space,

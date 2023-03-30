@@ -79,6 +79,7 @@ class DynamicsModel(object):
         self.scale_out = scale_out
         self.pred_diff = pred_diff
         self.alpha = 1.0
+        self.evaluate_for_exploration = self.evaluate
         pass
 
     def _init_fn(self):

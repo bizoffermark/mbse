@@ -73,6 +73,23 @@ class PendulumReward(RewardModel):
         action = action_transform_fn(action)
         return state_reward_fn(state=obs) - input_cost_fn(action)
 
+    def evaluate(self,
+                 parameters,
+                 obs,
+                 action,
+                 rng,
+                 sampling_idx=None,
+                 alpha: Union[jnp.ndarray, float] = 1.0,
+                 bias_obs: Union[jnp.ndarray, float] = 0.0,
+                 bias_act: Union[jnp.ndarray, float] = 0.0,
+                 bias_out: Union[jnp.ndarray, float] = 0.0,
+                 scale_obs: Union[jnp.ndarray, float] = 1.0,
+                 scale_act: Union[jnp.ndarray, float] = 1.0,
+                 scale_out: Union[jnp.ndarray, float] = 1.0):
+        next_state = self.predict(obs=obs, action=action, rng=rng)
+        reward = jnp.zeros(next_state.shape[0])
+        return next_state, reward
+
     @staticmethod
     def _rescale_action(action, min_action, max_action, low, high):
         """

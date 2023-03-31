@@ -176,6 +176,8 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                         env.observation_space.shape[0])
         )
         video_prefix += 'Optimistic'
+
+    dynamics_model = [dynamics_model_forward]
     if exploration_strategy == 'HUCRL':
         agent = ModelBasedAgent(
                     train_steps=train_steps,

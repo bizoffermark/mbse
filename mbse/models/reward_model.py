@@ -5,7 +5,7 @@ class RewardModel(object):
     def __init__(self, *args, **kwargs):
         pass
 
-    def predict(self, obs, action, next_obs, rng=None):
+    def predict(self, obs, action, next_obs=None, rng=None):
         pass
 
     def train_step(self, tran: Transition):

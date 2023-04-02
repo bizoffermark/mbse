@@ -8,6 +8,10 @@ from dm_control.suite.cheetah import Cheetah, _DEFAULT_TIME_LIMIT, get_model_and
 from dm_control.rl.control import Environment
 import collections
 from dm_control.utils import containers
+import os
+from gym import utils
+from gym.envs.mujoco import mujoco_env
+from gym.spaces import Box
 
 SUITE = containers.TaggedTasks()
 
@@ -51,7 +55,7 @@ class PetsCheetah(Cheetah):
         super().initialize_episode(physics)
 
 
-class HalfCheetahEnv(DeepMindBridge):
+class HalfCheetahEnvDM(DeepMindBridge):
     def __init__(self, reward_model: HalfCheetahReward, *args, **kwargs):
         self.prev_qpos = None
         self.reward_model = reward_model
@@ -72,13 +76,102 @@ class HalfCheetahEnv(DeepMindBridge):
         return task.get_observation(physics)
 
 
-if __name__ == "__main__":
-    from gym.wrappers.record_video import RecordVideo
-    from gym.wrappers.time_limit import TimeLimit
+class HalfCheetahEnv(mujoco_env.MujocoEnv, utils.EzPickle):
+    metadata = {
+        "render_modes": [
+            "human",
+            "rgb_array",
+            "depth_array",
+        ],
+        "render_fps": 20,
+    }
 
-    env = HalfCheetahEnv(reward_model=HalfCheetahReward(), render_mode="rgb_array")
+    def __init__(self, render_mode: str = None, reward_model: HalfCheetahReward = HalfCheetahReward()):
+        self.prev_qpos = None
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        observation_space = Box(low=-np.inf, high=np.inf, shape=(18,), dtype=np.float64)
+        mujoco_env.MujocoEnv.__init__(
+            self,
+            "%s/assets/half_cheetah.xml" % dir_path,
+            5,
+            observation_space,
+            render_mode,
+        )
+        utils.EzPickle.__init__(self)
+        self.reward_model = reward_model
+
+    def step(self, action):
+        self.prev_qpos = np.copy(self.data.qpos.flat)
+        self.do_simulation(action, self.frame_skip)
+        ob = self._get_obs()
+        reward = self.reward_model.predict(next_obs=ob, action=action, obs=ob)
+        terminated = False
+        return ob, reward, terminated, False, {}
+
+    def _get_obs(self):
+        return np.concatenate(
+            [
+                (self.data.qpos[:1] - self.prev_qpos[:1]) / self.dt,
+                self.data.qpos[1:],
+                self.data.qvel,
+            ]
+        )
+
+    def reset_model(self):
+        qpos = self.init_qpos + np.random.normal(loc=0, scale=0.001, size=self.model.nq)
+        qvel = self.init_qvel + np.random.normal(loc=0, scale=0.001, size=self.model.nv)
+        self.set_state(qpos, qvel)
+        self.prev_qpos = np.copy(self.data.qpos)
+        return self._get_obs()
+
+    def sample_obs(self):
+        qpos = self.init_qpos + np.random.normal(loc=0, scale=0.1, size=self.model.nq)
+        qvel = self.init_qvel + np.random.normal(loc=0, scale=0.1, size=self.model.nv)
+        self.set_state(qpos, qvel)
+        self.prev_qpos = np.copy(self.data.qpos)
+        state = self._get_obs()
+        self.reset_model()
+        return state
+
+    def viewer_setup(self):
+        self.viewer.cam.distance = self.model.stat.extent * 0.25
+        self.viewer.cam.elevation = -55
+
+    @staticmethod
+    def _preprocess_state_np(state):
+        assert isinstance(state, np.ndarray)
+        assert state.ndim in (1, 2, 3)
+        d1 = state.ndim == 1
+        if d1:
+            # if input is 1d, expand it to 2d
+            state = np.expand_dims(state, 0)
+        # [0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 11., 12., 13., 14., 15., 16., 17.] ->
+        # [1., sin(2), cos(2)., 4., 5., 6., 7., 8., 9., 10., 11., 12., 13., 14., 15., 16., 17.]
+        ret = np.concatenate(
+            [
+                state[..., 1:2],
+                np.sin(state[..., 2:3]),
+                np.cos(state[..., 2:3]),
+                state[..., 3:],
+            ],
+            axis=state.ndim - 1,
+        )
+        if d1:
+            # and squeeze it back afterwards
+            ret = ret.squeeze()
+        return ret
+
+    @staticmethod
+    def preprocess_fn(state):
+        if isinstance(state, np.ndarray):
+            return HalfCheetahEnv._preprocess_state_np(state)
+        raise ValueError("Invalid state type (must be np.ndarray).")
+
+
+if __name__ == "__main__":
+    from gym.wrappers.time_limit import TimeLimit
+    env = HalfCheetahEnv(reward_model=HalfCheetahReward())
     env = TimeLimit(env, max_episode_steps=1000)
-    env = RecordVideo(env, video_folder='./cheetah/', episode_trigger=lambda x: True)
     obs, _ = env.reset()
     for i in range(1999):
         obs, reward, terminated, truncated, info = env.step(env.action_space.sample())

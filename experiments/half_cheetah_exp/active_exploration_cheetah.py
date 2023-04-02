@@ -69,7 +69,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                                     env_kwargs=env_kwargs_forward, n_envs=1)
     test_env_backward = make_vec_env(HalfCheetahEnv, wrapper_class=wrapper_cls_test, seed=seed,
                                      env_kwargs=env_kwargs_backward, n_envs=1)
-    # test_env = [test_env_forward, test_env_backward]
+    test_env = [test_env_forward, test_env_backward]
     features = [num_neurons] * hidden_layers
     video_prefix = ""
     if exploration_strategy == 'Mean':
@@ -177,7 +177,6 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         )
         video_prefix += 'Optimistic'
 
-    dynamics_model = [dynamics_model_forward]
     if exploration_strategy == 'HUCRL':
         agent = ModelBasedAgent(
                     train_steps=train_steps,
@@ -213,7 +212,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     trainer = Trainer(
         agent=agent,
         env=env,
-        # test_env=test_env,
+        test_env=test_env,
         buffer_size=buffer_size,
         total_train_steps=total_train_steps,
         exploration_steps=exploration_steps,

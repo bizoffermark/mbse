@@ -106,6 +106,7 @@ class HalfCheetahEnv(mujoco_env.MujocoEnv, utils.EzPickle):
         ob = self._get_obs()
         reward = self.reward_model.predict(next_obs=ob, action=action, obs=ob)
         terminated = False
+        reward = reward.astype(float).item()
         return ob, reward, terminated, False, {}
 
     def _get_obs(self):

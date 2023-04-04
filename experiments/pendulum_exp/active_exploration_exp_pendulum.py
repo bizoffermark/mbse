@@ -29,6 +29,11 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
 
     """ Environment """
     # from jax.config import config
+    optimizer_kwargs = {
+        'num_samples': num_samples,
+        'num_elites': num_elites,
+        'num_steps': num_steps,
+    }
 
     # config.update("jax_log_compiles", 1)
     wrapper_cls = lambda x: RescaleAction(
@@ -102,7 +107,8 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         dynamics_model=dynamics_model,
         n_particles=n_particles,
         reset_model=reset_model,
-        policy_optimizer_name="TraJaxTO",
+        policy_optimizer_name="CemTO",
+        optimizer_kwargs=optimizer_kwargs,
         horizon=horizon,
     )
 

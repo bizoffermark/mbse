@@ -146,26 +146,11 @@ class DummyTrainer(object):
 
             obs_vec[step*self.num_envs: (step+1)*self.num_envs] = obs
             action_vec[step*self.num_envs: (step+1)*self.num_envs] = action
-            reward_vec[step*self.num_envs: (step+1)*self.num_envs] = reward
+            reward_vec[step*self.num_envs: (step+1)*self.num_envs] = reward.reshape(-1)
             next_obs_vec[step*self.num_envs: (step+1)*self.num_envs] = next_obs
-            done_vec[step*self.num_envs: (step+1)*self.num_envs] = terminate
-            # obs_vec = obs_vec.at[step].set(jnp.asarray(obs))
-            # action_vec = action_vec.at[step].set(jnp.asarray(action))
-            # reward_vec = reward_vec.at[step].set(jnp.asarray(reward))
-            # next_obs_vec = next_obs_vec.at[step].set(jnp.asarray(next_obs))
-            # done_vec = done_vec.at[step].set(jnp.asarray(terminate))
-
-            # for idx, done in enumerate(dones):
-            #     if done:
-            #         reset_rng, next_reset_rng = jax.random.split(reset_rng, 2)
-            #         reset_seed = jax.random.randint(
-            #             reset_rng,
-            #             (1,),
-            #             minval=0,
-            #             maxval=num_steps).item()
-            #         obs[idx], _ = self.env.reset(seed=reset_seed)
+            done_vec[step*self.num_envs: (step+1)*self.num_envs] = terminate.reshape(-1)
             obs = np.concatenate([x['current_env_state'].reshape(1, -1) for x in info], axis=0)
-            dones = np.concatenate([x['last_done'].reshape(1, -1) for x in info], axis=0)
+            dones = np.concatenate([np.asarray(x['last_done']).reshape(1, -1) for x in info], axis=0)
 
             last_obs = obs
             last_done = dones
@@ -202,9 +187,9 @@ class DummyTrainer(object):
 
             obs_vec[step * self.num_envs: (step + 1) * self.num_envs] = obs
             action_vec[step * self.num_envs: (step + 1) * self.num_envs] = action
-            reward_vec[step * self.num_envs: (step + 1) * self.num_envs] = reward
+            reward_vec[step * self.num_envs: (step + 1) * self.num_envs] = reward.reshape(-1)
             next_obs_vec[step * self.num_envs: (step + 1) * self.num_envs] = next_obs
-            done_vec[step * self.num_envs: (step + 1) * self.num_envs] = terminate
+            done_vec[step * self.num_envs: (step + 1) * self.num_envs] = terminate.reshape(-1)
             # obs_vec = obs_vec.at[step].set(jnp.asarray(obs))
             # action_vec = action_vec.at[step].set(jnp.asarray(action))
             # reward_vec = reward_vec.at[step].set(jnp.asarray(reward))

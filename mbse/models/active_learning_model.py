@@ -93,7 +93,6 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
                 sampling_type=self.sampling_type,
                 num_ensembles=self.model.num_ensembles,
                 sampling_idx=sampling_idx,
-                batch_size=obs.shape[0],
                 alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
@@ -164,7 +163,6 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
                 sampling_type=sampling_type,
                 num_ensembles=self.model.num_ensembles,
                 sampling_idx=sampling_idx,
-                batch_size=obs.shape[0],
                 alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
@@ -220,7 +218,6 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
             sampling_type,
             num_ensembles,
             sampling_idx,
-            batch_size,
             alpha: Union[jnp.ndarray, float] = 1.0,
             bias_obs: Union[jnp.ndarray, float] = 0.0,
             bias_act: Union[jnp.ndarray, float] = 0.0,
@@ -249,31 +246,24 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
             model_rng, sample_rng = jax.random.split(rng, 2)
             model_idx = jax.random.randint(
                 model_rng,
-                shape=(batch_size,),
+                shape=(1,),
                 minval=0,
                 maxval=num_ensembles)
 
-            sample_rng = jax.random.split(
-                sample_rng,
-                batch_size
-            )
+            model_idx = model_idx.squeeze()
 
-            next_obs = jax.vmap(sample, in_axes=(1, 0, 0), out_axes=0)(
+            next_obs = sample(
                 next_obs_tot,
                 model_idx,
                 sample_rng
             )
         elif sampling_scheme == 'TSInf':
-            assert sampling_idx.shape[0] == batch_size, \
+            assert sampling_idx.shape[0] == 1, \
                 'Set sampling indexes size to be particle size'
-            sample_rng = jax.random.split(
-                rng,
-                batch_size
-            )
-            next_obs = jax.vmap(sample, in_axes=(1, 1, 1), out_axes=1)(
+            next_obs = sample(
                 next_obs_tot,
                 sampling_idx,
-                sample_rng
+                rng
             )
 
         elif sampling_scheme == 'DS':
@@ -330,7 +320,6 @@ class ActiveLearningHUCRLModel(HUCRLModel):
                 action=action,
                 rng=rng,
                 beta=self.beta,
-                batch_size=obs.shape[0],
                 alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
@@ -400,7 +389,6 @@ class ActiveLearningHUCRLModel(HUCRLModel):
                 rng=rng,
                 num_ensembles=self.model.num_ensembles,
                 beta=self.beta,
-                batch_size=obs.shape[0],
                 alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
@@ -457,7 +445,6 @@ class ActiveLearningHUCRLModel(HUCRLModel):
             action,
             rng,
             beta,
-            batch_size,
             alpha: Union[jnp.ndarray, float] = 1.0,
             bias_obs: Union[jnp.ndarray, float] = 0.0,
             bias_act: Union[jnp.ndarray, float] = 0.0,
@@ -491,18 +478,6 @@ class ActiveLearningHUCRLModel(HUCRLModel):
                     rng,
                 )
                 return next_obs, next_obs_eps_std, al_uncertainty
-
-            sample_rng = jax.random.split(
-                rng,
-                batch_size
-            )
-            next_obs, next_obs_eps_std, al_uncertainty = jax.vmap(get_epistemic_estimate,
-                                                                  in_axes=(1, 1, 0, 0), out_axes=0) \
-                    (
-                    mean,
-                    std,
-                    eta,
-                    sample_rng
-                )
+            next_obs, next_obs_eps_std, al_uncertainty = get_epistemic_estimate(mean, std, eta, rng)
         next_obs = next_obs * scale_out + bias_out + pred_diff * obs
         return next_obs, next_obs_eps_std * scale_out, al_uncertainty * scale_out

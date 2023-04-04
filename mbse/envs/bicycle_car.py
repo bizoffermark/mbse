@@ -201,7 +201,7 @@ class BicycleEnv(Env):
         self.render_mode = render_mode
         self.reward_model = reward_model
         self.dynamics_model = dynamics_model
-        self.goal_pos = np.asarray(self.reward_model.goal_pos)
+        self.x_target = np.asarray(self.reward_model.x_target)
         self.room_boundary = self.dynamics_model.params.room_boundary
         self.velocity_limit = self.dynamics_model.params.velocity_limit
         high = np.asarray([self.room_boundary,

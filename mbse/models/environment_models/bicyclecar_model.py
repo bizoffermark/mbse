@@ -10,24 +10,17 @@ from flax import struct
 
 
 class BicycleCarReward(RewardModel):
-    def __init__(self, position_cost_weight: float = 10, velocity_cost_weight: float = 1,
-                 ctrl_cost_weight=0.01, goal_pos: Union[np.ndarray, jax.Array] = jnp.zeros(3), *args, **kwargs):
+    def __init__(self, x_target: Union[np.ndarray, jax.Array] = jnp.zeros(6), *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.ctrl_cost_weight = ctrl_cost_weight
-        self.position_cost_weight = position_cost_weight
-        self.velocity_cost_weight = velocity_cost_weight
-        self.goal_pos = goal_pos
+        self.x_target = x_target
         self._init_fn()
 
     def _init_fn(self):
-        def predict(obs, action, next_obs=None, rng=None):
+        def predict(obs, action, next_obs=None, rng=None, *args, **kwargs):
             return self._predict(
                 obs=obs,
                 action=action,
-                goal_pos=self.goal_pos,
-                position_cost_weight=self.position_cost_weight,
-                velocity_cost_weight=self.velocity_cost_weight,
-                ctrl_cost_weight=self.ctrl_cost_weight,
+                x_target=self.x_target,
                 next_obs=next_obs,
                 rng=rng,
             )
@@ -35,21 +28,11 @@ class BicycleCarReward(RewardModel):
         self.predict = jax.jit(predict)
 
     @staticmethod
-    def _predict(obs, action, goal_pos, position_cost_weight, velocity_cost_weight, ctrl_cost_weight,
-                 next_obs=None, rng=None):
+    def _predict(obs, action, x_target, rng=None, next_obs=None):
         obs = obs.reshape(-1, 6)
         action = action.reshape(-1, 2)
-        pos = obs[..., 0:3]
-        diff = goal_pos - pos
-        theta = diff[..., 2]
-        sin_diff, cos_diff = jnp.sin(theta), jnp.cos(theta)
-        diff.at[..., 2].set(jnp.arctan2(sin_diff, cos_diff))
-        pos_cost = position_cost_weight * jnp.sum(jnp.square(diff), axis=-1)
-        velocity_cost = velocity_cost_weight * jnp.sum(jnp.square(obs[..., 3:]), axis=-1)
-        input_cost = ctrl_cost_weight * jnp.sum(jnp.square(action), axis=-1)
-        # reward = (jnp.sum(jnp.abs(diff), axis=-1) < 0.1) * 100 + input_cost
-        reward = - (pos_cost + velocity_cost + input_cost)
-        return reward
+        reward = - 0.1 * (jnp.sum(action ** 2, axis=-1) + 10 * jnp.sum((obs - x_target) ** 2, axis=-1))
+        return reward.reshape(-1).squeeze()
 
 
 @struct.dataclass
@@ -78,7 +61,7 @@ class CarParams:
     velocity_limit: float = 100.0
     max_steering: float = 0.25
     dt: float = 0.01
-    control_freq: int = 5
+    control_freq: int = 1
 
     def _get_x_com(self):
         x_com = self.l * (self.a + 2) / (3 * (self.a + 1))
@@ -102,10 +85,9 @@ class BicycleCarModel(DynamicsModel):
         super().__init__()
         self.reward_model = reward_model
         self.params = params
-        predict = lambda x, u, rng=None: self._predict(x, u, params=self.params,
-                                                                    control_freq=self.params.control_freq)
+        predict = lambda obs, action, rng=None, *args, **kwargs: self._predict(obs, action, params=self.params,
+                                                       control_freq=self.params.control_freq)
         self.predict = jax.jit(predict)
-
 
     def _ode_dyn(self, x: jax.Array, u: jax.Array, params: CarParams):
         theta, v_x, v_y, w = x[..., 2], x[..., 3], x[..., 4], x[..., 5]
@@ -233,36 +215,18 @@ class BicycleCarModel(DynamicsModel):
                                    w])
         dx_kin_full = dx_kin_full.reshape(-1, 6)
         dxdyn = self._ode_dyn(x=x, u=u, params=params)
-        mul = jax.vmap(lambda x, y: x*y)
+        mul = jax.vmap(lambda x, y: x * y)
         return mul(lambda_blend, jnp.atleast_2d(dxdyn)) + mul(1 - lambda_blend, dx_kin_full).reshape(-1, 6)
 
     @partial(jax.jit, static_argnums=(0, 4))
     def next_step(self, x: jax.Array, u: jax.Array, params: CarParams, control_freq: int):
-        carry = [x, u]
-
-        def step(carry, outs):
-            x, u = carry[0], carry[1]
-            x_next = self.rk_integrator(x, u, params)
-            carry = [x_next, u]
-            outs = [x_next]
-            return carry, outs
-
-        _, outs = jax.lax.scan(step, carry, None, length=control_freq)
-        x = outs[0][-1]
-        return x
+        x_next = self.rk_integrator(x, u, params)
+        x_next = x_next.reshape(-1, 6).squeeze()
+        return x_next
 
     def rk_integrator(self, x: jax.Array, u: jax.Array, params: CarParams):
         k1 = self._ode(x, u, params)
-        k2 = self._ode(x + params.dt / 2. * k1, u, params)
-        k3 = self._ode(x + params.dt / 2. * k2, u, params)
-        k4 = self._ode(x + params.dt * k3, u, params)
-        x_next = x + params.dt * (k1 / 6. + k2 / 3. + k3 / 3. + k4 / 6.)
-        x_next.at[0:2].set(jnp.clip(x_next[0:2], a_min=-params.room_boundary, a_max=params.room_boundary))
-        theta = x_next[..., 2]
-        sin_theta, cos_theta = jnp.sin(theta), jnp.cos(theta)
-        x_next = x_next.at[..., 2].set(jnp.arctan2(sin_theta, cos_theta))
-        x_next = x_next.at[..., 3:].set(jnp.clip(x_next[..., 3:], a_min=-params.velocity_limit, a_max=params.velocity_limit))
-        return x_next
+        return x + k1 * params.dt
 
     @partial(jax.jit, static_argnums=(0, 4))
     def _predict(self, x: jax.Array, u: jax.Array, params: CarParams, control_freq: int):
@@ -272,10 +236,10 @@ class BicycleCarModel(DynamicsModel):
         return next_state
 
     def evaluate(self,
-                 parameters,
                  obs,
                  action,
-                 rng,
+                 parameters=None,
+                 rng=None,
                  sampling_idx=None,
                  alpha: Union[jnp.ndarray, float] = 1.0,
                  bias_obs: Union[jnp.ndarray, float] = 0.0,
@@ -284,6 +248,22 @@ class BicycleCarModel(DynamicsModel):
                  scale_obs: Union[jnp.ndarray, float] = 1.0,
                  scale_act: Union[jnp.ndarray, float] = 1.0,
                  scale_out: Union[jnp.ndarray, float] = 1.0):
-        next_state = self.predict(x=obs, u=action, rng=rng)
+        next_state = self.predict(obs=obs, action=action, rng=rng)
         reward = self.reward_model.predict(obs=obs, action=action, next_obs=next_state)
         return next_state, reward
+
+    def evaluate_without_reward(self,
+                                obs,
+                                action,
+                                rng=None,
+                                parameters=None,
+                                sampling_idx=None,
+                                alpha: Union[jnp.ndarray, float] = 1.0,
+                                bias_obs: Union[jnp.ndarray, float] = 0.0,
+                                bias_act: Union[jnp.ndarray, float] = 0.0,
+                                bias_out: Union[jnp.ndarray, float] = 0.0,
+                                scale_obs: Union[jnp.ndarray, float] = 1.0,
+                                scale_act: Union[jnp.ndarray, float] = 1.0,
+                                scale_out: Union[jnp.ndarray, float] = 1.0):
+        next_state = self.predict(obs=obs, action=action, rng=rng)
+        return next_state

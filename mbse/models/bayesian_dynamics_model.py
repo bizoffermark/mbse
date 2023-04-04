@@ -61,6 +61,7 @@ class BayesianDynamicsModel(DynamicsModel):
                  weight_decay: float = 1e-4,
                  sig_min: float = 1e-3,
                  sig_max: float = 1e3,
+                 deterministic: bool = False,
                  seed: int = 0,
                  *args,
                  **kwargs
@@ -92,12 +93,15 @@ class BayesianDynamicsModel(DynamicsModel):
             seed=seed,
             sig_min=sig_min,
             sig_max=sig_max,
+            deterministic=deterministic,
+
         )
         self.sampling_type = SamplingType()
         self.sampling_idx = jnp.zeros(1)
         self.obs_dim = obs_dim
         self.act_dim = act_dim
         self._init_fn()
+        self.evaluate_for_exploration = self.evaluate
 
     def _init_fn(self):
         def predict(parameters,
@@ -122,7 +126,6 @@ class BayesianDynamicsModel(DynamicsModel):
                 sampling_type=self.sampling_type,
                 num_ensembles=self.model.num_ensembles,
                 sampling_idx=sampling_idx,
-                batch_size=obs.shape[0],
                 alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
@@ -257,7 +260,6 @@ class BayesianDynamicsModel(DynamicsModel):
                  sampling_type,
                  num_ensembles,
                  sampling_idx,
-                 batch_size,
                  alpha: Union[jnp.ndarray, float] = 1.0,
                  bias_obs: Union[jnp.ndarray, float] = 0.0,
                  bias_act: Union[jnp.ndarray, float] = 0.0,
@@ -289,14 +291,10 @@ class BayesianDynamicsModel(DynamicsModel):
             mean = jnp.mean(mean, axis=0)
             al_uncertainty = jnp.sqrt(jnp.mean(jnp.square(al_uncertainty), axis=0))
             if rng is not None:
-                sample_rng = jax.random.split(
-                    rng,
-                    batch_size
-                )
-                next_obs = jax.vmap(sample_normal_dist, in_axes=(0, 0, 0), out_axes=0)(
+                next_obs = sample_normal_dist(
                     mean,
                     al_uncertainty,
-                    sample_rng,
+                    rng,
                 )
             else:
                 next_obs = mean
@@ -305,31 +303,23 @@ class BayesianDynamicsModel(DynamicsModel):
             model_rng, sample_rng = jax.random.split(rng, 2)
             model_idx = jax.random.randint(
                 model_rng,
-                shape=(batch_size,),
+                shape=(1,),
                 minval=0,
                 maxval=num_ensembles)
+            model_idx = model_idx.squeeze()
 
-            sample_rng = jax.random.split(
-                sample_rng,
-                batch_size
-            )
-
-            next_obs = jax.vmap(sample, in_axes=(1, 0, 0), out_axes=0)(
+            next_obs = sample(
                 next_obs_tot,
                 model_idx,
                 sample_rng
             )
         elif sampling_scheme == 'TSInf':
-            assert sampling_idx.shape[0] == batch_size, \
+            assert sampling_idx.shape[0] == 1, \
                 'Set sampling indexes size to be particle size'
-            sample_rng = jax.random.split(
-                rng,
-                batch_size
-            )
-            next_obs = jax.vmap(sample, in_axes=(1, 1, 1), out_axes=1)(
+            next_obs = sample(
                 next_obs_tot,
                 sampling_idx,
-                sample_rng
+                rng
             )
 
         elif sampling_scheme == 'DS':

@@ -1,9 +1,9 @@
 from gym.wrappers import RescaleAction, TimeLimit
 from mbse.utils.vec_env.env_util import make_vec_env
+from mbse.utils.vec_env.subproc_vec_env import SubprocVecEnv
 from mbse.models.environment_models.pendulum_swing_up import PendulumReward, CustomPendulumEnv, PendulumDynamicsModel
 from mbse.models.active_learning_model import ActiveLearningHUCRLModel, ActiveLearningPETSModel
-from mbse.agents.model_based.mb_active_exploration_agent import MBActiveExplorationAgent
-from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
+from mbse.agents.model_based.model_based_agent import ModelBasedAgent
 from mbse.trainer.model_based.model_based_trainer import ModelBasedTrainer as Trainer
 import numpy as np
 import time
@@ -18,16 +18,19 @@ from typing import Optional
 
 def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n_envs: int,
                num_samples: int, num_elites: int, num_steps: int, horizon: int, n_particles: int, reset_model: bool,
-               num_ensembles: int, hidden_layers: int, num_neurons: int, beta: float, max_train_steps: int,
-               pred_diff: bool, batch_size: int, eval_freq: int, total_train_steps: int, buffer_size: int,
-               exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int, num_epochs: int,
-               rollout_steps: int, normalize: bool, action_normalize: bool, validate: bool, record_test_video: bool,
-               validation_buffer_size: int, validation_batch_size: int,
+               num_ensembles: int, hidden_layers: int, num_neurons: int, beta: float, deterministic: bool,
+               max_train_steps: int, pred_diff: bool, batch_size: int, eval_freq: int, total_train_steps: int,
+               buffer_size: int, exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int,
+               num_epochs: int, rollout_steps: int, normalize: bool, action_normalize: bool, validate: bool,
+               record_test_video: bool, validation_buffer_size: int, validation_batch_size: int,
                seed: int, exploration_strategy: str, use_log: bool, use_al: bool,
                time_limit_eval: Optional[int] = None):
     """ Run experiment for a given method and environment. """
 
     """ Environment """
+    # from jax.config import config
+
+    # config.update("jax_log_compiles", 1)
     wrapper_cls = lambda x: RescaleAction(
         TimeLimit(x, max_episode_steps=time_limit),
         min_action=-1,
@@ -41,6 +44,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             max_action=1,
         )
     env = make_vec_env(env_id=CustomPendulumEnv, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed)
+                       # vec_env_cls=SubprocVecEnv)
     test_env = make_vec_env(env_id=CustomPendulumEnv, wrapper_class=wrapper_cls_test, n_envs=1, seed=seed)
     test_env = test_env.envs[0]
     features = [num_neurons] * hidden_layers
@@ -63,24 +67,11 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             seed=seed,
             use_log_uncertainties=use_log,
             use_al_uncertainties=use_al,
-        )
-        policy_optimizer = CrossEntropyOptimizer(
-            upper_bound=1,
-            num_samples=num_samples,
-            num_elites=num_elites,
-            num_steps=num_steps,
-            action_dim=(horizon, env.action_space.shape[0])
+            deterministic=deterministic,
         )
         video_prefix += 'PETS'
     elif exploration_strategy == 'true_model':
         dynamics_model = PendulumDynamicsModel(env=test_env)
-        policy_optimizer = CrossEntropyOptimizer(
-            upper_bound=1,
-            num_samples=num_samples,
-            num_elites=num_elites,
-            num_steps=num_steps,
-            action_dim=(horizon, env.action_space.shape[0])
-        )
         video_prefix += 'true_model'
         validation_buffer_size = 0
         total_train_steps = 1
@@ -96,29 +87,24 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             seed=seed,
             use_log_uncertainties=use_log,
             use_al_uncertainties=use_al,
+            deterministic=deterministic,
         )
-        policy_optimizer = CrossEntropyOptimizer(
-                upper_bound=1,
-                num_samples=num_samples,
-                num_elites=num_elites,
-                num_steps=num_steps,
-                action_dim=(horizon, env.action_space.shape[0] +
-                            env.observation_space.shape[0])
-        )
+
         video_prefix += 'Optimistic'
 
-    agent = MBActiveExplorationAgent(
-            train_steps=train_steps,
-            batch_size=batch_size,
-            max_train_steps=max_train_steps,
-            num_epochs=num_epochs,
-            action_space=env.action_space,
-            observation_space=env.observation_space,
-            dynamics_model=dynamics_model,
-            n_particles=n_particles,
-            reset_model=reset_model,
-            policy_optimizer=policy_optimizer,
-        )
+    agent = ModelBasedAgent(
+        train_steps=train_steps,
+        batch_size=batch_size,
+        max_train_steps=max_train_steps,
+        num_epochs=num_epochs,
+        action_space=env.action_space,
+        observation_space=env.observation_space,
+        dynamics_model=dynamics_model,
+        n_particles=n_particles,
+        reset_model=reset_model,
+        policy_optimizer_name="TraJaxTO",
+        horizon=horizon,
+    )
 
     USE_WANDB = use_wandb
     uniform_exploration = False
@@ -199,6 +185,7 @@ def main(args):
         n_particles=args.n_particles,
         reset_model=args.reset_model,
         beta=args.beta,
+        deterministic=args.deterministic,
         num_ensembles=args.num_ensembles,
         pred_diff=args.pred_diff,
         batch_size=args.batch_size,
@@ -255,7 +242,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_wandb', default=False, action="store_true")
     # env experiment args
     parser.add_argument('--time_limit', type=int, default=200)
-    parser.add_argument('--n_envs', type=int, default=1)
+    parser.add_argument('--n_envs', type=int, default=5)
 
     # optimizer experiment args
     parser.add_argument('--num_samples', type=int, default=500)
@@ -275,6 +262,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_neurons', type=int, default=128)
     parser.add_argument('--pred_diff', default=True, action="store_true")
     parser.add_argument('--beta', type=float, default=1.0)
+    parser.add_argument('--deterministic', default=True, action="store_true")
 
     # trainer experiment args
     parser.add_argument('--batch_size', type=int, default=128)
@@ -287,7 +275,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_freq', type=int, default=1)
     parser.add_argument('--train_steps', type=int, default=5000)
     parser.add_argument('--num_epochs', type=int, default=-1)
-    parser.add_argument('--rollout_steps', type=int, default=1)
+    parser.add_argument('--rollout_steps', type=int, default=200)
     parser.add_argument('--normalize', default=True, action="store_true")
     parser.add_argument('--action_normalize', default=True, action="store_true")
     parser.add_argument('--validate', default=True, action="store_true")

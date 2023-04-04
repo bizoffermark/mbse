@@ -11,12 +11,15 @@ from jax.scipy.stats import norm
 EPS = 1e-6
 
 
-def _predict(apply_fn, params, x, sig_max, sig_min, rng=None):
+def _predict(apply_fn, params, x, sig_max, sig_min, rng=None, deterministic=False):
     forward = jax.vmap(apply_fn, (0, None))
     predictions = forward(params, x)
     mu, sig = jnp.split(predictions, 2, axis=-1)
     sig = nn.softplus(sig)
     sig = jnp.clip(sig, 0, sig_max) + sig_min
+    eps = 1e-3
+    eps = jnp.ones_like(sig) * eps
+    sig = (1 - deterministic) * sig + deterministic * eps
     predictions = jnp.concatenate([mu, sig], axis=-1)
     return predictions
 
@@ -34,6 +37,7 @@ class ProbabilisticEnsembleModel(object):
             seed: int = 0,
             sig_min: float = 1e-3,
             sig_max: float = 1e3,
+            deterministic: bool = False,
             initialize_train_fn: bool = True,
     ):
         self.output_dim = output_dim
@@ -68,6 +72,7 @@ class ProbabilisticEnsembleModel(object):
                                 x=x,
                                 sig_max=self.sig_max,
                                 sig_min=self.sig_min,
+                                deterministic=deterministic,
                             )
                             )
         self.num_ps = 10
@@ -200,7 +205,7 @@ class ProbabilisticEnsembleModel(object):
 class FSVGDEnsemble(ProbabilisticEnsembleModel):
     def __init__(self,
                  n_prior_particles: Union[int, None] = None,
-                 prior_bandwidth: float = 0.1,
+                 prior_bandwidth: float = None,
                  k_bandwidth: float = 0.1,
                  initialize_train_fn: bool = True,
                  *args, **kwargs):

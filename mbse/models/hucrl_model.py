@@ -65,7 +65,7 @@ class HUCRLModel(BayesianDynamicsModel):
                 rng=rng,
                 num_ensembles=self.model.num_ensembles,
                 beta=self.beta,
-                batch_size=obs.shape[0],
+                # batch_size=obs.shape[0],
                 alpha=alpha,
                 bias_obs=bias_obs,
                 bias_act=bias_act,
@@ -140,7 +140,6 @@ class HUCRLModel(BayesianDynamicsModel):
                  rng,
                  num_ensembles,
                  beta,
-                 batch_size,
                  alpha: Union[jnp.ndarray, float] = 1.0,
                  bias_obs: Union[jnp.ndarray, float] = 0.0,
                  bias_act: Union[jnp.ndarray, float] = 0.0,
@@ -175,16 +174,17 @@ class HUCRLModel(BayesianDynamicsModel):
                 )
                 return next_obs
 
-            sample_rng = jax.random.split(
-                rng,
-                batch_size
-            )
-            next_obs = jax.vmap(get_epistemic_estimate, in_axes=(1, 1, 0, 0), out_axes=0)(
-                mean,
-                std,
-                eta,
-                sample_rng
-            )
+            # sample_rng = jax.random.split(
+            #    rng,
+            #    batch_size
+            # )
+            #next_obs = jax.vmap(get_epistemic_estimate, in_axes=(1, 1, 0, 0), out_axes=0)(
+            #    mean,
+            #    std,
+            #    eta,
+            #    sample_rng
+            #)
+            next_obs = get_epistemic_estimate(mean, std, eta, rng)
         next_obs = next_obs * scale_out + bias_out + pred_diff * obs
         return next_obs
 

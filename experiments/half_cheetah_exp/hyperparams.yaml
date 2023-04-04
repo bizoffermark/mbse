@@ -31,3 +31,4 @@ action_normalize: True
 record_test_video: False
 validation_buffer_size: 0
 validation_batch_size: 4096
+deterministic: True

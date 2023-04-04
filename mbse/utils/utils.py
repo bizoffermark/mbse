@@ -178,11 +178,11 @@ def sample_trajectories(
         # actions_T = jnp.expand_dims(actions_T, 2) \
         #    if len(actions_T.shape) < 3 else actions_T
         ins.append(actions)
-    if ins:
+    # if ins:
     # `jax.lax.scan` scans over the first dimension, transpose the inputs.
-        ins = tuple(map(lambda x: x.swapaxes(0, 1), ins))
-    else:
-        ins = None
+    #    ins = tuple(map(lambda x: x.swapaxes(0, 1), ins))
+    # else:
+    #    ins = None
     carry = [key, init_state]
     _, outs = jax.lax.scan(step, carry, ins, length=horizon)
     # Transpose back such that batch_dim is the leading dimension.

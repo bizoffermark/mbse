@@ -40,6 +40,7 @@ class PendulumReward(RewardModel):
                 next_obs=next_obs,
                 rng=rng,
             )
+
         self.predict = jax.jit(predict)
 
     def set_bounds(self, max_action, min_action=None):
@@ -204,7 +205,20 @@ class PendulumDynamicsModel(DynamicsModel):
         self.pred_diff = False
 
     @partial(jax.jit, static_argnums=0)
-    def predict(self, obs, action, rng=None):
+    def predict(self,
+                obs,
+                action,
+                rng=None,
+                parameters=None,
+                alpha: Union[float, jax.Array] = 1.0,
+                bias_obs: Union[float, jax.Array] = 0.0,
+                bias_act: Union[float, jax.Array] = 0.0,
+                bias_out: Union[float, jax.Array] = 0.0,
+                scale_obs: Union[float, jax.Array] = 1.0,
+                scale_act: Union[float, jax.Array] = 1.0,
+                scale_out: Union[float, jax.Array] = 1.0,
+                sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
+                ):
         u = jnp.clip(self.rescale_action(action), -self.env.max_torque, self.env.max_torque)[0]
         theta, omega = self._get_reduced_state(obs)
 
@@ -223,13 +237,14 @@ class PendulumDynamicsModel(DynamicsModel):
 
         new_state = jnp.asarray([new_theta, new_omega]).T
         next_obs = self._get_obs(new_state)
-        return next_obs.T
+        next_obs = next_obs.squeeze()
+        return next_obs
 
     def evaluate(self,
-                 parameters,
                  obs,
                  action,
-                 rng,
+                 rng=None,
+                 parameters=None,
                  sampling_idx=None,
                  alpha: Union[jnp.ndarray, float] = 1.0,
                  bias_obs: Union[jnp.ndarray, float] = 0.0,

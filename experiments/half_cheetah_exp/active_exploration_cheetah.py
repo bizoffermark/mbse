@@ -1,9 +1,7 @@
 from gym.wrappers import RescaleAction, TimeLimit
 from mbse.utils.vec_env.env_util import make_vec_env
 from mbse.models.active_learning_model import ActiveLearningHUCRLModel, ActiveLearningPETSModel
-from mbse.agents.model_based.mb_active_exploration_agent import MBActiveExplorationAgent
 from mbse.agents.model_based.model_based_agent import ModelBasedAgent
-from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
 from mbse.trainer.model_based.model_based_trainer import ModelBasedTrainer as Trainer
 import numpy as np
 import time
@@ -21,7 +19,7 @@ from mbse.envs.wrappers.action_repeat import ActionRepeat
 
 def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp_name: str,
                num_samples: int, num_elites: int, num_steps: int, horizon: int, alpha: float,
-               n_particles: int, reset_model: bool,
+               n_particles: int, reset_model: bool, deterministic: bool,
                num_ensembles: int, hidden_layers: int, num_neurons: int, beta: float,
                pred_diff: bool, batch_size: int, eval_freq: int, total_train_steps: int, buffer_size: int,
                exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int, num_epochs: int,
@@ -72,6 +70,12 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     test_env = [test_env_forward, test_env_backward]
     features = [num_neurons] * hidden_layers
     video_prefix = ""
+    optimizer_kwargs = {
+        'num_samples': num_samples,
+        'num_elites': num_elites,
+        'num_steps': num_steps,
+        'alpha': alpha,
+    }
     if exploration_strategy == 'Mean':
         beta = 0.0
         video_prefix += 'Mean'
@@ -87,6 +91,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             seed=seed,
             use_log_uncertainties=use_log,
             use_al_uncertainties=use_al,
+            deterministic=deterministic,
         )
 
         dynamics_model_backward = ActiveLearningPETSModel(
@@ -100,18 +105,10 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             seed=seed,
             use_log_uncertainties=use_log,
             use_al_uncertainties=use_al,
+            deterministic=deterministic,
         )
 
         dynamics_model = [dynamics_model_forward, dynamics_model_backward]
-
-        policy_optimizer = CrossEntropyOptimizer(
-            upper_bound=1,
-            num_samples=num_samples,
-            num_elites=num_elites,
-            num_steps=num_steps,
-            alpha=alpha,
-            action_dim=(horizon, env.action_space.shape[0]),
-        )
         video_prefix += 'PETS'
     else:
         if exploration_strategy == 'HUCRL':
@@ -124,6 +121,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                 pred_diff=pred_diff,
                 beta=beta,
                 seed=seed,
+                deterministic=deterministic,
             )
 
             dynamics_model_backward = HUCRLModel(
@@ -135,6 +133,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                 pred_diff=pred_diff,
                 beta=beta,
                 seed=seed,
+                deterministic=deterministic,
             )
             video_prefix += 'HUCRL'
         else:
@@ -149,6 +148,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                 seed=seed,
                 use_log_uncertainties=use_log,
                 use_al_uncertainties=use_al,
+                deterministic=deterministic,
             )
 
             dynamics_model_backward = ActiveLearningHUCRLModel(
@@ -162,48 +162,27 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                 seed=seed,
                 use_log_uncertainties=use_log,
                 use_al_uncertainties=use_al,
+                deterministic=deterministic,
             )
 
         dynamics_model = [dynamics_model_forward, dynamics_model_backward]
 
-        policy_optimizer = CrossEntropyOptimizer(
-            upper_bound=1,
-            num_samples=num_samples,
-            num_elites=num_elites,
-            num_steps=num_steps,
-            alpha=alpha,
-            action_dim=(horizon, env.action_space.shape[0] +
-                        env.observation_space.shape[0])
-        )
         video_prefix += 'Optimistic'
 
-    if exploration_strategy == 'HUCRL':
-        agent = ModelBasedAgent(
-                    train_steps=train_steps,
-                    batch_size=batch_size,
-                    max_train_steps=max_train_steps,
-                    num_epochs=num_epochs,
-                    action_space=env.action_space,
-                    observation_space=env.observation_space,
-                    dynamics_model=dynamics_model,
-                    n_particles=n_particles,
-                    reset_model=reset_model,
-                    policy_optimizer=policy_optimizer,
-            )
-
-    else:
-        agent = MBActiveExplorationAgent(
-                    train_steps=train_steps,
-                    batch_size=batch_size,
-                    max_train_steps=max_train_steps,
-                    num_epochs=num_epochs,
-                    action_space=env.action_space,
-                    observation_space=env.observation_space,
-                    dynamics_model=dynamics_model,
-                    n_particles=n_particles,
-                    reset_model=reset_model,
-                    policy_optimizer=policy_optimizer,
-            )
+    agent = ModelBasedAgent(
+                train_steps=train_steps,
+                batch_size=batch_size,
+                max_train_steps=max_train_steps,
+                num_epochs=num_epochs,
+                action_space=env.action_space,
+                observation_space=env.observation_space,
+                dynamics_model=dynamics_model,
+                n_particles=n_particles,
+                reset_model=reset_model,
+                policy_optimizer_name="TraJaxTO",
+                horizon=horizon,
+                optimizer_kwargs=optimizer_kwargs,
+        )
 
     USE_WANDB = use_wandb
     uniform_exploration = False
@@ -285,6 +264,7 @@ def main(args):
         n_particles=args.n_particles,
         reset_model=args.reset_model,
         beta=args.beta,
+        deterministic=args.deterministic,
         num_ensembles=args.num_ensembles,
         pred_diff=args.pred_diff,
         batch_size=args.batch_size,
@@ -361,6 +341,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_neurons', type=int, default=256)
     parser.add_argument('--pred_diff', default=True, action="store_true")
     parser.add_argument('--beta', type=float, default=1.0)
+    parser.add_argument('--deterministic', default=True, action="store_true")
 
     # trainer experiment args
     parser.add_argument('--batch_size', type=int, default=256)

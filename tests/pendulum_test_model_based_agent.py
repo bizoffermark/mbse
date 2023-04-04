@@ -8,9 +8,6 @@ import wandb
 from gym.wrappers.time_limit import TimeLimit
 from gym.wrappers.rescale_action import RescaleAction
 from mbse.models.environment_models.pendulum_swing_up import PendulumSwingUpEnv, PendulumDynamicsModel
-from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
-from mbse.optimizers.gradient_based_optimizer import GradientBasedOptimizer
-from mbse.agents.actor_critic.sac import SACAgent
 from mbse.utils.vec_env.env_util import make_vec_env
 from mbse.models.bayesian_dynamics_model import BayesianDynamicsModel
 from jax.config import config
@@ -52,27 +49,16 @@ if __name__ == "__main__":
         features=[128, 128],
         pred_diff=True,
     )
-    # policy_optimizer = GradientBasedOptimizer(
-    #    upper_bound=1,
-    #    num_samples=50,
-    #    num_steps=10,
-    #    action_dim=(horizon, env.action_space.shape[0])
-    #)
 
     agent = ModelBasedAgent(
-            train_steps=kwargs['agent']['train_steps'],
-            batch_size=kwargs['trainer']['batch_size'],
-            action_space=env.action_space,
-            observation_space=env.action_space,
-            dynamics_model=dynamics_model,
-            n_particles=10,
-            # policy_optimizer=policy_optimizer,
-            policy_optimizer=CrossEntropyOptimizer(
-                upper_bound=1,
-                num_samples=500,
-                num_elites=50,
-                num_steps=10,
-                action_dim=(horizon, env.action_space.shape[0])),
+        train_steps=kwargs['agent']['train_steps'],
+        batch_size=kwargs['agent']['batch_size'],
+        action_space=env.action_space,
+        observation_space=env.observation_space,
+        dynamics_model=dynamics_model,
+        n_particles=10,
+        policy_optimizer_name="TraJaxTO",
+        horizon=horizon,
     )
 
     USE_WANDB = True

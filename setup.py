@@ -21,6 +21,7 @@ required = [
     'cloudpickle',
     'pandas',
     'dm_control',
+    'trajax @ git+ssh://git@github.com/lenarttreven/trajax.git'
 ]
 
 extras = {'dev': ['seaborn', 'control>=0.9.2']}

@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax import vmap
 from mbse.optimizers.dummy_optimizer import DummyOptimizer
+from typing import Optional
 
 
 class CrossEntropyOptimizer(DummyOptimizer):
@@ -45,9 +46,12 @@ class CrossEntropyOptimizer(DummyOptimizer):
         return elites, elite_values
 
     # @partial(jit, static_argnums=(0, 1))
-    def optimize(self, func, rng=None):
+    def optimize(self, func, rng=None, mean: Optional[jax.Array] = None):
         best_value = -jnp.inf
-        mean = jnp.zeros(self.action_dim)
+        if mean is None:
+            mean = jnp.zeros(self.action_dim)
+        else:
+            assert mean.shape == self.action_dim
         std = jnp.ones(self.action_dim)*self.init_std
         best_sequence = mean
         get_best_action = lambda best_val, best_seq, val, seq: [val[-1].squeeze(), seq[-1]]

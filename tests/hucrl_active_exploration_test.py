@@ -2,13 +2,12 @@ from argparse_dataclass import ArgumentParser
 from typing import Any
 import yaml
 from mbse.trainer.model_based.model_based_trainer import ModelBasedTrainer as Trainer
-from mbse.agents.model_based.mb_active_exploration_agent import MBActiveExplorationAgent
+from mbse.agents.model_based.model_based_agent import ModelBasedAgent
 from dataclasses import dataclass, field
 import wandb
 from gym.wrappers.time_limit import TimeLimit
 from gym.wrappers.rescale_action import RescaleAction
 from mbse.models.environment_models.pendulum_swing_up import PendulumSwingUpEnv, PendulumDynamicsModel
-from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
 from mbse.utils.vec_env.env_util import make_vec_env
 from mbse.models.active_learning_model import ActiveLearningHUCRLModel
 
@@ -58,22 +57,16 @@ if __name__ == "__main__":
     #    num_steps=10,
     #    action_dim=(horizon, env.action_space.shape[0])
     # )
-
-    agent = MBActiveExplorationAgent(
-            train_steps=kwargs['agent']['train_steps'],
-            batch_size=kwargs['agent']['batch_size'],
-            action_space=env.action_space,
-            observation_space=env.observation_space,
-            dynamics_model=dynamics_model,
-            n_particles=10,
-            # policy_optimizer=policy_optimizer,
-            policy_optimizer=CrossEntropyOptimizer(
-                upper_bound=1,
-                num_samples=500,
-                num_elites=50,
-                num_steps=10,
-                action_dim=(horizon, env.action_space.shape[0] + env.observation_space.shape[0])),
-        )
+    agent = ModelBasedAgent(
+        train_steps=kwargs['agent']['train_steps'],
+        batch_size=kwargs['agent']['batch_size'],
+        action_space=env.action_space,
+        observation_space=env.observation_space,
+        dynamics_model=dynamics_model,
+        n_particles=10,
+        policy_optimizer_name="TraJaxTO",
+        horizon=horizon,
+    )
 
     USE_WANDB = True
 

@@ -3,15 +3,15 @@ import functools
 import jax
 import math
 from mbse.models.dynamics_model import DynamicsModel, ModelSummary
-from mbse.optimizers.dummy_optimizer import DummyOptimizer
+from mbse.optimizers.cem_trajectory_optimizer import CemTO
+from mbse.optimizers.trajax_trajectory_optimizer import TraJaxTO
 import gym
-from mbse.utils.utils import sample_trajectories
 from mbse.utils.replay_buffer import ReplayBuffer, Transition
 from mbse.agents.dummy_agent import DummyAgent
 import jax.numpy as jnp
 import wandb
-from typing import Union
-
+from typing import Union, Optional, Dict, Any
+from mbse.models.hucrl_model import HUCRLModel
 
 Model_list = list[DynamicsModel]
 
@@ -23,11 +23,13 @@ class ModelBasedAgent(DummyAgent):
             action_space: gym.spaces.box,
             observation_space: gym.spaces.box,
             dynamics_model: Union[DynamicsModel, Model_list],
-            policy_optimizer: DummyOptimizer,
-            discount: float = 0.99,
+            policy_optimizer_name: str = "CemTO",
+            horizon: int = 100,
             n_particles: int = 10,
             reset_model: bool = False,
             calibrate_model: bool = True,
+            init_function: bool = True,
+            optimizer_kwargs: Optional[Dict[str, Any]] = None,
             *args,
             **kwargs,
     ):
@@ -40,52 +42,35 @@ class ModelBasedAgent(DummyAgent):
         else:
             self.dynamics_model_list = dynamics_model
             self.num_dynamics_models = len(dynamics_model)
-        self.policy_optimizer = policy_optimizer
-        self.discount = discount
+        assert policy_optimizer_name in ["CemTO", "TraJaxTO"], "Optimizer must be CEM or TraJax"
+
+        optimizer_kwargs = {} if optimizer_kwargs is None else optimizer_kwargs
+        action_dim = self.action_space.shape
+        if isinstance(self.dynamics_model, HUCRLModel):
+            action_dim = (self.action_space.shape[0] + self.observation_space.shape[0], )
+        if policy_optimizer_name == "CemTO":
+            self.policy_optimizer = CemTO(
+                dynamics_model_list=self.dynamics_model_list,
+                horizon=horizon,
+                action_dim=action_dim,
+                n_particles=n_particles,
+                **optimizer_kwargs,
+            )
+        elif policy_optimizer_name == "TraJaxTO":
+            self.policy_optimizer = TraJaxTO(
+                dynamics_model_list=self.dynamics_model_list,
+                horizon=horizon,
+                action_dim=action_dim,
+                n_particles=n_particles,
+                **optimizer_kwargs,
+            )
         self.n_particles = n_particles
         self.reset_model = reset_model
         self.calibrate_model = calibrate_model
-        self._init_fn()
+        if init_function:
+            self._init_fn()
 
     def _init_fn(self):
-
-        def _optimize(
-                model_index,
-                params,
-                init_state,
-                key,
-                optimizer_key,
-                alpha,
-                bias_obs,
-                bias_act,
-                bias_out,
-                scale_obs,
-                scale_act,
-                scale_out):
-            return self._optimize(
-                eval_fn=self.dynamics_model_list[model_index].evaluate,
-                optimize_fn=self.policy_optimizer.optimize,
-                n_particles=self.n_particles,
-                horizon=self.policy_optimizer.action_dim[-2],
-                params=params,
-                init_state=init_state,
-                key=key,
-                optimizer_key=optimizer_key,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
-            )
-        self.optimize_for_eval_fns = []
-        for i in range(len(self.dynamics_model_list)):
-            self.optimize_for_eval_fns.append(jax.jit(functools.partial(
-                _optimize, model_index=i
-            )))
-        self.optimize = self.optimize_for_eval_fns[0]
-
         def step(carry, ins):
             rng = carry[0]
             model_params = carry[2]
@@ -124,58 +109,14 @@ class ModelBasedAgent(DummyAgent):
 
         self.step = jax.jit(step)
 
-    @staticmethod
-    def _optimize(eval_fn,
-                  optimize_fn,
-                  n_particles,
-                  horizon,
-                  params,
-                  init_state,
-                  key,
-                  optimizer_key,
-                  alpha,
-                  bias_obs,
-                  bias_act,
-                  bias_out,
-                  scale_obs,
-                  scale_act,
-                  scale_out,
-                  ):
-        eval_func = lambda seq, x, k: sample_trajectories(
-            evaluate_fn=eval_fn,
-            parameters=params,
-            init_state=x,
-            horizon=horizon,
-            key=k,
-            actions=seq,
-            alpha=alpha,
-            bias_obs=bias_obs,
-            bias_act=bias_act,
-            bias_out=bias_out,
-            scale_obs=scale_obs,
-            scale_act=scale_act,
-            scale_out=scale_out,
-        )
-
-        def sum_rewards(seq):
-            seq = jnp.repeat(jnp.expand_dims(seq, 0), n_particles, 0)
-            transition = eval_func(seq, init_state, key)
-            return transition.reward.mean()
-
-        action_seq, reward = optimize_fn(
-            sum_rewards,
-            optimizer_key
-        )
-        return action_seq, reward
-
     def act_in_jax(self, obs, rng, eval=False, eval_idx: int = 0):
 
         if eval:
             def optimize_for_eval(init_state, key, optimizer_key):
-                optimize_fn = self.optimize_for_eval_fns[eval_idx]
+                optimize_fn = self.policy_optimizer.optimize_for_eval_fns[eval_idx]
                 action_seq, reward = optimize_fn(
-                    params=self.dynamics_model.model_params,
-                    init_state=init_state,
+                    dynamics_params=self.dynamics_model.model_params,
+                    obs=init_state,
                     key=key,
                     optimizer_key=optimizer_key,
                     alpha=self.dynamics_model.alpha,
@@ -187,16 +128,27 @@ class ModelBasedAgent(DummyAgent):
                     scale_out=self.dynamics_model.scale_out,
                 )
                 return action_seq, reward
-            obs = jnp.repeat(jnp.expand_dims(obs, 0), self.n_particles, 0)
+
+            dim_state = obs.shape[-1]
+            obs = obs.reshape(-1, dim_state)
+            n_envs = obs.shape[0]
             rollout_rng, optimizer_rng = jax.random.split(rng, 2)
-            action_sequence, best_reward = optimize_for_eval(obs, rollout_rng, optimizer_rng)
-            action = action_sequence[0, ...]
+            rollout_rng = jax.random.split(rollout_rng, n_envs)
+            optimizer_rng = jax.random.split(optimizer_rng, n_envs)
+            action_sequence, best_reward = jax.vmap(optimize_for_eval, in_axes=(0, 0, 0))(
+                obs,
+                rollout_rng,
+                optimizer_rng
+            )
+            action = action_sequence[:, 0, ...]
+            if action.shape[0] == 1:
+                action = action.squeeze(0)
         else:
             def optimize(init_state, key, optimizer_key):
 
-                action_seq, reward = self.optimize(
-                    params=self.dynamics_model.model_params,
-                    init_state=init_state,
+                action_seq, reward = self.policy_optimizer.optimize_for_exploration(
+                    dynamics_params=self.dynamics_model.model_params,
+                    obs=init_state,
                     key=key,
                     optimizer_key=optimizer_key,
                     alpha=self.dynamics_model.alpha,
@@ -208,13 +160,8 @@ class ModelBasedAgent(DummyAgent):
                     scale_out=self.dynamics_model.scale_out,
                 )
                 return action_seq, reward
+
             n_envs = obs.shape[0]
-            obs = jnp.repeat(jnp.expand_dims(obs, 1), self.n_particles, 1)
-            # eval_func = lambda seq: rollout_actions(seq,
-            #                                        initial_state=obs,
-            #                                        dynamics_model=self.dynamics_model,
-            #                                        reward_model=self.reward_model,
-            #                                        rng=rng)
             rollout_rng, optimizer_rng = jax.random.split(rng, 2)
             rollout_rng = jax.random.split(rollout_rng, n_envs)
             optimizer_rng = jax.random.split(optimizer_rng, n_envs)
@@ -236,7 +183,7 @@ class ModelBasedAgent(DummyAgent):
                    ):
         max_train_steps_per_iter = 1000
         if self.num_epochs > 0:
-            total_train_steps = math.ceil(buffer.size * self.num_epochs/self.batch_size)
+            total_train_steps = math.ceil(buffer.size * self.num_epochs / self.batch_size)
         else:
             total_train_steps = self.train_steps
         total_train_steps = min(total_train_steps, self.max_train_steps)

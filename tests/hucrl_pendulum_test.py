@@ -11,9 +11,12 @@ from mbse.models.environment_models.pendulum_swing_up import PendulumSwingUpEnv,
 from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
 from mbse.utils.vec_env.env_util import make_vec_env
 from mbse.models.hucrl_model import HUCRLModel
+
 OptState = Any
 from jax.config import config
+
 config.update("jax_log_compiles", 1)
+
 
 @dataclass
 class Experiment:
@@ -53,22 +56,23 @@ if __name__ == "__main__":
     #    num_samples=50,
     #    num_steps=10,
     #    action_dim=(horizon, env.action_space.shape[0])
-    #)
-
+    # )
+    optimizer_kwargs = {
+        'num_samples': 500,
+        'num_elites': 50,
+        'num_steps': 10,
+    }
     agent = ModelBasedAgent(
-            train_steps=kwargs['agent']['train_steps'],
-            batch_size=kwargs['agent']['batch_size'],
-            action_space=env.action_space,
-            observation_space=env.observation_space,
-            dynamics_model=dynamics_model,
-            n_particles=10,
-            # policy_optimizer=policy_optimizer,
-            policy_optimizer=CrossEntropyOptimizer(
-                upper_bound=1,
-                num_samples=500,
-                num_elites=50,
-                num_steps=10,
-                action_dim=(horizon, env.action_space.shape[0] + env.observation_space.shape[0])),
+        train_steps=kwargs['agent']['train_steps'],
+        batch_size=kwargs['agent']['batch_size'],
+        action_space=env.action_space,
+        observation_space=env.observation_space,
+        dynamics_model=dynamics_model,
+        n_particles=10,
+        policy_optimizer_name="TraJaxTO",
+        horizon=horizon,
+        optimizer_kwargs=optimizer_kwargs,
+        # policy_optimizer=policy_optimizer,
     )
 
     USE_WANDB = True

@@ -5,7 +5,7 @@ from typing import Optional, Union
 class DummyOptimizer(object):
     def __init__(self,
                  action_dim=(1, ),
-                 upper_bound: Optional[Union[float, jnp.ndarray]] = None,
+                 upper_bound: Optional[Union[float, jnp.ndarray]] = 1.0,
                  num_steps: int = 20,
                  lower_bound: Optional[Union[float, jnp.ndarray]] = None,
                  *args,

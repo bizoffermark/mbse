@@ -33,7 +33,7 @@ def _worker(
                 new_observation = np.copy(observation)
                 if terminal or truncate:
                     # save final observation where user can get it, then reset
-                    new_observation = env.reset()
+                    new_observation, info = env.reset()
                     done = True
                 info["current_env_state"] = new_observation
                 info['last_done'] = done
@@ -139,8 +139,9 @@ class SubprocVecEnv(VecEnv):
     def reset(self, seed: Optional[int] = None) -> VecEnvObs:
         for remote in self.remotes:
             remote.send(("reset", seed))
-        obs, info = [remote.recv() for remote in self.remotes]
-        return _flatten_obs(obs, self.observation_space), info
+        results = [remote.recv() for remote in self.remotes]
+        obs, infos = zip(*results)
+        return _flatten_obs(obs, self.observation_space), infos
 
     def close(self) -> None:
         if self.closed:

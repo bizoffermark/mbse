@@ -15,10 +15,11 @@ from typing import Optional
 from mbse.models.hucrl_model import HUCRLModel
 from mbse.models.environment_models.halfcheetah_reward_model import HalfCheetahReward
 from mbse.envs.wrappers.action_repeat import ActionRepeat
+from mbse.utils.vec_env.subproc_vec_env import SubprocVecEnv
 
 
 def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp_name: str,
-               num_samples: int, num_elites: int, num_steps: int, horizon: int, alpha: float,
+               optimizer_type: str, num_samples: int, num_elites: int, num_steps: int, horizon: int, alpha: float,
                n_particles: int, reset_model: bool, deterministic: bool,
                num_ensembles: int, hidden_layers: int, num_neurons: int, beta: float,
                pred_diff: bool, batch_size: int, eval_freq: int, total_train_steps: int, buffer_size: int,
@@ -62,7 +63,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     }
     from mbse.envs.pets_halfcheetah import HalfCheetahEnv
     env = make_vec_env(env_id=HalfCheetahEnv, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed,
-                       env_kwargs=env_kwargs_forward)
+                       env_kwargs=env_kwargs_forward, vec_env_cls=SubprocVecEnv)
     test_env_forward = make_vec_env(HalfCheetahEnv, wrapper_class=wrapper_cls_test, seed=seed,
                                     env_kwargs=env_kwargs_forward, n_envs=1)
     test_env_backward = make_vec_env(HalfCheetahEnv, wrapper_class=wrapper_cls_test, seed=seed,
@@ -179,7 +180,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                 dynamics_model=dynamics_model,
                 n_particles=n_particles,
                 reset_model=reset_model,
-                policy_optimizer_name="TraJaxTO",
+                policy_optimizer_name=optimizer_type,
                 horizon=horizon,
                 optimizer_kwargs=optimizer_kwargs,
         )
@@ -256,6 +257,7 @@ def main(args):
         exp_name=args.exp_name,
         time_limit=args.time_limit,
         n_envs=args.n_envs,
+        optimizer_type=args.optimizer_type,
         num_samples=args.num_samples,
         num_elites=args.num_elites,
         num_steps=args.num_steps,
@@ -324,6 +326,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_envs', type=int, default=1)
 
     # optimizer experiment args
+    parser.add_argument('--optimizer_type', type=str, default='TraJaxTO')
     parser.add_argument('--num_samples', type=int, default=500)
     parser.add_argument('--num_elites', type=int, default=50)
     parser.add_argument('--num_steps', type=int, default=5)

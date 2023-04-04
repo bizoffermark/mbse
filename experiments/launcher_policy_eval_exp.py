@@ -10,7 +10,7 @@ import itertools
 applicable_configs = {
     'general': ['use_wandb'],
     'env': ['time_limit', 'n_envs', 'time_limit_eval'],
-    'optimizer': ['num_samples', 'num_elites', 'num_steps', 'horizon', 'alpha'],
+    'optimizer': ['optimizer_type', 'num_samples', 'num_elites', 'num_steps', 'horizon', 'alpha'],
     'agent': ['discount', 'n_particles', 'reset_model', 'batch_size', 'train_steps', 'num_epochs', 'max_train_steps'],
     'dynamics_model': ['num_ensembles', 'hidden_layers', 'num_neurons', 'pred_diff', 'deterministic'],
     'trainer': ['eval_freq', 'total_train_steps', 'buffer_size',
@@ -129,7 +129,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_seeds_per_hparam', type=int, default=3)
     parser.add_argument('--use_log', default=False, action="store_true")
     parser.add_argument('--use_al', default=False, action="store_true")
-    parser.add_argument('--beta', type=float, default=20.0)
+    parser.add_argument('--beta', type=float, default=2.0)
     parser.add_argument('--long_run', default=False, action="store_true")
 
     args = parser.parse_args()

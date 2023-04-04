@@ -17,6 +17,7 @@ from typing import Optional
 
 
 def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n_envs: int,
+               optimizer_type: str,
                num_samples: int, num_elites: int, num_steps: int, horizon: int, n_particles: int, reset_model: bool,
                num_ensembles: int, hidden_layers: int, num_neurons: int, beta: float, deterministic: bool,
                max_train_steps: int, pred_diff: bool, batch_size: int, eval_freq: int, total_train_steps: int,
@@ -107,7 +108,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         dynamics_model=dynamics_model,
         n_particles=n_particles,
         reset_model=reset_model,
-        policy_optimizer_name="CemTO",
+        policy_optimizer_name=optimizer_type,
         optimizer_kwargs=optimizer_kwargs,
         horizon=horizon,
     )
@@ -184,6 +185,7 @@ def main(args):
         exp_name=args.exp_name,
         time_limit=args.time_limit,
         n_envs=args.n_envs,
+        optimizer_type=args.optimizer_type,
         num_samples=args.num_samples,
         num_elites=args.num_elites,
         num_steps=args.num_steps,
@@ -251,6 +253,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_envs', type=int, default=5)
 
     # optimizer experiment args
+    parser.add_argument('--optimizer_type', type=str, default='TraJaxTO')
     parser.add_argument('--num_samples', type=int, default=500)
     parser.add_argument('--num_elites', type=int, default=50)
     parser.add_argument('--num_steps', type=int, default=10)

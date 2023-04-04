@@ -57,7 +57,7 @@ def _optimize_with_params(reward_fn: Callable,
         init_act = initial_actions
     ilqr = ILQR(cost_fn, dynamics)
     out = ilqr.solve(cost_params, dynamics_params, initial_state, init_act, optimizer_params)
-    return jnp.clip(jnp.tanh(out.us), -1, 1), out.obj
+    return jnp.clip(jnp.tanh(out.us), -1, 1), -out.obj
 
 
 class TraJaxTO(object):

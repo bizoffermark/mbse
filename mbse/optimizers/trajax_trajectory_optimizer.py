@@ -18,6 +18,7 @@ def _optimize_with_params(reward_fn: Callable,
                           scale_obs: Union[float, jax.Array],
                           scale_act: Union[float, jax.Array],
                           scale_out: Union[float, jax.Array],
+                          init_var: Union[float, jax.Array] = 5.0,
                           cost_params: Optional = None,
                           key: Optional = None,
                           optimizer_key: Optional = None,
@@ -44,8 +45,18 @@ def _optimize_with_params(reward_fn: Callable,
         action = jnp.tanh(u)
         return - reward_fn(x, action).sum()
 
+    if optimizer_key is not None:
+        sampled_action = jax.random.multivariate_normal(
+            key=optimizer_key,
+            mean=jnp.zeros_like(initial_actions.reshape(-1, 1).squeeze()),
+            cov=jnp.diag(jnp.ones_like(initial_actions.reshape(-1, 1).squeeze()))
+        ) * init_var
+        sampled_action = sampled_action.reshape(initial_actions.shape)
+        init_act = initial_actions + sampled_action
+    else:
+        init_act = initial_actions
     ilqr = ILQR(cost_fn, dynamics)
-    out = ilqr.solve(cost_params, dynamics_params, initial_state, initial_actions, optimizer_params)
+    out = ilqr.solve(cost_params, dynamics_params, initial_state, init_act, optimizer_params)
     return jnp.clip(jnp.tanh(out.us), -1, 1), out.obj
 
 
@@ -97,10 +108,10 @@ class TraJaxTO(object):
             if initial_actions is None:
                 initial_actions = self.previous_actions
             else:
-                assert initial_actions.shape == (self.horizon, ) + self.action_dim
+                assert initial_actions.shape == (self.horizon,) + self.action_dim
             obs = jnp.repeat(jnp.expand_dims(obs, 0), self.n_particles, 0)
 
-            def get_sequence_and_returns_for_init_state(x0):
+            def get_sequence_and_returns_for_init_state(x0, opt_key):
                 return _optimize_with_params(
                     reward_fn=reward_fn,
                     dynamics_fn=dynamics_fn,
@@ -116,10 +127,16 @@ class TraJaxTO(object):
                     scale_act=scale_act,
                     scale_out=scale_out,
                     key=key,
-                    optimizer_key=optimizer_key,
+                    optimizer_key=opt_key,
                     sampling_idx=sampling_idx,
                 )
-            sequence, returns = jax.vmap(get_sequence_and_returns_for_init_state)(obs)
+
+            if optimizer_key is not None:
+                opt_key = jax.random.split(key=key, num=self.n_particles)
+                sequence, returns = jax.vmap(get_sequence_and_returns_for_init_state)(obs, opt_key)
+            else:
+                sequence, returns = jax.vmap(get_sequence_and_returns_for_init_state, in_axes=(0, None)) \
+                    (obs, optimizer_key)
             best_elite_idx = jnp.argsort(returns, axis=0).squeeze()[-1]
             elite_action = sequence[best_elite_idx]
             return elite_action, returns[best_elite_idx]
@@ -165,7 +182,7 @@ class TraJaxTO(object):
                 assert initial_actions.shape == (self.horizon,) + self.action_dim
             obs = jnp.repeat(jnp.expand_dims(obs, 0), self.n_particles, 0)
 
-            def get_sequence_and_returns_for_init_state(x0):
+            def get_sequence_and_returns_for_init_state(x0, opt_key):
                 return _optimize_with_params(
                     reward_fn=reward_fn,
                     dynamics_fn=dynamics_fn,
@@ -181,11 +198,16 @@ class TraJaxTO(object):
                     scale_act=scale_act,
                     scale_out=scale_out,
                     key=key,
-                    optimizer_key=optimizer_key,
+                    optimizer_key=opt_key,
                     sampling_idx=sampling_idx,
                 )
 
-            sequence, returns = jax.vmap(get_sequence_and_returns_for_init_state)(obs)
+            if optimizer_key is not None:
+                opt_key = jax.random.split(key=key, num=self.n_particles)
+                sequence, returns = jax.vmap(get_sequence_and_returns_for_init_state)(obs, opt_key)
+            else:
+                sequence, returns = jax.vmap(get_sequence_and_returns_for_init_state, in_axes=(0, None)) \
+                    (obs, optimizer_key)
             best_elite_idx = jnp.argsort(returns, axis=0).squeeze()[-1]
             elite_action = sequence[best_elite_idx]
             return elite_action, returns[best_elite_idx]

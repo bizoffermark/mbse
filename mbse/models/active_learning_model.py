@@ -207,6 +207,7 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
             )
 
         self.evaluate = jax.jit(evaluate)
+        self.predict = self.predict_with_mean
 
     @staticmethod
     def _predict_with_uncertainty(
@@ -402,6 +403,7 @@ class ActiveLearningHUCRLModel(HUCRLModel):
             )
 
         self.predict_without_optimism = jax.jit(predict_without_optimism)
+        self.predict = self.predict_without_optimism
 
         def evaluate(
                 parameters,

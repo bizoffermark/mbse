@@ -17,8 +17,7 @@ def _predict(apply_fn, params, x, sig_max, sig_min, rng=None, deterministic=Fals
     mu, sig = jnp.split(predictions, 2, axis=-1)
     sig = nn.softplus(sig)
     sig = jnp.clip(sig, 0, sig_max) + sig_min
-    eps = 1e-3
-    eps = jnp.ones_like(sig) * eps
+    eps = jnp.ones_like(sig) * sig_min
     sig = (1 - deterministic) * sig + deterministic * eps
     predictions = jnp.concatenate([mu, sig], axis=-1)
     return predictions

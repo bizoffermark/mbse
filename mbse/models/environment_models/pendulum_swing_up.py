@@ -203,6 +203,7 @@ class PendulumDynamicsModel(DynamicsModel):
         )
         self.reward_model = reward_model
         self.pred_diff = False
+        self.obs_dim = 3
 
     @partial(jax.jit, static_argnums=0)
     def predict(self,

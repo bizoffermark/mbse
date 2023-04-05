@@ -200,3 +200,92 @@ class ReplayBuffer(object):
         self.action_normalizer = Normalizer(self.action_shape)
         self.reward_normalizer = Normalizer((1,))
         self.next_state_normalizer = Normalizer(self.obs_shape)
+
+
+class JaxReplayBuffer(object):
+    def __init__(self,
+                 obs_shape,
+                 action_shape,
+                 max_size: int = int(1e6),
+                 normalize=False,
+                 action_normalize=False,
+                 learn_deltas=False
+                 ):
+        self.max_size = max_size
+        self.current_ptr = 0
+        self.size = 0
+        self.obs_shape = obs_shape
+        self.action_shape = action_shape
+        self.normalize = normalize
+        self.learn_deltas = learn_deltas
+        self.obs, self.action, self.next_obs, self.reward, self.done = None, None, None, None, None
+        self.state_normalizer, self.action_normalizer, self.reward_normalizer = None, None, None
+        self.next_state_normalizer = None
+        self.action_normalize = action_normalize
+        self.reset()
+
+    def add(self, transition: Transition):
+        size = transition.shape[0]
+        start = self.current_ptr
+        end = self.current_ptr + size
+        if end > self.max_size:
+            idx_range = jnp.arange(start=start, stop=self.max_size, step=1)
+            idx_range2 = jnp.arange(start=0, stop=end-self.max_size, step=1)
+            idx_range = jnp.concatenate([idx_range.reshape(-1, 1), idx_range2.reshape(-1, 1)]).squeeze(1)
+        else:
+            idx_range = jnp.arange(start=start, stop=end, step=1)
+        self.obs = self.obs.at[idx_range].set(transition.obs)
+        self.action = self.action.at[idx_range].set(transition.action)
+        self.next_obs = self.next_obs.at[idx_range].set(transition.next_obs)
+        self.reward = self.reward.at[idx_range].set(transition.reward.reshape(-1, 1))
+        self.done = self.done.at[idx_range].set(transition.done.reshape(-1, 1))
+        # self.obs[start:end] = transition.obs
+        # self.action[start:end] = transition.action
+        # self.next_obs[start:end] = transition.next_obs
+        # self.reward[start:end] = transition.reward.reshape(-1, 1)
+        # self.done[start:end] = transition.done.reshape(-1, 1)
+        # self.obs = self.obs.at[start:end].set(transition.obs)
+        # self.action = self.action.at[start:end].set(transition.action)
+        # self.next_obs = self.next_obs.at[start:end].set(transition.next_obs)
+        # self.reward = self.reward.at[start:end].set(transition.reward.reshape(-1, 1))
+        # self.done = self.done.at[start:end].set(transition.done.reshape(-1, 1))
+        self.size = min(self.size + size, self.max_size)
+        self.current_ptr = end % self.max_size
+        if self.normalize:
+            self.state_normalizer.update(self.obs[idx_range])
+            if self.action_normalize:
+                self.action_normalizer.update(self.action[idx_range])
+            if self.learn_deltas:
+                self.next_state_normalizer.update(self.next_obs[idx_range] - self.obs[idx_range])
+            else:
+                self.next_state_normalizer = deepcopy(self.state_normalizer)
+            self.reward_normalizer.update(self.reward[idx_range])
+
+    def sample(self, rng, batch_size: int = 256):
+        ind = jax.random.randint(rng, (batch_size,), 0, self.size)
+        obs = self.obs[ind]
+        next_state = self.next_obs[ind]
+        if self.learn_deltas:
+            next_state = self.next_state_normalizer.normalize(next_state - obs)
+        else:
+            next_state = self.state_normalizer.normalize(next_state)
+        return Transition(
+            self.state_normalizer.normalize(obs),
+            self.action_normalizer.normalize(self.action[ind]),
+            next_state,
+            self.reward_normalizer.normalize(self.reward[ind]),
+            self.done[ind])
+
+    def reset(self):
+        self.current_ptr = 0
+        self.size = 0
+        self.obs = jnp.zeros((self.max_size, *self.obs_shape))
+        self.action = jnp.zeros((self.max_size, *self.action_shape))
+        self.next_obs = jnp.zeros((self.max_size, *self.obs_shape))
+        self.reward = jnp.zeros((self.max_size, 1))
+        self.done = jnp.zeros((self.max_size, 1))
+
+        self.state_normalizer = Normalizer(self.obs_shape)
+        self.action_normalizer = Normalizer(self.action_shape)
+        self.reward_normalizer = Normalizer((1,))
+        self.next_state_normalizer = Normalizer(self.obs_shape)

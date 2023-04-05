@@ -6,35 +6,34 @@ from mbse.utils.replay_buffer import Transition
 from mbse.models.dynamics_model import DynamicsModel
 from typing import Optional, Union, Tuple, Callable
 
-
 EPS = 1e-6
 
 
 @jit
 def gaussian_log_likelihood(x, mu, sig):
     log_sig = jnp.log(sig + EPS)
-    log_l = -0.5 * (2 * log_sig + jnp.log(2*jnp.pi)
-                     + jnp.square((x - mu)/(sig + EPS)))
+    log_l = -0.5 * (2 * log_sig + jnp.log(2 * jnp.pi)
+                    + jnp.square((x - mu) / (sig + EPS)))
     log_l = jnp.sum(log_l, axis=-1)
     return log_l
 
 
 @jit
 def sample_normal_dist(mu, sig, rng):
-    return mu + jax.random.normal(rng, mu.shape)*sig
+    return mu + jax.random.normal(rng, mu.shape) * sig
 
 
 @jit
 def rbf_kernel(x, y, bandwidth=None):
-  square_sum = lambda x, y: jnp.sum(jnp.square(x-y))
-  pairwise = jax.vmap(lambda y: jax.vmap(lambda x: square_sum(x, y), in_axes=0, out_axes=0)(x))(y)
-  n_x = x.shape[-2]
-  if bandwidth is None:
-      bandwidth = jnp.median(pairwise)
-  bandwidth = 0.5 * bandwidth / jnp.log(n_x + 1)
-  bandwidth = jnp.maximum(jax.lax.stop_gradient(bandwidth), 1e-5)
-  k_xy = jnp.exp(-pairwise / bandwidth / 2)
-  return k_xy
+    square_sum = lambda x, y: jnp.sum(jnp.square(x - y))
+    pairwise = jax.vmap(lambda y: jax.vmap(lambda x: square_sum(x, y), in_axes=0, out_axes=0)(x))(y)
+    n_x = x.shape[-2]
+    if bandwidth is None:
+        bandwidth = jnp.median(pairwise)
+    bandwidth = 0.5 * bandwidth / jnp.log(n_x + 1)
+    bandwidth = jnp.maximum(jax.lax.stop_gradient(bandwidth), 1e-5)
+    k_xy = jnp.exp(-pairwise / bandwidth / 2)
+    return k_xy
 
 
 @partial(jit, static_argnums=(2, 3))
@@ -62,14 +61,14 @@ def rollout_actions(action_sequence, initial_state, dynamics_model, reward_model
 @partial(jit, static_argnums=(0, 2, 3, 5))
 def rollout_policy(policy, initial_state, dynamics_model, reward_model, rng, num_steps=10):
     state = initial_state
-    state_shape = (num_steps + 1, ) + initial_state.shape
+    state_shape = (num_steps + 1,) + initial_state.shape
     states = jnp.zeros(state_shape)
     states = states.at[0].set(initial_state)
-    reward_shape = (num_steps, ) + (initial_state.shape[0], )
+    reward_shape = (num_steps,) + (initial_state.shape[0],)
     rewards = jnp.zeros(reward_shape)
     dones = jnp.zeros(reward_shape, dtype=jnp.int8)
     test_act = policy(state)
-    actions_shape = (num_steps, ) + test_act.shape
+    actions_shape = (num_steps,) + test_act.shape
     actions = jnp.zeros(actions_shape)
     if rng is not None:
         rng_seq = jax.random.split(rng, num_steps + 1)
@@ -80,7 +79,7 @@ def rollout_policy(policy, initial_state, dynamics_model, reward_model, rng, num
         act = policy(state, act_rng)
         next_state = dynamics_model.predict(state, act, rng=obs_rng)
         reward = reward_model.predict(state, act, next_state)
-        states = states.at[i+1].set(next_state)
+        states = states.at[i + 1].set(next_state)
         actions = actions.at[i].set(act)
         rewards = rewards.at[i].set(reward)
         state = next_state
@@ -101,77 +100,77 @@ def rollout_policy(policy, initial_state, dynamics_model, reward_model, rng, num
     return transitions
 
 
-@partial(jax.jit, static_argnums=(0, 3))
+@partial(jax.jit, static_argnums=(0, 3, 5))
 def sample_trajectories(
-    evaluate_fn: Callable,
-    parameters,
-    init_state: jnp.ndarray,
-    horizon: int,
-    key: Optional[jax.random.PRNGKey],
-    *,
-    policy: Optional[Callable] = None,
-    actions: Optional[jnp.ndarray] = None,
-    alpha: Union[jnp.ndarray, float] = 1.0,
-    bias_obs: Union[jnp.ndarray, float] = 0.0,
-    bias_act: Union[jnp.ndarray, float] = 0.0,
-    bias_out: Union[jnp.ndarray, float] = 0.0,
-    scale_obs: Union[jnp.ndarray, float] = 1.0,
-    scale_act: Union[jnp.ndarray, float] = 1.0,
-    scale_out: Union[jnp.ndarray, float] = 1.0,
-    sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
-    # observations: Optional[jnp.ndarray] = None
+        evaluate_fn: Callable,
+        parameters,
+        init_state: jnp.ndarray,
+        horizon: int,
+        key: Optional[jax.random.PRNGKey],
+        policy: Optional[Callable] = None,
+        actor_params=None,
+        actions: Optional[jnp.ndarray] = None,
+        alpha: Union[jnp.ndarray, float] = 1.0,
+        bias_obs: Union[jnp.ndarray, float] = 0.0,
+        bias_act: Union[jnp.ndarray, float] = 0.0,
+        bias_out: Union[jnp.ndarray, float] = 0.0,
+        scale_obs: Union[jnp.ndarray, float] = 1.0,
+        scale_act: Union[jnp.ndarray, float] = 1.0,
+        scale_out: Union[jnp.ndarray, float] = 1.0,
+        sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
+        # observations: Optional[jnp.ndarray] = None
 ) -> Transition:
     """
     TODO (yarden): document this thing.
     """
     assert policy is not None or actions is not None, \
-      'Please provide policy or actor'
+        'Please provide policy or actor'
     # use_observations = observations is not None
     use_policy = policy is not None
+
     # batch_size = init_state.shape[0]
     def step(carry, ins):
         seed = carry[0]
-        #if use_observations:
+        # if use_observations:
         #  obs = ins[0]
-        #else:
+        # else:
         #  obs = carry[1]
         obs = carry[1]
         if use_policy:
-          seed, actor_seed = jax.random.split(seed, 2) \
-              if seed is not None else seed, None
-          acs = policy(jax.lax.stop_gradient(obs), rng=actor_seed)
+            seed, actor_seed = jax.random.split(seed, 2)
+            acs = policy(actor_params=actor_params, obs=jax.lax.stop_gradient(obs), rng=actor_seed)
         else:
-          acs = ins[-1]
+            acs = ins[-1]
         model_seed = None
         if seed is not None:
             seed, model_seed = jax.random.split(seed, 2)
         next_obs, reward = evaluate_fn(
-                    parameters=parameters,
-                    obs=obs,
-                    action=acs,
-                    rng=model_seed,
-                    sampling_idx=sampling_idx,
-                    alpha=alpha,
-                    bias_obs=bias_obs,
-                    bias_act=bias_act,
-                    bias_out=bias_out,
-                    scale_obs=scale_obs,
-                    scale_act=scale_act,
-                    scale_out=scale_out,
-                )
+            parameters=parameters,
+            obs=obs,
+            action=acs,
+            rng=model_seed,
+            sampling_idx=sampling_idx,
+            alpha=alpha,
+            bias_obs=bias_obs,
+            bias_act=bias_act,
+            bias_out=bias_out,
+            scale_obs=scale_obs,
+            scale_act=scale_act,
+            scale_out=scale_out,
+        )
         # if use_observations:
         #  carry = seed, obs, hidden
-        #else:
+        # else:
         carry = [seed, next_obs]
-        outs = [next_obs, reward]
+        outs = [next_obs, reward, acs]
         return carry, outs
 
     ins = []
 
-  #if use_observations:
-  #  observations = jnp.concatenate([init_state[0][:, None], observations], 1)
-  #  assert observations.shape[1] == horizon
-  #  ins.append(observations)
+    # if use_observations:
+    #  observations = jnp.concatenate([init_state[0][:, None], observations], 1)
+    #  assert observations.shape[1] == horizon
+    #  ins.append(observations)
     if not use_policy:
         # assert actions.shape[-2] == horizon, 'action shape must be the same as horizon'
         # actions = jnp.repeat(actions, repeats=batch_size, axis=0)
@@ -191,6 +190,7 @@ def sample_trajectories(
     state = state.at[0, ...].set(init_state)
     state = state.at[1:, ...].set(next_state[:-1, ...])
     rewards = outs[1].reshape(-1, 1)
+    acs = outs[-1]
 
     def flatten(arr):
         new_arr = arr.reshape(-1, arr.shape[-1])
@@ -198,7 +198,7 @@ def sample_trajectories(
 
     transitions = Transition(
         obs=flatten(state),
-        action=flatten(actions),
+        action=flatten(acs),
         reward=rewards,
         next_obs=flatten(next_state),
         done=flatten(jnp.zeros_like(rewards)),

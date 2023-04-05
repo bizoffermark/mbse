@@ -88,6 +88,7 @@ class BicycleCarModel(DynamicsModel):
         predict = lambda obs, action, rng=None, *args, **kwargs: self._predict(obs, action, params=self.params,
                                                        control_freq=self.params.control_freq)
         self.predict = jax.jit(predict)
+        self.obs_dim = 6
 
     def _ode_dyn(self, x: jax.Array, u: jax.Array, params: CarParams):
         theta, v_x, v_y, w = x[..., 2], x[..., 3], x[..., 4], x[..., 5]

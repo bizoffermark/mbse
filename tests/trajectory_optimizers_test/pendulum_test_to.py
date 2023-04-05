@@ -23,7 +23,7 @@ obs, _ = env.reset()
 policy_optimizer = TraJaxTO(
     dynamics_model_list=dynamics_model_list,
     horizon=horizon,
-    action_dim=(2,),
+    action_dim=(1,),
     params=ILQRHyperparams(maxiter=100),
 )
 

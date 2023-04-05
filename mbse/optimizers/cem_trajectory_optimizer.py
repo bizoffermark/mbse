@@ -4,9 +4,10 @@ from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
 from mbse.utils.utils import sample_trajectories
 import functools
 from typing import Optional, Union
+from mbse.optimizers.dummy_policy_optimizer import DummyPolicyOptimizer
 
 
-class CemTO(object):
+class CemTO(DummyPolicyOptimizer):
     def __init__(self,
                  horizon: int,
                  action_dim: tuple,
@@ -15,6 +16,7 @@ class CemTO(object):
                  *cem_args,
                  **cem_kwargs
                  ):
+        super().__init__()
         cem_action_dim = (horizon,) + action_dim
         self.horizon = horizon
         self.n_particles = n_particles

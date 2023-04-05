@@ -3,6 +3,7 @@ from typing import Union, Callable, Optional
 import jax
 import jax.numpy as jnp
 import functools
+from mbse.optimizers.dummy_policy_optimizer import DummyPolicyOptimizer
 
 
 def _optimize_with_params(reward_fn: Callable,
@@ -60,7 +61,7 @@ def _optimize_with_params(reward_fn: Callable,
     return jnp.clip(jnp.tanh(out.us), -1, 1), -out.obj
 
 
-class TraJaxTO(object):
+class TraJaxTO(DummyPolicyOptimizer):
 
     def __init__(self,
                  horizon: int,
@@ -71,6 +72,7 @@ class TraJaxTO(object):
                  initial_actions: Optional[jax.Array] = None,
                  *args,
                  **kwargs):
+        super().__init__(*args, **kwargs)
         self.horizon = horizon
         self.action_dim = action_dim
         self.params = params

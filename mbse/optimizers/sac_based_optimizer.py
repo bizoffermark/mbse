@@ -385,39 +385,24 @@ class SACOptimizer(DummyPolicyOptimizer):
         return alpha_params, alpha_opt_state, actor_params, actor_opt_state, critic_params, target_critic_params, \
             critic_opt_state, summaries
 
-    def train_agents(self,
-                     rng,
-                     buffer: ReplayBuffer,
-                     dynamics_params: Optional = None,
-                     alpha: Union[jnp.ndarray, float] = 1.0,
-                     bias_obs: Union[jnp.ndarray, float] = 0.0,
-                     bias_act: Union[jnp.ndarray, float] = 0.0,
-                     bias_out: Union[jnp.ndarray, float] = 0.0,
-                     scale_obs: Union[jnp.ndarray, float] = 1.0,
-                     scale_act: Union[jnp.ndarray, float] = 1.0,
-                     scale_out: Union[jnp.ndarray, float] = 1.0,
-                     sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
-                     validate: bool = True,
-                     log_results: bool = True,
-                     ):
+    def train(self,
+              rng,
+              buffer: ReplayBuffer,
+              dynamics_params: Optional = None,
+              alpha: Union[jnp.ndarray, float] = 1.0,
+              bias_obs: Union[jnp.ndarray, float] = 0.0,
+              bias_act: Union[jnp.ndarray, float] = 0.0,
+              bias_out: Union[jnp.ndarray, float] = 0.0,
+              scale_obs: Union[jnp.ndarray, float] = 1.0,
+              scale_act: Union[jnp.ndarray, float] = 1.0,
+              scale_out: Union[jnp.ndarray, float] = 1.0,
+              sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
+              validate: bool = True,
+              log_results: bool = True,
+              ):
         for i in range(len(self.agent_list)):
             agent_rng, rng = jax.random.split(rng, 2)
             true_obs = buffer.obs[:buffer.size]
-            # (alpha_params, alpha_opt_state, actor_params, actor_opt_state, critic_params, target_critic_params,
-            #  critic_opt_state) = self.train_single_agent(
-            #     rng=agent_rng,
-            #     buffer=buffer,
-            #     agent_idx=i,
-            #     dynamics_params=dynamics_params,
-            #     alpha=alpha,
-            #     bias_obs=bias_obs,
-            #     bias_act=bias_act,
-            #     bias_out=bias_out,
-            #     scale_obs=scale_obs,
-            #     scale_act=scale_act,
-            #     scale_out=scale_out,
-            #     sampling_idx=sampling_idx,
-            # )
             train_agent_fn = self.train_agent_fns[i]
             (alpha_params, alpha_opt_state, actor_params, actor_opt_state, critic_params, target_critic_params,
              critic_opt_state, summaries) = train_agent_fn(

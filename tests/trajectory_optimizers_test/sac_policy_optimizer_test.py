@@ -105,7 +105,7 @@ policy_optimizer = SACOptimizer(
     dynamics_model_list=dynamics_model_list,
     horizon=horizon,
     action_dim=(1,),
-    train_steps_per_model_update=100,
+    train_steps_per_model_update=50,
     sac_kwargs=sac_kwargs
 )
 
@@ -130,7 +130,7 @@ obs, _ = env.reset()
 #    action = policy_optimizer.get_action(obs=obs, rng=rng)
 #    obs, reward, terminate, truncate, info = env.step(action)
 #    env.render()
-policy_optimizer.train_agents(
+policy_optimizer.train(
     rng=train_rng,
     buffer=buffer,
 )

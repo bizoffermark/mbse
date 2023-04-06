@@ -5,6 +5,7 @@ import math
 from mbse.models.dynamics_model import DynamicsModel, ModelSummary
 from mbse.optimizers.cem_trajectory_optimizer import CemTO
 from mbse.optimizers.trajax_trajectory_optimizer import TraJaxTO
+from mbse.optimizers.sac_based_optimizer import SACOptimizer
 import gym
 from mbse.utils.replay_buffer import ReplayBuffer, Transition
 from mbse.agents.dummy_agent import DummyAgent
@@ -42,7 +43,7 @@ class ModelBasedAgent(DummyAgent):
         else:
             self.dynamics_model_list = dynamics_model
             self.num_dynamics_models = len(dynamics_model)
-        assert policy_optimizer_name in ["CemTO", "TraJaxTO"], "Optimizer must be CEM or TraJax"
+        assert policy_optimizer_name in ["CemTO", "TraJaxTO", "SacOpt"], "Optimizer must be CEM or TraJax"
 
         optimizer_kwargs = {} if optimizer_kwargs is None else optimizer_kwargs
         action_dim = self.action_space.shape
@@ -62,6 +63,13 @@ class ModelBasedAgent(DummyAgent):
                 horizon=horizon,
                 action_dim=action_dim,
                 n_particles=n_particles,
+                **optimizer_kwargs,
+            )
+        elif policy_optimizer_name == "SacOpt":
+            self.policy_optimizer = SACOptimizer(
+                dynamics_model_list=self.dynamics_model_list,
+                horizon=horizon,
+                action_dim=action_dim,
                 **optimizer_kwargs,
             )
         self.n_particles = n_particles
@@ -110,69 +118,74 @@ class ModelBasedAgent(DummyAgent):
         self.step = jax.jit(step)
 
     def act_in_jax(self, obs, rng, eval=False, eval_idx: int = 0):
-
-        if eval:
-            def optimize_for_eval(init_state, key, optimizer_key):
-                optimize_fn = self.policy_optimizer.optimize_for_eval_fns[eval_idx]
-                action_seq, reward = optimize_fn(
-                    dynamics_params=self.dynamics_model.model_params,
-                    obs=init_state,
-                    key=key,
-                    optimizer_key=optimizer_key,
-                    alpha=self.dynamics_model.alpha,
-                    bias_obs=self.dynamics_model.bias_obs,
-                    bias_act=self.dynamics_model.bias_act,
-                    bias_out=self.dynamics_model.bias_out,
-                    scale_obs=self.dynamics_model.scale_obs,
-                    scale_act=self.dynamics_model.scale_act,
-                    scale_out=self.dynamics_model.scale_out,
-                )
-                return action_seq, reward
-
-            dim_state = obs.shape[-1]
-            obs = obs.reshape(-1, dim_state)
-            n_envs = obs.shape[0]
-            rollout_rng, optimizer_rng = jax.random.split(rng, 2)
-            rollout_rng = jax.random.split(rollout_rng, n_envs)
-            optimizer_rng = jax.random.split(optimizer_rng, n_envs)
-            action_sequence, best_reward = jax.vmap(optimize_for_eval, in_axes=(0, 0, 0))(
-                obs,
-                rollout_rng,
-                optimizer_rng
-            )
-            action = action_sequence[:, 0, ...]
-            if action.shape[0] == 1:
-                action = action.squeeze(0)
+        if isinstance(self.policy_optimizer, SACOptimizer):
+            if eval:
+                action = self.policy_optimizer.get_action_for_eval(obs=obs, rng=rng, agent_idx=eval_idx)
+            else:
+                action = self.policy_optimizer.get_action_for_exploration(obs=obs, rng=rng)
         else:
-            def optimize(init_state, key, optimizer_key):
+            if eval:
+                def optimize_for_eval(init_state, key, optimizer_key):
+                    optimize_fn = self.policy_optimizer.optimize_for_eval_fns[eval_idx]
+                    action_seq, reward = optimize_fn(
+                        dynamics_params=self.dynamics_model.model_params,
+                        obs=init_state,
+                        key=key,
+                        optimizer_key=optimizer_key,
+                        alpha=self.dynamics_model.alpha,
+                        bias_obs=self.dynamics_model.bias_obs,
+                        bias_act=self.dynamics_model.bias_act,
+                        bias_out=self.dynamics_model.bias_out,
+                        scale_obs=self.dynamics_model.scale_obs,
+                        scale_act=self.dynamics_model.scale_act,
+                        scale_out=self.dynamics_model.scale_out,
+                    )
+                    return action_seq, reward
 
-                action_seq, reward = self.policy_optimizer.optimize_for_exploration(
-                    dynamics_params=self.dynamics_model.model_params,
-                    obs=init_state,
-                    key=key,
-                    optimizer_key=optimizer_key,
-                    alpha=self.dynamics_model.alpha,
-                    bias_obs=self.dynamics_model.bias_obs,
-                    bias_act=self.dynamics_model.bias_act,
-                    bias_out=self.dynamics_model.bias_out,
-                    scale_obs=self.dynamics_model.scale_obs,
-                    scale_act=self.dynamics_model.scale_act,
-                    scale_out=self.dynamics_model.scale_out,
+                dim_state = obs.shape[-1]
+                obs = obs.reshape(-1, dim_state)
+                n_envs = obs.shape[0]
+                rollout_rng, optimizer_rng = jax.random.split(rng, 2)
+                rollout_rng = jax.random.split(rollout_rng, n_envs)
+                optimizer_rng = jax.random.split(optimizer_rng, n_envs)
+                action_sequence, best_reward = jax.vmap(optimize_for_eval, in_axes=(0, 0, 0))(
+                    obs,
+                    rollout_rng,
+                    optimizer_rng
                 )
-                return action_seq, reward
+                action = action_sequence[:, 0, ...]
+                if action.shape[0] == 1:
+                    action = action.squeeze(0)
+            else:
+                def optimize(init_state, key, optimizer_key):
 
-            n_envs = obs.shape[0]
-            rollout_rng, optimizer_rng = jax.random.split(rng, 2)
-            rollout_rng = jax.random.split(rollout_rng, n_envs)
-            optimizer_rng = jax.random.split(optimizer_rng, n_envs)
+                    action_seq, reward = self.policy_optimizer.optimize_for_exploration(
+                        dynamics_params=self.dynamics_model.model_params,
+                        obs=init_state,
+                        key=key,
+                        optimizer_key=optimizer_key,
+                        alpha=self.dynamics_model.alpha,
+                        bias_obs=self.dynamics_model.bias_obs,
+                        bias_act=self.dynamics_model.bias_act,
+                        bias_out=self.dynamics_model.bias_out,
+                        scale_obs=self.dynamics_model.scale_obs,
+                        scale_act=self.dynamics_model.scale_act,
+                        scale_out=self.dynamics_model.scale_out,
+                    )
+                    return action_seq, reward
 
-            action_sequence, best_reward = jax.vmap(optimize)(
-                obs,
-                rollout_rng,
-                optimizer_rng
-            )
-            action = action_sequence[:, 0, ...]
-        action = action[..., :self.action_space.shape[0]]
+                n_envs = obs.shape[0]
+                rollout_rng, optimizer_rng = jax.random.split(rng, 2)
+                rollout_rng = jax.random.split(rollout_rng, n_envs)
+                optimizer_rng = jax.random.split(optimizer_rng, n_envs)
+
+                action_sequence, best_reward = jax.vmap(optimize)(
+                    obs,
+                    rollout_rng,
+                    optimizer_rng
+                )
+                action = action_sequence[:, 0, ...]
+            action = action[..., :self.action_space.shape[0]]
         return action
 
     def train_step(self,

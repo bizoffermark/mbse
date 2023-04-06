@@ -235,6 +235,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                     scale_act: Union[jnp.ndarray, float] = 1.0,
                     scale_out: Union[jnp.ndarray, float] = 1.0,
                     sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
+                    horizon=self.horizon,
             ):
                 return self._train_single_agent(
                     rng=rng,
@@ -252,7 +253,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                     init_critic_opt_state=self.init_agent_opt_state['critic_opt_state'][-1],
                     sim_transition_ratio=self.sim_transitions_ratio,
                     transitions_per_update=self.transitions_per_update,
-                    horizon=self.horizon,
+                    horizon=horizon,
                     train_steps_per_model_update=self.train_steps_per_model_update,
                     agent_batch_size=self.agent_list[-1].batch_size,
                     agent_train_steps=self.agent_list[-1].train_steps,

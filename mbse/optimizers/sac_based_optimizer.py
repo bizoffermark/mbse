@@ -174,7 +174,6 @@ class SACOptimizer(DummyPolicyOptimizer):
                 model_idx: int,
                 rng,
                 true_obs: jax.Array,
-                horizon=self.horizon,
                 dynamics_params: Optional = None,
                 alpha: Union[jnp.ndarray, float] = 1.0,
                 bias_obs: Union[jnp.ndarray, float] = 0.0,
@@ -201,7 +200,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                 init_critic_opt_state=self.init_agent_opt_state['critic_opt_state'][model_idx],
                 sim_transition_ratio=self.sim_transitions_ratio,
                 transitions_per_update=self.transitions_per_update,
-                horizon=horizon,
+                horizon=self.horizon,
                 train_steps_per_model_update=self.train_steps_per_model_update,
                 agent_batch_size=self.agent_list[model_idx].batch_size,
                 agent_train_steps=self.agent_list[model_idx].train_steps,
@@ -235,7 +234,6 @@ class SACOptimizer(DummyPolicyOptimizer):
                     scale_act: Union[jnp.ndarray, float] = 1.0,
                     scale_out: Union[jnp.ndarray, float] = 1.0,
                     sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
-                    horizon=self.horizon,
             ):
                 return self._train_single_agent(
                     rng=rng,
@@ -253,7 +251,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                     init_critic_opt_state=self.init_agent_opt_state['critic_opt_state'][-1],
                     sim_transition_ratio=self.sim_transitions_ratio,
                     transitions_per_update=self.transitions_per_update,
-                    horizon=horizon,
+                    horizon=self.horizon,
                     train_steps_per_model_update=self.train_steps_per_model_update,
                     agent_batch_size=self.agent_list[-1].batch_size,
                     agent_train_steps=self.agent_list[-1].train_steps,
@@ -401,10 +399,7 @@ class SACOptimizer(DummyPolicyOptimizer):
               scale_act: Union[jnp.ndarray, float] = 1.0,
               scale_out: Union[jnp.ndarray, float] = 1.0,
               sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
-              horizon: int = None,
               ):
-        if horizon is None:
-            horizon = self.horizon
         agent_training_summary = []
         for i in range(len(self.agent_list)):
             agent_rng, rng = jax.random.split(rng, 2)
@@ -423,7 +418,6 @@ class SACOptimizer(DummyPolicyOptimizer):
                 scale_act=scale_act,
                 scale_out=scale_out,
                 sampling_idx=sampling_idx,
-                horizon=horizon
             )
             self.agent_list[i].alpha_params = alpha_params
             self.agent_list[i].alpha_opt_state = alpha_opt_state

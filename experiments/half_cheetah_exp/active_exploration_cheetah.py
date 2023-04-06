@@ -15,7 +15,6 @@ from typing import Optional
 from mbse.models.hucrl_model import HUCRLModel
 from mbse.models.environment_models.halfcheetah_reward_model import HalfCheetahReward
 from mbse.envs.wrappers.action_repeat import ActionRepeat
-from mbse.utils.vec_env.subproc_vec_env import SubprocVecEnv
 
 
 def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp_name: str,
@@ -63,7 +62,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     }
     from mbse.envs.pets_halfcheetah import HalfCheetahEnv
     env = make_vec_env(env_id=HalfCheetahEnv, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed,
-                       env_kwargs=env_kwargs_forward, vec_env_cls=SubprocVecEnv)
+                       env_kwargs=env_kwargs_forward)
     test_env_forward = make_vec_env(HalfCheetahEnv, wrapper_class=wrapper_cls_test, seed=seed,
                                     env_kwargs=env_kwargs_forward, n_envs=1)
     test_env_backward = make_vec_env(HalfCheetahEnv, wrapper_class=wrapper_cls_test, seed=seed,
@@ -71,12 +70,35 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     test_env = [test_env_forward, test_env_backward]
     features = [num_neurons] * hidden_layers
     video_prefix = ""
+
+    sac_kwargs = {
+        'discount': 0.99,
+        'init_ent_coef': 1.0,
+        'lr_actor': 0.0003,
+        'weight_decay_actor': 1e-5,
+        'lr_critic': 0.0003,
+        'weight_decay_critic': 1e-5,
+        'lr_alpha': 0.0003,
+        'weight_decay_alpha': 0.0,
+        'actor_features': [256, 256],
+        'critic_features': [256, 256],
+        'scale_reward': 1.0,
+        'tune_entropy_coef': True,
+        'tau': 0.005,
+        'batch_size': 256,
+        'train_steps': 1200,
+    }
+
     optimizer_kwargs = {
         'num_samples': num_samples,
         'num_elites': num_elites,
         'num_steps': num_steps,
-        'alpha': alpha,
+        'train_steps_per_model_update': 50,
+        'transitions_per_update': 1000,
+        'sac_kwargs': sac_kwargs,
+        'sim_transitions_ratio': 0.0,
     }
+
     if exploration_strategy == 'Mean':
         beta = 0.0
         video_prefix += 'Mean'
@@ -326,7 +348,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_envs', type=int, default=1)
 
     # optimizer experiment args
-    parser.add_argument('--optimizer_type', type=str, default='TraJaxTO')
+    parser.add_argument('--optimizer_type', type=str, default='SacOpt')
     parser.add_argument('--num_samples', type=int, default=500)
     parser.add_argument('--num_elites', type=int, default=50)
     parser.add_argument('--num_steps', type=int, default=5)
@@ -352,7 +374,7 @@ if __name__ == '__main__':
     parser.add_argument('--eval_freq', type=int, default=50)
     parser.add_argument('--total_train_steps', type=int, default=10000)
     parser.add_argument('--buffer_size', type=int, default=1000000)
-    parser.add_argument('--exploration_steps', type=int, default=0)
+    parser.add_argument('--exploration_steps', type=int, default=1000)
     parser.add_argument('--eval_episodes', type=int, default=1)
     parser.add_argument('--train_freq', type=int, default=1)
     parser.add_argument('--train_steps', type=int, default=5000)

@@ -9,7 +9,7 @@ from mbse.utils.utils import sample_trajectories
 import functools
 from mbse.optimizers.dummy_policy_optimizer import DummyPolicyOptimizer
 from mbse.models.active_learning_model import ActiveLearningHUCRLModel, ActiveLearningPETSModel
-
+EPS = 1e-6
 
 @functools.partial(
     jax.jit, static_argnums=(0, 2, 4)
@@ -127,14 +127,23 @@ class SACOptimizer(DummyPolicyOptimizer):
         self.action_dim = action_dim
         self.train_steps_per_model_update = train_steps_per_model_update
         self.sim_transitions_ratio = sim_transitions_ratio
+        actor_bias_obs = jnp.zeros(obs_dim)
+        actor_scale_obs = jnp.ones_like(actor_bias_obs)
+        self.actor_normalizers = {
+            'actor_bias_obs': [actor_bias_obs for agent in self.agent_list],
+            'actor_scale_obs': [actor_scale_obs for agent in self.agent_list],
+        }
         self._init_fn()
 
     def get_action_for_eval(self, obs: jax.Array, rng, agent_idx: int):
         policy = self.agent_list[agent_idx].get_eval_action
         actor_params = self.agent_list[agent_idx].actor_params
+        actor_bias_obs = self.actor_normalizers['actor_bias_obs'][agent_idx]
+        actor_scale_obs = self.actor_normalizers['actor_scale_obs'][agent_idx]
+        normalized_obs = (obs - actor_bias_obs)/(actor_scale_obs + EPS)
         action = policy(
             actor_params=actor_params,
-            obs=obs,
+            obs=normalized_obs,
             rng=rng,
         )
         return action
@@ -146,17 +155,23 @@ class SACOptimizer(DummyPolicyOptimizer):
         if self.active_exploration_agent:
             policy = self.agent_list[-1].get_action
             actor_params = self.agent_list[-1].actor_params
+            actor_bias_obs = self.actor_normalizers['actor_bias_obs'][-1]
+            actor_scale_obs = self.actor_normalizers['actor_scale_obs'][-1]
+            normalized_obs = (obs - actor_bias_obs) / (actor_scale_obs + EPS)
             action = policy(
                 actor_params=actor_params,
-                obs=obs,
+                obs=normalized_obs,
                 rng=rng,
             )
         else:
             policy = self.agent_list[0].get_action
             actor_params = self.agent_list[0].actor_params
+            actor_bias_obs = self.actor_normalizers['actor_bias_obs'][0]
+            actor_scale_obs = self.actor_normalizers['actor_scale_obs'][0]
+            normalized_obs = (obs - actor_bias_obs) / (actor_scale_obs + EPS)
             action = policy(
                 actor_params=actor_params,
-                obs=obs,
+                obs=normalized_obs,
                 rng=rng,
             )
         return action
@@ -384,8 +399,10 @@ class SACOptimizer(DummyPolicyOptimizer):
                 critic_opt_state = carry[7]
                 summary = carry[8]
                 summaries.append(summary)
+        actor_bias_obs = simulation_buffer.state_normalizer.mean
+        actor_scale_obs = simulation_buffer.state_normalizer.std
         return alpha_params, alpha_opt_state, actor_params, actor_opt_state, critic_params, target_critic_params, \
-            critic_opt_state, summaries
+            critic_opt_state, summaries, actor_bias_obs, actor_scale_obs
 
     def train(self,
               rng,
@@ -406,7 +423,7 @@ class SACOptimizer(DummyPolicyOptimizer):
             true_obs = buffer.obs[:buffer.size]
             train_agent_fn = self.train_agent_fns[i]
             (alpha_params, alpha_opt_state, actor_params, actor_opt_state, critic_params, target_critic_params,
-             critic_opt_state, summaries) = train_agent_fn(
+             critic_opt_state, summaries, actor_bias_obs, actor_scale_obs) = train_agent_fn(
                 rng=rng,
                 true_obs=true_obs,
                 dynamics_params=dynamics_params,
@@ -426,6 +443,8 @@ class SACOptimizer(DummyPolicyOptimizer):
             self.agent_list[i].critic_params = critic_params
             self.agent_list[i].target_critic_params = target_critic_params
             self.agent_list[i].critic_opt_state = critic_opt_state
+            self.actor_normalizers['actor_bias_obs'][i] = actor_bias_obs
+            self.actor_normalizers['actor_scale_obs'][i] = actor_scale_obs
             agent_training_summary.append(summaries)
 
         return agent_training_summary

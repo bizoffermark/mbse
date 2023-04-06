@@ -140,7 +140,7 @@ class ReplayBuffer(object):
         end = self.current_ptr + size
         if end > self.max_size:
             idx_range = list(range(start, self.max_size))
-            idx_range += list(range(0, end-self.max_size))
+            idx_range += list(range(0, end - self.max_size))
         else:
             idx_range = list(range(start, end))
         self.obs[idx_range] = transition.obs
@@ -230,7 +230,7 @@ class JaxReplayBuffer(object):
         end = self.current_ptr + size
         if end > self.max_size:
             idx_range = jnp.arange(start=start, stop=self.max_size, step=1)
-            idx_range2 = jnp.arange(start=0, stop=end-self.max_size, step=1)
+            idx_range2 = jnp.arange(start=0, stop=end - self.max_size, step=1)
             idx_range = jnp.concatenate([idx_range.reshape(-1, 1), idx_range2.reshape(-1, 1)]).squeeze(1)
         else:
             idx_range = jnp.arange(start=start, stop=end, step=1)
@@ -280,6 +280,7 @@ class JaxReplayBuffer(object):
         self.reward_normalizer = JaxNormalizer((1,))
         self.next_state_normalizer = JaxNormalizer(self.obs_shape)
 
+
 class JaxNormalizer(object):
     def __init__(self, input_shape):
         self.mean = jnp.zeros(*input_shape)
@@ -291,9 +292,9 @@ class JaxNormalizer(object):
         total_size = new_size + self.size
         new_mean = (self.mean * self.size + jnp.sum(x, axis=0)) / total_size
         new_s_n = jnp.square(self.std) * self.size + jnp.sum(jnp.square(x - new_mean),
-                                                           axis=0
-                                                           ) + self.size * jnp.square(self.mean -
-                                                                                     new_mean)
+                                                             axis=0
+                                                             ) + self.size * jnp.square(self.mean -
+                                                                                        new_mean)
 
         new_var = new_s_n / total_size
         new_std = jnp.sqrt(new_var)
@@ -306,4 +307,3 @@ class JaxNormalizer(object):
 
     def inverse(self, x):
         return x * self.std + self.mean
-

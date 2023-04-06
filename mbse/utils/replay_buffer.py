@@ -239,16 +239,6 @@ class JaxReplayBuffer(object):
         self.next_obs = self.next_obs.at[idx_range].set(transition.next_obs)
         self.reward = self.reward.at[idx_range].set(transition.reward.reshape(-1, 1))
         self.done = self.done.at[idx_range].set(transition.done.reshape(-1, 1))
-        # self.obs[start:end] = transition.obs
-        # self.action[start:end] = transition.action
-        # self.next_obs[start:end] = transition.next_obs
-        # self.reward[start:end] = transition.reward.reshape(-1, 1)
-        # self.done[start:end] = transition.done.reshape(-1, 1)
-        # self.obs = self.obs.at[start:end].set(transition.obs)
-        # self.action = self.action.at[start:end].set(transition.action)
-        # self.next_obs = self.next_obs.at[start:end].set(transition.next_obs)
-        # self.reward = self.reward.at[start:end].set(transition.reward.reshape(-1, 1))
-        # self.done = self.done.at[start:end].set(transition.done.reshape(-1, 1))
         self.size = min(self.size + size, self.max_size)
         self.current_ptr = end % self.max_size
         if self.normalize:
@@ -285,7 +275,35 @@ class JaxReplayBuffer(object):
         self.reward = jnp.zeros((self.max_size, 1))
         self.done = jnp.zeros((self.max_size, 1))
 
-        self.state_normalizer = Normalizer(self.obs_shape)
-        self.action_normalizer = Normalizer(self.action_shape)
-        self.reward_normalizer = Normalizer((1,))
-        self.next_state_normalizer = Normalizer(self.obs_shape)
+        self.state_normalizer = JaxNormalizer(self.obs_shape)
+        self.action_normalizer = JaxNormalizer(self.action_shape)
+        self.reward_normalizer = JaxNormalizer((1,))
+        self.next_state_normalizer = JaxNormalizer(self.obs_shape)
+
+class JaxNormalizer(object):
+    def __init__(self, input_shape):
+        self.mean = jnp.zeros(*input_shape)
+        self.std = jnp.ones(*input_shape)
+        self.size = 0
+
+    def update(self, x):
+        new_size = x.shape[0]
+        total_size = new_size + self.size
+        new_mean = (self.mean * self.size + jnp.sum(x, axis=0)) / total_size
+        new_s_n = jnp.square(self.std) * self.size + jnp.sum(jnp.square(x - new_mean),
+                                                           axis=0
+                                                           ) + self.size * jnp.square(self.mean -
+                                                                                     new_mean)
+
+        new_var = new_s_n / total_size
+        new_std = jnp.sqrt(new_var)
+        self.mean = new_mean
+        self.std = jnp.maximum(new_std, jnp.ones_like(new_std) * EPS)
+        self.size = total_size
+
+    def normalize(self, x):
+        return (x - self.mean) / self.std
+
+    def inverse(self, x):
+        return x * self.std + self.mean
+

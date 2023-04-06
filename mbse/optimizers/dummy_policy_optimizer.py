@@ -5,4 +5,4 @@ class DummyPolicyOptimizer(object):
         return
 
     def train(self, *args, **kwargs):
-        return
+        return {}

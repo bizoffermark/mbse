@@ -123,6 +123,7 @@ class ModelBasedAgent(DummyAgent):
                 action = self.policy_optimizer.get_action_for_eval(obs=obs, rng=rng, agent_idx=eval_idx)
             else:
                 action = self.policy_optimizer.get_action_for_exploration(obs=obs, rng=rng)
+            action = action[..., :self.action_space.shape[0]]
         else:
             if eval:
                 def optimize_for_eval(init_state, key, optimizer_key):
@@ -240,6 +241,33 @@ class ModelBasedAgent(DummyAgent):
         if self.calibrate_model:
             alpha = carry[1]
         self.update_models(model_params=model_params, model_opt_state=model_opt_state, alpha=alpha)
+        if buffer.size > self.policy_optimizer.transitions_per_update and \
+                isinstance(self.policy_optimizer, SACOptimizer):
+            train_rng = carry[0]
+            policy_train_rng, train_rng = jax.random.split(train_rng, 2)
+            policy_agent_train_summary = self.policy_optimizer.train(
+                rng=policy_train_rng,
+                buffer=buffer,
+                dynamics_params=model_params,
+                alpha=alpha,
+                bias_obs=self.dynamics_model.bias_obs,
+                bias_act=self.dynamics_model.bias_act,
+                bias_out=self.dynamics_model.bias_out,
+                scale_obs=self.dynamics_model.scale_obs,
+                scale_act=self.dynamics_model.scale_act,
+                scale_out=self.dynamics_model.scale_out,
+            )
+            if log_results:
+                for i in range(len(self.policy_optimizer.agent_list)):
+                    for j in range(self.policy_optimizer.train_steps_per_model_update):
+                        summary = policy_agent_train_summary[i][j]
+                        summary_dict = summary.dict()
+                        summary_relabeled_dict = {}
+                        for key, value in summary_dict.items():
+                            summary_relabeled_dict[key + '_agent_' + str(i)] = value
+                        wandb.log(
+                            summary_relabeled_dict
+                        )
         return total_train_steps
 
     def set_transforms(self,

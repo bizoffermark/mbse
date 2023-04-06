@@ -30,11 +30,33 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
 
     """ Environment """
     # from jax.config import config
+    sac_kwargs = {
+        'discount': 0.99,
+        'init_ent_coef': 1.0,
+        'lr_actor': 0.001,
+        'weight_decay_actor': 1e-5,
+        'lr_critic': 0.001,
+        'weight_decay_critic': 1e-5,
+        'lr_alpha': 0.0005,
+        'weight_decay_alpha': 0.0,
+        'actor_features': [64, 64],
+        'critic_features': [256, 256],
+        'scale_reward': 1,
+        'tune_entropy_coef': True,
+        'tau': 0.005,
+        'batch_size': 128,
+        'train_steps': 350,
+    }
+
     optimizer_kwargs = {
         'num_samples': num_samples,
         'num_elites': num_elites,
         'num_steps': num_steps,
+        'train_steps_per_model_update': 10,
+        'transitions_per_update': 30,
+        'sac_kwargs': sac_kwargs,
     }
+
 
     # config.update("jax_log_compiles", 1)
     wrapper_cls = lambda x: RescaleAction(
@@ -253,7 +275,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_envs', type=int, default=5)
 
     # optimizer experiment args
-    parser.add_argument('--optimizer_type', type=str, default='TraJaxTO')
+    parser.add_argument('--optimizer_type', type=str, default='SacOpt')
     parser.add_argument('--num_samples', type=int, default=500)
     parser.add_argument('--num_elites', type=int, default=50)
     parser.add_argument('--num_steps', type=int, default=10)

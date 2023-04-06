@@ -98,14 +98,15 @@ sac_kwargs = {
     'tune_entropy_coef': True,
     'tau': 0.005,
     'batch_size': 128,
-    'train_steps': 300,
+    'train_steps': 350,
 }
 
 policy_optimizer = SACOptimizer(
     dynamics_model_list=dynamics_model_list,
     horizon=horizon,
     action_dim=(1,),
-    train_steps_per_model_update=50,
+    train_steps_per_model_update=10,
+    transitions_per_update=30,
     sac_kwargs=sac_kwargs
 )
 
@@ -130,10 +131,25 @@ obs, _ = env.reset()
 #    action = policy_optimizer.get_action(obs=obs, rng=rng)
 #    obs, reward, terminate, truncate, info = env.step(action)
 #    env.render()
-policy_optimizer.train(
+train_summary = policy_optimizer.train(
     rng=train_rng,
     buffer=buffer,
 )
+import wandb
+wandb.init(
+    project="sac_opt_test"
+)
+for i in range(len(policy_optimizer.agent_list)):
+    for j in range(policy_optimizer.train_steps_per_model_update):
+        summary = train_summary[i][j]
+        summary_dict = summary.dict()
+        summary_relabeled_dict = {}
+        for key, value in summary_dict.items():
+            summary_relabeled_dict[key + '_agent_' + str(i)] = value
+        wandb.log(
+            summary_relabeled_dict
+        )
+
 obs, _ = env.reset()
 actor_rng, rng = jax.random.split(rng, 2)
 time_stamps = []

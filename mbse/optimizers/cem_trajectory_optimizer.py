@@ -13,14 +13,17 @@ class CemTO(DummyPolicyOptimizer):
                  action_dim: tuple,
                  dynamics_model_list: list,
                  n_particles: int = 10,
-                 *cem_args,
-                 **cem_kwargs
+                 cem_kwargs=None,
+                 *args,
+                 **kwargs,
                  ):
-        super().__init__()
+        super().__init__(*args, **kwargs)
         cem_action_dim = (horizon,) + action_dim
         self.horizon = horizon
         self.n_particles = n_particles
-        self.optimizer = CrossEntropyOptimizer(action_dim=cem_action_dim, *cem_args, **cem_kwargs)
+        if cem_kwargs is None:
+            cem_kwargs = {}
+        self.optimizer = CrossEntropyOptimizer(action_dim=cem_action_dim, **cem_kwargs)
         assert isinstance(dynamics_model_list, list)
         self.dynamics_model_list = dynamics_model_list
         self._init_fn()

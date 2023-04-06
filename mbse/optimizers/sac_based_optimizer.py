@@ -79,8 +79,10 @@ class SACOptimizer(DummyPolicyOptimizer):
                  normalize: bool = False,
                  action_normalize: bool = False,
                  sac_kwargs: Optional[dict] = None,
+                 *args,
+                 **kwargs,
                  ):
-        super().__init__()
+        super().__init__(*args, **kwargs)
         assert isinstance(dynamics_model_list, list)
         self.dynamics_model_list = dynamics_model_list
         obs_dim = self.dynamics_model.obs_dim
@@ -101,7 +103,6 @@ class SACOptimizer(DummyPolicyOptimizer):
             self.agent_list = [SACAgent(
                 action_space=dummy_act_space,
                 observation_space=dummy_obs_space,
-                **sac_kwargs,
             ) for model in self.dynamics_model_list]
 
         self.init_agent_params = {
@@ -243,18 +244,18 @@ class SACOptimizer(DummyPolicyOptimizer):
                     agent_train_fn=self.agent_list[-1].step,
                     sim_buffer_kwargs=sim_buffer_kwargs,
                     init_alpha_params=self.init_agent_params['alpha_params'][-1],
-                    init_alpha_opt_state=self.init_agent_params['init_alpha_opt_state'][-1],
-                    init_actor_params=self.init_agent_params['init_actor_params'][-1],
-                    init_actor_opt_state=self.init_agent_params['init_actor_opt_state'][-1],
-                    init_critic_params=self.init_agent_params['init_critic_params'][-1],
-                    init_target_critic_params=self.init_agent_params['init_target_critic_params'][-1],
-                    init_critic_opt_state=self.init_agent_params['init_critic_opt_state'][-1],
+                    init_alpha_opt_state=self.init_agent_opt_state['alpha_opt_state'][-1],
+                    init_actor_params=self.init_agent_params['actor_params'][-1],
+                    init_actor_opt_state=self.init_agent_opt_state['actor_opt_state'][-1],
+                    init_critic_params=self.init_agent_params['critic_params'][-1],
+                    init_target_critic_params=self.init_agent_params['target_critic_params'][-1],
+                    init_critic_opt_state=self.init_agent_opt_state['critic_opt_state'][-1],
                     sim_transition_ratio=self.sim_transitions_ratio,
                     transitions_per_update=self.transitions_per_update,
                     horizon=self.horizon,
                     train_steps_per_model_update=self.train_steps_per_model_update,
                     agent_batch_size=self.agent_list[-1].batch_size,
-                    agent_train_steps=self.agent_list[-1].agent_train_steps,
+                    agent_train_steps=self.agent_list[-1].train_steps,
                     dynamics_params=dynamics_params,
                     alpha=alpha,
                     bias_obs=bias_obs,
@@ -397,9 +398,8 @@ class SACOptimizer(DummyPolicyOptimizer):
               scale_act: Union[jnp.ndarray, float] = 1.0,
               scale_out: Union[jnp.ndarray, float] = 1.0,
               sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
-              validate: bool = True,
-              log_results: bool = True,
               ):
+        agent_training_summary = []
         for i in range(len(self.agent_list)):
             agent_rng, rng = jax.random.split(rng, 2)
             true_obs = buffer.obs[:buffer.size]
@@ -425,6 +425,9 @@ class SACOptimizer(DummyPolicyOptimizer):
             self.agent_list[i].critic_params = critic_params
             self.agent_list[i].target_critic_params = target_critic_params
             self.agent_list[i].critic_opt_state = critic_opt_state
+            agent_training_summary.append(summaries)
+
+        return agent_training_summary
 
     @property
     def dynamics_model(self):

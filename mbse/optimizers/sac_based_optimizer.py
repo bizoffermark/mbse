@@ -55,7 +55,6 @@ def _simulate_dynamics(horizon: int,
     def flatten(arr):
         new_arr = arr.reshape(-1, arr.shape[-1])
         return new_arr
-
     transitions = Transition(
         obs=flatten(transitions.obs),
         action=flatten(transitions.action),
@@ -76,7 +75,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                  simulated_buffer_size: int = 1000000,
                  train_steps_per_model_update: int = 20,
                  sim_transitions_ratio: float = 0.5,
-                 normalize: bool = False,
+                 normalize: bool = True,
                  action_normalize: bool = False,
                  sac_kwargs: Optional[dict] = None,
                  *args,
@@ -175,6 +174,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                 model_idx: int,
                 rng,
                 true_obs: jax.Array,
+                horizon=self.horizon,
                 dynamics_params: Optional = None,
                 alpha: Union[jnp.ndarray, float] = 1.0,
                 bias_obs: Union[jnp.ndarray, float] = 0.0,
@@ -201,7 +201,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                 init_critic_opt_state=self.init_agent_opt_state['critic_opt_state'][model_idx],
                 sim_transition_ratio=self.sim_transitions_ratio,
                 transitions_per_update=self.transitions_per_update,
-                horizon=self.horizon,
+                horizon=horizon,
                 train_steps_per_model_update=self.train_steps_per_model_update,
                 agent_batch_size=self.agent_list[model_idx].batch_size,
                 agent_train_steps=self.agent_list[model_idx].train_steps,
@@ -324,8 +324,10 @@ class SACOptimizer(DummyPolicyOptimizer):
                 true_buffer_rng, sim_buffer_rng = jax.random.split(buffer_rng, 2)
                 ind = jax.random.randint(true_buffer_rng, (batch_true_buffer,), 0, true_obs.shape[0])
                 true_obs_sample = true_obs[ind]
-                sim_transitions = simulation_buffer.sample(sim_buffer_rng, batch_sim_buffer)
-                obs = jnp.concatenate([true_obs_sample, sim_transitions.obs], axis=0)
+                sim_obs = simulation_buffer.obs[simulation_buffer.size]
+                ind = jax.random.randint(sim_buffer_rng, (batch_sim_buffer,), 0, sim_obs.shape[0])
+                sim_obs_sample = sim_obs[ind]
+                obs = jnp.concatenate([true_obs_sample, sim_obs_sample], axis=0)
             else:
                 ind = jax.random.randint(buffer_rng, (batch_true_buffer,), 0, true_obs.shape[0])
                 obs = true_obs[ind]
@@ -398,7 +400,10 @@ class SACOptimizer(DummyPolicyOptimizer):
               scale_act: Union[jnp.ndarray, float] = 1.0,
               scale_out: Union[jnp.ndarray, float] = 1.0,
               sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
+              horizon: int = None,
               ):
+        if horizon is None:
+            horizon = self.horizon
         agent_training_summary = []
         for i in range(len(self.agent_list)):
             agent_rng, rng = jax.random.split(rng, 2)
@@ -417,6 +422,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                 scale_act=scale_act,
                 scale_out=scale_out,
                 sampling_idx=sampling_idx,
+                horizon=horizon
             )
             self.agent_list[i].alpha_params = alpha_params
             self.agent_list[i].alpha_opt_state = alpha_opt_state

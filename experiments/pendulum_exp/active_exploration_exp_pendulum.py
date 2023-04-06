@@ -52,9 +52,10 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         'num_samples': num_samples,
         'num_elites': num_elites,
         'num_steps': num_steps,
-        'train_steps_per_model_update': 10,
-        'transitions_per_update': 30,
+        'train_steps_per_model_update': 20,
+        'transitions_per_update': 50,
         'sac_kwargs': sac_kwargs,
+        'sim_transitions_ratio': 0.0,
     }
 
 

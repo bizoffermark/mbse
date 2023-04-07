@@ -321,4 +321,4 @@ class ModelBasedAgent(DummyAgent):
 
     @property
     def update_optimizer(self):
-        self.update_steps >= self.start_optimizer_update
+        return self.update_steps >= self.start_optimizer_update

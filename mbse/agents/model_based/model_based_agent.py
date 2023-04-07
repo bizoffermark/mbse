@@ -31,6 +31,7 @@ class ModelBasedAgent(DummyAgent):
             calibrate_model: bool = True,
             init_function: bool = True,
             optimizer_kwargs: Optional[Dict[str, Any]] = None,
+            start_optimizer_update: int = 0,
             *args,
             **kwargs,
     ):
@@ -75,6 +76,8 @@ class ModelBasedAgent(DummyAgent):
         self.n_particles = n_particles
         self.reset_model = reset_model
         self.calibrate_model = calibrate_model
+        self.start_optimizer_update = start_optimizer_update
+        self.update_steps = 0
         if init_function:
             self._init_fn()
 
@@ -200,6 +203,7 @@ class ModelBasedAgent(DummyAgent):
             total_train_steps = math.ceil(buffer.size * self.num_epochs / self.batch_size)
         else:
             total_train_steps = self.train_steps
+        self.update_steps += 1
         total_train_steps = min(total_train_steps, self.max_train_steps)
         train_loops = math.ceil(total_train_steps / max_train_steps_per_iter)
         train_steps = min(max_train_steps_per_iter, total_train_steps)
@@ -241,7 +245,7 @@ class ModelBasedAgent(DummyAgent):
         if self.calibrate_model:
             alpha = carry[1]
         self.update_models(model_params=model_params, model_opt_state=model_opt_state, alpha=alpha)
-        if buffer.size > self.policy_optimizer.transitions_per_update and \
+        if (buffer.size > self.policy_optimizer.transitions_per_update and self.update_optimizer) and \
                 isinstance(self.policy_optimizer, SACOptimizer):
             train_rng = carry[0]
             policy_train_rng, train_rng = jax.random.split(train_rng, 2)
@@ -314,3 +318,7 @@ class ModelBasedAgent(DummyAgent):
     @property
     def dynamics_model(self):
         return self.dynamics_model_list[0]
+
+    @property
+    def update_optimizer(self):
+        self.update_steps >= self.start_optimizer_update

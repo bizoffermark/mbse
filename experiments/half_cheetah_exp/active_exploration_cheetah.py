@@ -79,14 +79,14 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         'lr_critic': 0.0003,
         'weight_decay_critic': 1e-5,
         'lr_alpha': 0.0003,
-        'weight_decay_alpha': 0.0,
+        'weight_decay_alpha': 1e-5,
         'actor_features': [256, 256],
         'critic_features': [256, 256],
         'scale_reward': 1.0,
         'tune_entropy_coef': True,
         'tau': 0.005,
         'batch_size': 256,
-        'train_steps': 1200,
+        'train_steps': 250,
     }
 
     optimizer_kwargs = {
@@ -193,19 +193,20 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         video_prefix += 'Optimistic'
 
     agent = ModelBasedAgent(
-                train_steps=train_steps,
-                batch_size=batch_size,
-                max_train_steps=max_train_steps,
-                num_epochs=num_epochs,
-                action_space=env.action_space,
-                observation_space=env.observation_space,
-                dynamics_model=dynamics_model,
-                n_particles=n_particles,
-                reset_model=reset_model,
-                policy_optimizer_name=optimizer_type,
-                horizon=horizon,
-                optimizer_kwargs=optimizer_kwargs,
-        )
+        train_steps=train_steps,
+        batch_size=batch_size,
+        max_train_steps=max_train_steps,
+        num_epochs=num_epochs,
+        action_space=env.action_space,
+        observation_space=env.observation_space,
+        dynamics_model=dynamics_model,
+        n_particles=n_particles,
+        reset_model=reset_model,
+        policy_optimizer_name=optimizer_type,
+        horizon=horizon,
+        optimizer_kwargs=optimizer_kwargs,
+        start_optimizer_update=10
+    )
 
     USE_WANDB = use_wandb
     uniform_exploration = False

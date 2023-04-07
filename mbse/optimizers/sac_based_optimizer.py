@@ -9,7 +9,9 @@ from mbse.utils.utils import sample_trajectories
 import functools
 from mbse.optimizers.dummy_policy_optimizer import DummyPolicyOptimizer
 from mbse.models.active_learning_model import ActiveLearningHUCRLModel, ActiveLearningPETSModel
+
 EPS = 1e-6
+
 
 @functools.partial(
     jax.jit, static_argnums=(0, 2, 4)
@@ -55,6 +57,7 @@ def _simulate_dynamics(horizon: int,
     def flatten(arr):
         new_arr = arr.reshape(-1, arr.shape[-1])
         return new_arr
+
     transitions = Transition(
         obs=flatten(transitions.obs),
         action=flatten(transitions.action),
@@ -78,6 +81,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                  normalize: bool = True,
                  action_normalize: bool = False,
                  sac_kwargs: Optional[dict] = None,
+                 reset_actor_params: bool = False,
                  *args,
                  **kwargs,
                  ):
@@ -133,6 +137,7 @@ class SACOptimizer(DummyPolicyOptimizer):
             'actor_bias_obs': [actor_bias_obs for agent in self.agent_list],
             'actor_scale_obs': [actor_scale_obs for agent in self.agent_list],
         }
+        self.reset_actor_params = reset_actor_params
         self._init_fn()
 
     def get_action_for_eval(self, obs: jax.Array, rng, agent_idx: int):
@@ -140,7 +145,7 @@ class SACOptimizer(DummyPolicyOptimizer):
         actor_params = self.agent_list[agent_idx].actor_params
         actor_bias_obs = self.actor_normalizers['actor_bias_obs'][agent_idx]
         actor_scale_obs = self.actor_normalizers['actor_scale_obs'][agent_idx]
-        normalized_obs = (obs - actor_bias_obs)/(actor_scale_obs + EPS)
+        normalized_obs = (obs - actor_bias_obs) / (actor_scale_obs + EPS)
         action = policy(
             actor_params=actor_params,
             obs=normalized_obs,
@@ -189,6 +194,13 @@ class SACOptimizer(DummyPolicyOptimizer):
                 model_idx: int,
                 rng,
                 true_obs: jax.Array,
+                init_alpha_params,
+                init_alpha_opt_state,
+                init_actor_params,
+                init_actor_opt_state,
+                init_critic_params,
+                init_target_critic_params,
+                init_critic_opt_state,
                 dynamics_params: Optional = None,
                 alpha: Union[jnp.ndarray, float] = 1.0,
                 bias_obs: Union[jnp.ndarray, float] = 0.0,
@@ -206,13 +218,13 @@ class SACOptimizer(DummyPolicyOptimizer):
                 policy=self.agent_list[model_idx].get_action,
                 agent_train_fn=self.agent_list[model_idx].step,
                 sim_buffer_kwargs=sim_buffer_kwargs,
-                init_alpha_params=self.init_agent_params['alpha_params'][model_idx],
-                init_alpha_opt_state=self.init_agent_opt_state['alpha_opt_state'][model_idx],
-                init_actor_params=self.init_agent_params['actor_params'][model_idx],
-                init_actor_opt_state=self.init_agent_opt_state['actor_opt_state'][model_idx],
-                init_critic_params=self.init_agent_params['critic_params'][model_idx],
-                init_target_critic_params=self.init_agent_params['target_critic_params'][model_idx],
-                init_critic_opt_state=self.init_agent_opt_state['critic_opt_state'][model_idx],
+                init_alpha_params=init_alpha_params,
+                init_alpha_opt_state=init_alpha_opt_state,
+                init_actor_params=init_actor_params,
+                init_actor_opt_state=init_actor_opt_state,
+                init_critic_params=init_critic_params,
+                init_target_critic_params=init_target_critic_params,
+                init_critic_opt_state=init_critic_opt_state,
                 sim_transition_ratio=self.sim_transitions_ratio,
                 transitions_per_update=self.transitions_per_update,
                 horizon=self.horizon,
@@ -240,6 +252,13 @@ class SACOptimizer(DummyPolicyOptimizer):
             def train_agent_active_exploration(
                     rng,
                     true_obs: jax.Array,
+                    init_alpha_params,
+                    init_alpha_opt_state,
+                    init_actor_params,
+                    init_actor_opt_state,
+                    init_critic_params,
+                    init_target_critic_params,
+                    init_critic_opt_state,
                     dynamics_params: Optional = None,
                     alpha: Union[jnp.ndarray, float] = 1.0,
                     bias_obs: Union[jnp.ndarray, float] = 0.0,
@@ -257,13 +276,13 @@ class SACOptimizer(DummyPolicyOptimizer):
                     policy=self.agent_list[-1].get_action,
                     agent_train_fn=self.agent_list[-1].step,
                     sim_buffer_kwargs=sim_buffer_kwargs,
-                    init_alpha_params=self.init_agent_params['alpha_params'][-1],
-                    init_alpha_opt_state=self.init_agent_opt_state['alpha_opt_state'][-1],
-                    init_actor_params=self.init_agent_params['actor_params'][-1],
-                    init_actor_opt_state=self.init_agent_opt_state['actor_opt_state'][-1],
-                    init_critic_params=self.init_agent_params['critic_params'][-1],
-                    init_target_critic_params=self.init_agent_params['target_critic_params'][-1],
-                    init_critic_opt_state=self.init_agent_opt_state['critic_opt_state'][-1],
+                    init_alpha_params=init_alpha_params,
+                    init_alpha_opt_state=init_alpha_opt_state,
+                    init_actor_params=init_actor_params,
+                    init_actor_opt_state=init_actor_opt_state,
+                    init_critic_params=init_critic_params,
+                    init_target_critic_params=init_target_critic_params,
+                    init_critic_opt_state=init_critic_opt_state,
                     sim_transition_ratio=self.sim_transitions_ratio,
                     transitions_per_update=self.transitions_per_update,
                     horizon=self.horizon,
@@ -422,9 +441,18 @@ class SACOptimizer(DummyPolicyOptimizer):
             agent_rng, rng = jax.random.split(rng, 2)
             true_obs = buffer.obs[:buffer.size]
             train_agent_fn = self.train_agent_fns[i]
+            init_alpha_params = self.init_agent_params['alpha_params'][i]
+            init_alpha_opt_state = self.init_agent_opt_state['alpha_opt_state'][i]
+            init_actor_params = self.init_agent_params['actor_params'][i]
+            init_actor_opt_state = self.init_agent_opt_state['actor_opt_state'][i]
+            init_critic_params = self.init_agent_params['critic_params'][i]
+            init_target_critic_params = self.init_agent_params['target_critic_params'][i]
+            init_critic_opt_state = self.init_agent_opt_state['critic_opt_state'][i]
+            if not self.reset_actor_params:
+                init_actor_params = self.agent_list[i].actor_params
             (alpha_params, alpha_opt_state, actor_params, actor_opt_state, critic_params, target_critic_params,
              critic_opt_state, summaries, actor_bias_obs, actor_scale_obs) = train_agent_fn(
-                rng=rng,
+                rng=agent_rng,
                 true_obs=true_obs,
                 dynamics_params=dynamics_params,
                 alpha=alpha,
@@ -435,6 +463,13 @@ class SACOptimizer(DummyPolicyOptimizer):
                 scale_act=scale_act,
                 scale_out=scale_out,
                 sampling_idx=sampling_idx,
+                init_alpha_params=init_alpha_params,
+                init_alpha_opt_state=init_alpha_opt_state,
+                init_actor_params=init_actor_params,
+                init_actor_opt_state=init_actor_opt_state,
+                init_critic_params=init_critic_params,
+                init_target_critic_params=init_target_critic_params,
+                init_critic_opt_state=init_critic_opt_state,
             )
             self.agent_list[i].alpha_params = alpha_params
             self.agent_list[i].alpha_opt_state = alpha_opt_state

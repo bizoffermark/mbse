@@ -4,6 +4,7 @@ import optax
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
+from jax.tree_util import tree_map
 from jax import jit, vmap, random, value_and_grad
 from mbse.utils.network_utils import MLP, mse
 from mbse.utils.replay_buffer import ReplayBuffer, Transition
@@ -16,6 +17,14 @@ import wandb
 
 EPS = 1e-6
 ZERO = 0.0
+
+@jit
+def safe_clip_grads(grad_tree, max_norm=1e8):
+    """Clip gradients stored as a pytree of arrays to maximum norm `max_norm`."""
+    norm = optax.global_norm(grad_tree)
+    eps = 1e-9
+    normalize = lambda g: jnp.where(norm < max_norm, g, g * max_norm / (norm + eps))
+    return tree_map(normalize, grad_tree)
 
 
 # Perform Polyak averaging provided two network parameters and the averaging value tau.
@@ -143,6 +152,7 @@ def update_actor(
         return jnp.mean(actor_loss), log_l
 
     (loss, log_a), grads = value_and_grad(loss, has_aux=True)(actor_params)
+    grads = safe_clip_grads(grads)
     updates, new_actor_opt_state = actor_update_fn(grads, actor_opt_state, params=actor_params)
     new_actor_params = optax.apply_updates(actor_params, updates)
     grad_norm = optax.global_norm(grads)
@@ -168,6 +178,7 @@ def update_critic(
         return critic_loss, (q_loss, v_loss)
 
     (loss, aux), grads = value_and_grad(loss, has_aux=True)(critic_params)
+    grads = safe_clip_grads(grads)
     q_loss, v_loss = aux
     updates, new_critic_opt_state = critic_update_fn(grads, critic_opt_state, params=critic_params)
     new_critic_params = optax.apply_updates(critic_params, updates)
@@ -188,6 +199,7 @@ def update_alpha(log_alpha_fn, alpha_params, alpha_opt_state, alpha_update_fn, l
         return alpha_loss_fn(diff_entropy)
 
     loss, grads = value_and_grad(loss)(alpha_params)
+    grads = safe_clip_grads(grads)
     updates, new_alpha_opt_state = alpha_update_fn(grads, alpha_opt_state, params=alpha_params)
     new_alpha_params = optax.apply_updates(alpha_params, updates)
     grad_norm = optax.global_norm(grads)
@@ -465,7 +477,6 @@ class SACAgent(DummyAgent):
             train_rng, rng = jax.random.split(rng, 2)
             tran = transition.get_idx(idx)
 
-
             (
                 new_alpha_params,
                 new_alpha_opt_state,
@@ -500,7 +511,7 @@ class SACAgent(DummyAgent):
                 new_target_critic_params,
                 new_critic_opt_state,
                 summary,
-                idx+1,
+                idx + 1,
                 transition,
             ]
             outs = [summary]
@@ -628,10 +639,10 @@ class SACAgent(DummyAgent):
                    ):
 
         # @partial(jit, static_argnums=(0, 2))
-        #def sample_data(data_buffer, rng, batch_size):
+        # def sample_data(data_buffer, rng, batch_size):
         #    tran = data_buffer.sample(rng, batch_size=batch_size)
         #    return tran
-        transitions = buffer.sample(rng, batch_size=int(self.batch_size*self.train_steps))
+        transitions = buffer.sample(rng, batch_size=int(self.batch_size * self.train_steps))
         transitions = transitions.reshape(self.train_steps, self.batch_size)
 
         carry = [

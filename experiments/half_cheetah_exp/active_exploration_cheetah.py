@@ -86,15 +86,15 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         'tune_entropy_coef': True,
         'tau': 0.005,
         'batch_size': 256,
-        'train_steps': 250,
+        'train_steps': 150,
     }
 
     optimizer_kwargs = {
         'num_samples': num_samples,
         'num_elites': num_elites,
         'num_steps': num_steps,
-        'train_steps_per_model_update': 50,
-        'transitions_per_update': 1000,
+        'train_steps_per_model_update': 5,
+        'transitions_per_update': 2000,
         'sac_kwargs': sac_kwargs,
         'sim_transitions_ratio': 0.0,
     }
@@ -306,7 +306,7 @@ def main(args):
         normalize=args.normalize,
         action_normalize=args.action_normalize,
         validate=args.validate,
-        record_test_video=args.record_test_video,
+        record_test_video=False, #args.record_test_video,
         validation_buffer_size=args.validation_buffer_size,
         validation_batch_size=args.validation_batch_size,
         seed=args.seed,

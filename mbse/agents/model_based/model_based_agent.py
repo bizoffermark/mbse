@@ -262,9 +262,9 @@ class ModelBasedAgent(DummyAgent):
                 scale_out=self.dynamics_model.scale_out,
             )
             if log_results:
-                for i in range(len(self.policy_optimizer.agent_list)):
-                    for j in range(self.policy_optimizer.train_steps_per_model_update):
-                        summary = policy_agent_train_summary[i][j]
+                for j in range(self.policy_optimizer.train_steps_per_model_update):
+                    for i in range(len(self.policy_optimizer.agent_list)):
+                        summary = policy_agent_train_summary[j][i]
                         summary_dict = summary.dict()
                         summary_relabeled_dict = {}
                         for key, value in summary_dict.items():

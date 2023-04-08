@@ -8,7 +8,8 @@ from gym.wrappers.time_limit import TimeLimit
 from gym.wrappers.rescale_action import RescaleAction
 from mbse.utils.replay_buffer import ReplayBuffer, Transition
 from mbse.utils.vec_env.env_util import make_vec_env
-
+from jax.config import config
+config.update("jax_log_compiles", 1)
 
 def rollout_random_policy(env, num_steps, rng):
     rng, reset_rng = jax.random.split(rng, 2)
@@ -77,7 +78,7 @@ wrapper_cls = lambda x: RescaleAction(
 )
 env = wrapper_cls(CustomPendulumEnv(render_mode='human'))
 true_dynamics = PendulumDynamicsModel(env)
-dynamics_model_list = [true_dynamics]
+dynamics_model_list = [true_dynamics, true_dynamics, true_dynamics]
 
 horizon = 20
 
@@ -105,8 +106,8 @@ policy_optimizer = SACOptimizer(
     dynamics_model_list=dynamics_model_list,
     horizon=horizon,
     action_dim=(1,),
-    train_steps_per_model_update=10,
-    transitions_per_update=30,
+    train_steps_per_model_update=15,
+    transitions_per_update=50,
     sac_kwargs=sac_kwargs
 )
 
@@ -131,42 +132,42 @@ obs, _ = env.reset()
 #    action = policy_optimizer.get_action(obs=obs, rng=rng)
 #    obs, reward, terminate, truncate, info = env.step(action)
 #    env.render()
-train_summary = policy_optimizer.train(
-    rng=train_rng,
-    buffer=buffer,
-)
-import wandb
-wandb.init(
-    project="sac_opt_test"
-)
-for i in range(len(policy_optimizer.agent_list)):
-    for j in range(policy_optimizer.train_steps_per_model_update):
-        summary = train_summary[i][j]
-        summary_dict = summary.dict()
-        summary_relabeled_dict = {}
-        for key, value in summary_dict.items():
-            summary_relabeled_dict[key + '_agent_' + str(i)] = value
-        wandb.log(
-            summary_relabeled_dict
-        )
 
-obs, _ = env.reset()
-actor_rng, rng = jax.random.split(rng, 2)
-time_stamps = []
-for i in range(200):
-    start_time = time.time()
-    action = policy_optimizer.get_action(obs=obs, rng=rng)
-    time_taken = time.time() - start_time
-    if i == 0:
-        print("Time taken", time_taken)
-    else:
-        time_stamps.append(time_taken)
+# import wandb
+# wandb.init(
+#     project="sac_opt_test"
+# )
+# for i in range(len(policy_optimizer.agent_list)):
+#     for j in range(policy_optimizer.train_steps_per_model_update):
+#         summary = train_summary[i][j]
+#         summary_dict = summary.dict()
+#         summary_relabeled_dict = {}
+#         for key, value in summary_dict.items():
+#             summary_relabeled_dict[key + '_agent_' + str(i)] = value
+#         wandb.log(
+#             summary_relabeled_dict
+#         )
+for run in range(5):
+    t = time.time()
+    train_summary = policy_optimizer.train(
+        rng=train_rng,
+        buffer=buffer,
+    )
+    print("time taken for optimization ", time.time() - t)
+    for j in range(len(dynamics_model_list)):
+        obs, _ = env.reset()
+        actor_rng, rng = jax.random.split(rng, 2)
+        time_stamps = []
+        for i in range(200):
+            start_time = time.time()
+            action = policy_optimizer.get_action_for_eval(obs=obs, rng=rng, agent_idx=j)
+            time_taken = time.time() - start_time
+            if i == 0:
+                print("Time taken", time_taken)
+            else:
+                time_stamps.append(time_taken)
 
-    obs, reward, terminate, truncate, info = env.step(action)
+            obs, reward, terminate, truncate, info = env.step(action)
 
-time_stamps = np.asarray(time_taken)
-print("avergage time taken", time_stamps.mean())
-# start_time = time.time()
-# action_sequence, returns = policy_optimizer.optimize(obs=initial_state, dynamics_params=None,
-#                                                      initial_actions=initial_actions)
-# print("Time taken: ", time.time() - start_time)
+        time_stamps = np.asarray(time_taken)
+        print("avergage time taken", time_stamps.mean())

@@ -32,6 +32,7 @@ class ModelBasedAgent(DummyAgent):
             init_function: bool = True,
             optimizer_kwargs: Optional[Dict[str, Any]] = None,
             start_optimizer_update: int = 0,
+            log_full_training: bool = False,
             log_agent_training: bool = False,
             *args,
             **kwargs,
@@ -80,6 +81,7 @@ class ModelBasedAgent(DummyAgent):
         self.start_optimizer_update = start_optimizer_update
         self.update_steps = 0
         self.log_agent_training = log_agent_training
+        self.log_full_training = log_full_training
         if init_function:
             self._init_fn()
 
@@ -242,8 +244,11 @@ class ModelBasedAgent(DummyAgent):
             alpha = carry[1]
             summary = outs[0].dict()
             if log_results:
-                for log_dict in summary:
-                    wandb.log(log_dict)
+                if self.log_full_training:
+                    for log_dict in summary:
+                        wandb.log(log_dict)
+                    else:
+                        wandb.log(summary[-1])
         if self.calibrate_model:
             alpha = carry[1]
         self.update_models(model_params=model_params, model_opt_state=model_opt_state, alpha=alpha)

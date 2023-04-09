@@ -327,7 +327,7 @@ class SACOptimizer(DummyPolicyOptimizer):
             critic_params = self.init_agent_params['critic_params'][j]
             target_critic_params = self.init_agent_params['target_critic_params'][j]
             critic_opt_state = self.init_agent_opt_state['critic_opt_state'][j]
-            if not self.reset_actor_params:
+            if not (self.reset_actor_params and self.is_active_exploration_agent(idx=j)):
                 actor_params = self.agent_list[j].actor_params
             alpha_params_list.append(alpha_params)
             alpha_opt_state_list.append(alpha_opt_state)
@@ -345,7 +345,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                 sim_buffer = simulation_buffers[j]
                 agent = self.agent_list[j]
                 evaluate_fn = self.dynamics_model_list[j].evaluate
-                if j == len(self.agent_list) - 1 and self.active_exploration_agent:
+                if self.is_active_exploration_agent(idx=j):
                     evaluate_fn = self.dynamics_model_list[j].evaluate_for_exploration
 
                 batch_sim_buffer = int(self.sim_transitions_ratio * self.transitions_per_update) * \
@@ -437,3 +437,6 @@ class SACOptimizer(DummyPolicyOptimizer):
     @property
     def dynamics_model(self):
         return self.dynamics_model_list[0]
+
+    def is_active_exploration_agent(self, idx):
+        return idx == len(self.agent_list)-1 and self.active_exploration_agent

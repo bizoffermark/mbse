@@ -74,11 +74,11 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     sac_kwargs = {
         'discount': 0.99,
         'init_ent_coef': 1.0,
-        'lr_actor': 0.0003,
+        'lr_actor': 0.0005,
         'weight_decay_actor': 1e-5,
-        'lr_critic': 0.0003,
+        'lr_critic': 0.0005,
         'weight_decay_critic': 1e-5,
-        'lr_alpha': 0.0003,
+        'lr_alpha': 0.0005,
         'weight_decay_alpha': 1e-5,
         'actor_features': [256, 256],
         'critic_features': [256, 256],
@@ -86,7 +86,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         'tune_entropy_coef': True,
         'tau': 0.005,
         'batch_size': 256,
-        'train_steps': 150,
+        'train_steps': 100,
     }
 
     optimizer_kwargs = {
@@ -94,9 +94,10 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         'num_elites': num_elites,
         'num_steps': num_steps,
         'train_steps_per_model_update': 5,
-        'transitions_per_update': 2000,
+        'transitions_per_update': 8000,
         'sac_kwargs': sac_kwargs,
         'sim_transitions_ratio': 0.0,
+        'reset_actor_params': True,
     }
 
     if exploration_strategy == 'Mean':

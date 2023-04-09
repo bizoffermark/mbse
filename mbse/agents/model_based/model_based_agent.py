@@ -32,6 +32,7 @@ class ModelBasedAgent(DummyAgent):
             init_function: bool = True,
             optimizer_kwargs: Optional[Dict[str, Any]] = None,
             start_optimizer_update: int = 0,
+            log_agent_training: bool = False,
             *args,
             **kwargs,
     ):
@@ -78,6 +79,7 @@ class ModelBasedAgent(DummyAgent):
         self.calibrate_model = calibrate_model
         self.start_optimizer_update = start_optimizer_update
         self.update_steps = 0
+        self.log_agent_training = log_agent_training
         if init_function:
             self._init_fn()
 
@@ -261,7 +263,7 @@ class ModelBasedAgent(DummyAgent):
                 scale_act=self.dynamics_model.scale_act,
                 scale_out=self.dynamics_model.scale_out,
             )
-            if log_results:
+            if log_results and self.log_agent_training:
                 for j in range(self.policy_optimizer.train_steps_per_model_update):
                     for i in range(len(self.policy_optimizer.agent_list)):
                         summary = policy_agent_train_summary[j][i]

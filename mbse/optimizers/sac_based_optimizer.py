@@ -67,6 +67,8 @@ def _simulate_dynamics(horizon: int,
                        scale_act: Union[jnp.ndarray, float] = 1.0,
                        scale_out: Union[jnp.ndarray, float] = 1.0,
                        sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
+                       policy_bias_obs: Union[jnp.ndarray, float] = 0.0,
+                       policy_scale_obs: Union[jnp.ndarray, float] = 1.0,
                        ):
     def sample_trajectories_for_state(state: jax.Array, sample_key):
         return sample_trajectories(
@@ -85,6 +87,8 @@ def _simulate_dynamics(horizon: int,
             scale_act=scale_act,
             scale_out=scale_out,
             sampling_idx=sampling_idx,
+            policy_bias_obs=policy_bias_obs,
+            policy_scale_obs=policy_scale_obs,
         )
 
     key = jax.random.split(key, obs.shape[0])
@@ -380,6 +384,8 @@ class SACOptimizer(DummyPolicyOptimizer):
                     scale_out=scale_out,
                     sampling_idx=sampling_idx,
                     horizon=self.horizon,
+                    policy_bias_obs=sim_buffer.state_normalizer.mean,
+                    policy_scale_obs=sim_buffer.state_normalizer.std,
                 )
                 simulation_buffers[j].add(transition=simulated_transitions)
                 actor_obs_bias.append(simulation_buffers[j].state_normalizer.mean)
@@ -439,4 +445,4 @@ class SACOptimizer(DummyPolicyOptimizer):
         return self.dynamics_model_list[0]
 
     def is_active_exploration_agent(self, idx):
-        return idx == len(self.agent_list)-1 and self.active_exploration_agent
+        return idx == len(self.agent_list) - 1 and self.active_exploration_agent

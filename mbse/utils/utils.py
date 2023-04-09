@@ -118,6 +118,8 @@ def sample_trajectories(
         scale_act: Union[jnp.ndarray, float] = 1.0,
         scale_out: Union[jnp.ndarray, float] = 1.0,
         sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
+        policy_bias_obs: Union[jnp.ndarray, float] = 0.0,
+        policy_scale_obs: Union[jnp.ndarray, float] = 1.0,
         # observations: Optional[jnp.ndarray] = None
 ) -> Transition:
     """
@@ -138,7 +140,8 @@ def sample_trajectories(
         obs = carry[1]
         if use_policy:
             seed, actor_seed = jax.random.split(seed, 2)
-            acs = policy(actor_params=actor_params, obs=jax.lax.stop_gradient(obs), rng=actor_seed)
+            normalized_obs = (jax.lax.stop_gradient(obs) - policy_bias_obs)/(policy_scale_obs + EPS)
+            acs = policy(actor_params=actor_params, obs=normalized_obs, rng=actor_seed)
         else:
             acs = ins[-1]
         model_seed = None

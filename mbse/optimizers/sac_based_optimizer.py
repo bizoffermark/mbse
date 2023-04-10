@@ -1,3 +1,5 @@
+import time
+
 import jax.random
 
 from mbse.agents.actor_critic.sac import SACAgent, SACModelSummary
@@ -272,11 +274,9 @@ class SACOptimizer(DummyPolicyOptimizer):
             critic_params,
             target_critic_params,
             critic_opt_state,
-            SACModelSummary(),
-            0,
-            sim_transitions,
         ]
-        carry, outs = jax.lax.scan(agent_train_fn, carry, xs=None, length=agent_train_steps)
+        ins = [sim_transitions]
+        carry, outs = jax.lax.scan(agent_train_fn, carry, ins, length=agent_train_steps)
         alpha_params = carry[1]
         alpha_opt_state = carry[2]
         actor_params = carry[3]
@@ -284,7 +284,7 @@ class SACOptimizer(DummyPolicyOptimizer):
         critic_params = carry[5]
         target_critic_params = carry[6]
         critic_opt_state = carry[7]
-        summary = carry[8]
+        summary = outs[-1]
         return alpha_params, alpha_opt_state, actor_params, actor_opt_state, critic_params, target_critic_params, \
             critic_opt_state, summary
 
@@ -323,6 +323,8 @@ class SACOptimizer(DummyPolicyOptimizer):
         critic_params_list = []
         target_critic_params_list = []
         critic_opt_state_list = []
+        actor_obs_bias = []
+        actor_obs_scale = []
         for j in range(len(self.agent_list)):
             alpha_params = self.init_agent_params['alpha_params'][j]
             alpha_opt_state = self.init_agent_opt_state['alpha_opt_state'][j]
@@ -331,8 +333,14 @@ class SACOptimizer(DummyPolicyOptimizer):
             critic_params = self.init_agent_params['critic_params'][j]
             target_critic_params = self.init_agent_params['target_critic_params'][j]
             critic_opt_state = self.init_agent_opt_state['critic_opt_state'][j]
-            if not (self.reset_actor_params and self.is_active_exploration_agent(idx=j)):
+            if not self.reset_actor_params and not self.is_active_exploration_agent(idx=j):
+                alpha_params = self.agent_list[j].alpha_params
                 actor_params = self.agent_list[j].actor_params
+                critic_params = self.agent_list[j].critic_params
+                target_critic_params = self.agent_list[j].target_critic_params
+                alpha_opt_state = self.agent_list[j].alpha_opt_state
+                actor_opt_state = self.agent_list[j].actor_opt_state
+                critic_opt_state = self.agent_list[j].critic_opt_state
             alpha_params_list.append(alpha_params)
             alpha_opt_state_list.append(alpha_opt_state)
             actor_params_list.append(actor_params)
@@ -340,6 +348,8 @@ class SACOptimizer(DummyPolicyOptimizer):
             critic_params_list.append(critic_params)
             target_critic_params_list.append(target_critic_params)
             critic_opt_state_list.append(critic_opt_state)
+            actor_obs_bias.append(self.actor_normalizers['actor_bias_obs'][j])
+            actor_obs_scale.append(self.actor_normalizers['actor_scale_obs'][j])
         agent_summary = []
         for i in range(self.train_steps_per_model_update):
             actor_obs_bias = []
@@ -396,7 +406,6 @@ class SACOptimizer(DummyPolicyOptimizer):
                                                                )
                 sim_transitions = sim_transitions.reshape(train_steps, batch_size)
                 transitions_list.append(sim_transitions)
-
             alpha_params = tree_stack(alpha_params_list, axis=0)
             alpha_opt_state = tree_stack(alpha_opt_state_list, axis=0)
             actor_params = tree_stack(actor_params_list, axis=0)

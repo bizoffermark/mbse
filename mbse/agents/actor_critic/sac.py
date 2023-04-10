@@ -1,10 +1,11 @@
+import time
+
 import numpy as np
 from typing import Sequence, Callable, Optional
 import optax
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
-from jax.tree_util import tree_map
 from jax import jit, vmap, random, value_and_grad
 from mbse.utils.network_utils import MLP, mse
 from mbse.utils.replay_buffer import ReplayBuffer, Transition
@@ -18,13 +19,14 @@ import wandb
 EPS = 1e-6
 ZERO = 0.0
 
+
 @jit
 def safe_clip_grads(grad_tree, max_norm=1e8):
     """Clip gradients stored as a pytree of arrays to maximum norm `max_norm`."""
     norm = optax.global_norm(grad_tree)
     eps = 1e-9
     normalize = lambda g: jnp.where(norm < max_norm, g, g * max_norm / (norm + eps))
-    return tree_map(normalize, grad_tree)
+    return jax.tree_util.tree_map(normalize, grad_tree)
 
 
 # Perform Polyak averaging provided two network parameters and the averaging value tau.
@@ -81,29 +83,42 @@ def get_soft_td_target(
     #    obs=next_obs,
     #    rng=next_rng,
     # )
-    current_action, current_log_a = get_squashed_log_prob(
+    # current_action, current_log_a = get_squashed_log_prob(
+    #    actor_fn=actor_fn,
+    #    params=actor_params,
+    #    obs=obs,
+    #    rng=rng,
+    # )
+
+    next_action, next_action_log_a = get_squashed_log_prob(
         actor_fn=actor_fn,
         params=actor_params,
-        obs=obs,
+        obs=next_obs,
         rng=rng,
     )
 
+    next_q1, next_q2 = critic_fn(critic_target_params, obs=next_obs, action=next_action)
+    next_q = jnp.minimum(next_q1, next_q2)
+    entropy_term = - alpha * next_action_log_a
+    next_q_target = next_q + entropy_term
+
     # Get predictions for both Q functions and take the min
-    _, _, target_v = critic_fn(critic_target_params, obs=next_obs,
-                               action=jnp.zeros_like(current_action))
-    target_v_term = target_v.mean()
-    target_q1, target_q2, _ = critic_fn(critic_params, obs=obs, action=current_action)
+    # _, _, target_v = critic_fn(critic_target_params, obs=next_obs,
+    #                           action=jnp.zeros_like(current_action))
+    # target_v_term = target_v.mean()
+    # target_q1, target_q2, _ = critic_fn(critic_params, obs=obs, action=current_action)
     # Soft target update
-    target_q = jnp.minimum(target_q1, target_q2)
+    # target_q = jnp.minimum(target_q1, target_q2)
 
-    entropy_term = - alpha * current_log_a
+    # entropy_term = - alpha * current_log_a
 
-    target_q_term = target_q.mean()
-    target_q = target_q + entropy_term
+    # target_q_term = target_q.mean()
+    # target_q = target_q + entropy_term
 
     # Td target = r_t + \gamma V_{t+1}
-    target_v = reward_scale * reward + not_done * discount * target_v
-    return target_v, target_q, target_v_term, target_q_term, entropy_term.mean()
+    target_v = reward_scale * reward + not_done * discount * next_q_target
+    target_v_term = target_v.mean()
+    return target_v, target_v_term, entropy_term.mean()
 
 
 # @partial(jit, static_argnums=(0, ))
@@ -146,7 +161,7 @@ def update_actor(
 ):
     def loss(params):
         action, log_l = get_squashed_log_prob(actor_fn, params, obs, rng)
-        q1, q2, _ = critic_fn(critic_params, obs=obs, action=action)
+        q1, q2 = critic_fn(critic_params, obs=obs, action=action)
         min_q = jnp.minimum(q1, q2)
         actor_loss = - min_q + alpha * log_l
         return jnp.mean(actor_loss), log_l
@@ -167,23 +182,21 @@ def update_critic(
         critic_opt_state,
         obs,
         action,
-        target_q,
         target_v,
 ):
     def loss(params):
-        q1, q2, v = critic_fn(params, obs, action)
+        q1, q2 = critic_fn(params, obs, action)
         q_loss = jnp.mean(0.5 * (mse(q1, target_v) + mse(q2, target_v)))
-        v_loss = 0.5 * jnp.mean(mse(v, target_q))
-        critic_loss = q_loss + v_loss
-        return critic_loss, (q_loss, v_loss)
+        # v_loss = 0.5 * jnp.mean(mse(v, target_q))
+        # critic_loss = q_loss + v_loss
+        return q_loss
 
-    (loss, aux), grads = value_and_grad(loss, has_aux=True)(critic_params)
+    loss, grads = value_and_grad(loss, has_aux=False)(critic_params)
     grads = safe_clip_grads(grads)
-    q_loss, v_loss = aux
     updates, new_critic_opt_state = critic_update_fn(grads, critic_opt_state, params=critic_params)
     new_critic_params = optax.apply_updates(critic_params, updates)
     grad_norm = optax.global_norm(grads)
-    return new_critic_params, new_critic_opt_state, loss, grad_norm, v_loss, q_loss
+    return new_critic_params, new_critic_opt_state, loss, grad_norm
 
 
 # @partial(jit, static_argnums=(0, 3))
@@ -211,15 +224,15 @@ class SACModelSummary:
     actor_loss: jnp.array = ZERO
     entropy: jnp.array = ZERO
     critic_loss: jnp.array = ZERO
-    v_loss: jnp.array = ZERO
-    q_loss: jnp.array = ZERO
+    # v_loss: jnp.array = ZERO
+    # q_loss: jnp.array = ZERO
     alpha_loss: jnp.array = ZERO
     log_alpha: jnp.array = ZERO
     actor_std: jnp.array = ZERO
     critic_grad_norm: jnp.array = ZERO
     actor_grad_norm: jnp.array = ZERO
     alpha_grad_norm: jnp.array = ZERO
-    target_q_term: jnp.array = ZERO
+    # target_q_term: jnp.array = ZERO
     target_v_term: jnp.array = ZERO
     entropy_term: jnp.array = ZERO
     max_reward: jnp.array = ZERO
@@ -231,14 +244,14 @@ class SACModelSummary:
             'entropy': self.entropy.item(),
             'actor_std': self.actor_std.item(),
             'critic_loss': self.critic_loss.item(),
-            'v_loss': self.v_loss.item(),
-            'q_loss': self.q_loss.item(),
+            # 'v_loss': self.v_loss.item(),
+            # 'q_loss': self.q_loss.item(),
             'alpha_loss': self.alpha_loss.item(),
             'log_alpha': self.log_alpha.item(),
             'critic_grad_norm': self.critic_grad_norm.item(),
             'actor_grad_norm': self.actor_grad_norm.item(),
             'alpha_grad_norm': self.alpha_grad_norm.item(),
-            'target_q_term': self.target_q_term.item(),
+            # 'target_q_term': self.target_q_term.item(),
             'target_v_term': self.target_v_term.item(),
             'entropy_term': self.entropy_term.item(),
             'max_reward': self.max_reward.item(),
@@ -284,11 +297,11 @@ class Critic(nn.Module):
         obs_action = jnp.concatenate((obs, action), -1)
         value_1 = critic_1(obs_action)
         value_2 = critic_2(obs_action)
-        value = MLP(
-            features=self.features,
-            output_dim=1,
-            non_linearity=self.non_linearity)
-        return value_1, value_2, value(obs)
+        # value = MLP(
+        #    features=self.features,
+        #    output_dim=1,
+        #    non_linearity=self.non_linearity)
+        return value_1, value_2  # value(obs)
 
 
 class ConstantModule(nn.Module):
@@ -420,7 +433,7 @@ class SACAgent(DummyAgent):
                                                   reward_scale=self.scale_reward,
                                               ))
 
-        self.update_critic = jax.jit(lambda critic_params, critic_opt_state, obs, action, target_q, target_v: \
+        self.update_critic = jax.jit(lambda critic_params, critic_opt_state, obs, action, target_v: \
                                          update_critic(
                                              critic_fn=self.critic.apply,
                                              critic_params=critic_params,
@@ -428,7 +441,6 @@ class SACAgent(DummyAgent):
                                              critic_update_fn=self.critic_optimizer.update,
                                              obs=obs,
                                              action=action,
-                                             target_q=target_q,
                                              target_v=target_v,
                                          ))
 
@@ -468,14 +480,12 @@ class SACAgent(DummyAgent):
             critic_params = carry[5]
             target_critic_params = carry[6]
             critic_opt_state = carry[7]
-            idx = carry[9]
-            transition = carry[10]
+            tran = ins[-1]
             # if use_observations:
             #  obs = ins[0]
             # else:
             #  obs = carry[1]
             train_rng, rng = jax.random.split(rng, 2)
-            tran = transition.get_idx(idx)
 
             (
                 new_alpha_params,
@@ -510,9 +520,6 @@ class SACAgent(DummyAgent):
                 new_critic_params,
                 new_target_critic_params,
                 new_critic_opt_state,
-                summary,
-                idx + 1,
-                transition,
             ]
             outs = [summary]
             return carry, outs
@@ -553,7 +560,7 @@ class SACAgent(DummyAgent):
             )
         )
         td_rng, target_q_rng = random.split(td_rng, 2)
-        target_v, target_q, target_v_term, target_q_term, entropy_term = \
+        target_v, target_v_term, entropy_term = \
             jax.lax.stop_gradient(
                 self.get_soft_td_target(
                     next_obs=tran.next_obs,
@@ -567,17 +574,17 @@ class SACAgent(DummyAgent):
                     rng=target_q_rng,
                 )
             )
-        new_critic_params, new_critic_opt_state, critic_loss, critic_grad_norm, v_loss, q_loss = \
+        t = time.time()
+        new_critic_params, new_critic_opt_state, critic_loss, critic_grad_norm = \
             self.update_critic(
                 critic_params=critic_params,
                 critic_opt_state=critic_opt_state,
                 obs=tran.obs,
                 action=tran.action,
-                target_q=target_q,
+                # target_q=target_q,
                 target_v=target_v,
             )
         new_target_critic_params = self.soft_update(target_critic_params, new_critic_params)
-
         new_actor_params, new_actor_opt_state, actor_loss, log_a, actor_grad_norm = self.update_actor(
             actor_params=actor_params,
             critic_params=critic_params,
@@ -600,24 +607,41 @@ class SACAgent(DummyAgent):
 
         log_alpha = self.log_alpha_apply(new_alpha_params)
         _, std = self.actor_apply(new_actor_params, tran.obs)
+        # summary = SACModelSummary(
+        #     actor_loss=actor_loss.astype(float),
+        #     entropy=-log_a.mean().astype(float),
+        #     actor_std=std.mean().astype(float),
+        #     critic_loss=critic_loss.astype(float),
+        #     v_loss=v_loss.astype(float),
+        #     q_loss=q_loss.astype(float),
+        #     alpha_loss=alpha_loss.astype(float),
+        #     log_alpha=log_alpha.astype(float),
+        #     critic_grad_norm=critic_grad_norm.astype(float),
+        #     actor_grad_norm=actor_grad_norm.astype(float),
+        #     alpha_grad_norm=alpha_grad_norm.astype(float),
+        #     target_v_term=target_v_term.astype(float),
+        #     target_q_term=target_q_term.astype(float),
+        #     entropy_term=entropy_term.astype(float),
+        #     max_reward=jnp.max(tran.reward).astype(float),
+        #     min_reward=jnp.min(tran.reward).astype(float),
+        # )
 
         summary = SACModelSummary(
-            actor_loss=actor_loss.astype(float),
-            entropy=-log_a.mean().astype(float),
-            actor_std=std.mean().astype(float),
-            critic_loss=critic_loss.astype(float),
-            v_loss=v_loss.astype(float),
-            q_loss=q_loss.astype(float),
-            alpha_loss=alpha_loss.astype(float),
-            log_alpha=log_alpha.astype(float),
-            critic_grad_norm=critic_grad_norm.astype(float),
-            actor_grad_norm=actor_grad_norm.astype(float),
-            alpha_grad_norm=alpha_grad_norm.astype(float),
-            target_v_term=target_v_term.astype(float),
-            target_q_term=target_q_term.astype(float),
-            entropy_term=entropy_term.astype(float),
-            max_reward=jnp.max(tran.reward).astype(float),
-            min_reward=jnp.min(tran.reward).astype(float),
+            actor_loss=actor_loss,
+            entropy=-log_a.mean(),
+            actor_std=std.mean(),
+            critic_loss=critic_loss,
+            # v_loss=v_loss,
+            # q_loss=q_loss,
+            alpha_loss=alpha_loss,
+            log_alpha=log_alpha,
+            actor_grad_norm=actor_grad_norm,
+            alpha_grad_norm=alpha_grad_norm,
+            target_v_term=target_v_term,
+            # target_q_term=target_q_term,
+            entropy_term=entropy_term,
+            max_reward=jnp.max(tran.reward),
+            min_reward=jnp.min(tran.reward),
         )
 
         return (
@@ -654,11 +678,9 @@ class SACAgent(DummyAgent):
             self.critic_params,
             self.target_critic_params,
             self.critic_opt_state,
-            SACModelSummary(),
-            0,
-            transitions,
         ]
-        carry, outs = jax.lax.scan(self.step, carry, xs=None, length=self.train_steps)
+        ins = [transitions]
+        carry, outs = jax.lax.scan(self.step, carry, ins, length=self.train_steps)
         self.alpha_params = carry[1]
         self.alpha_opt_state = carry[2]
         self.actor_params = carry[3]
@@ -666,113 +688,7 @@ class SACAgent(DummyAgent):
         self.critic_params = carry[5]
         self.target_critic_params = carry[6]
         self.critic_opt_state = carry[7]
-        summary = carry[8]
+        summary = outs[-1]
         if log_results:
             wandb.log(summary.dict())
         return self.train_steps
-
-    # def train_step(
-    #         self,
-    #         rng,
-    #         tran: Transition,
-    #         writer,
-    # ):
-    #     rng, actor_rng, td_rng = random.split(rng, 3)
-    #
-    #     alpha = jax.lax.stop_gradient(
-    #         jnp.exp(
-    #             self.log_alpha.apply(self.alpha_params)
-    #         )
-    #     )
-    #
-    #     #for u in range(self.q_update_frequency):
-    #     td_rng, target_q_rng = random.split(td_rng, 2)
-    #     target_v, target_q, target_v_term, target_q_term, entropy_term = \
-    #         jax.lax.stop_gradient(
-    #             get_soft_td_target(
-    #                 critic_fn=self.critic.apply,
-    #                 actor_fn=self.actor.apply,
-    #                 next_obs=tran.next_obs,
-    #                 obs=tran.obs,
-    #                 reward=tran.reward,
-    #                 not_done=1.0 - tran.done,
-    #                 critic_target_params=self.target_critic_params,
-    #                 critic_params=self.critic_params,
-    #                 actor_params=self.actor_params,
-    #                 alpha=alpha,
-    #                 discount=self.discount,
-    #                 rng=target_q_rng,
-    #                 reward_scale=self.scale_reward,
-    #             )
-    #     )
-    #
-    #     critic_params, critic_opt_state, critic_loss, critic_grad_norm, v_loss, q_loss = \
-    #         update_critic(
-    #             critic_fn=self.critic.apply,
-    #             critic_params=self.critic_params,
-    #             critic_opt_state=self.critic_opt_state,
-    #             critic_update_fn=self.critic_optimizer.update,
-    #             obs=tran.obs,
-    #             action=tran.action,
-    #             target_q=target_q,
-    #             target_v=target_v,
-    #         )
-    #
-    #     target_critic_params = soft_update(self.target_critic_params, critic_params, self.tau)
-    #
-    #     actor_params, actor_opt_state, actor_loss, log_a, actor_grad_norm = update_actor(
-    #         actor_fn=self.actor.apply,
-    #         critic_fn=self.critic.apply,
-    #         actor_params=self.actor_params,
-    #         actor_update_fn=self.actor_optimizer.update,
-    #         critic_params=self.critic_params,
-    #         alpha=alpha,
-    #         actor_opt_state=self.actor_opt_state,
-    #         obs=tran.obs,
-    #         rng=actor_rng,
-    #     )
-    #
-    #     if self.tune_entropy_coef:
-    #         alpha_params, alpha_opt_state, alpha_loss, alpha_grad_norm = update_alpha(
-    #             log_alpha_fn=self.log_alpha.apply,
-    #             alpha_params=self.alpha_params,
-    #             alpha_opt_state=self.alpha_opt_state,
-    #             alpha_update_fn=self.alpha_optimizer.update,
-    #             log_a=log_a,
-    #             target_entropy=self.target_entropy
-    #         )
-    #         self.alpha_params = alpha_params
-    #         self.alpha_opt_state = alpha_opt_state
-    #     else:
-    #         alpha_loss = jnp.zeros(1)
-    #         alpha_grad_norm = jnp.zeros(1)
-    #
-    #     self.actor_params = actor_params
-    #     self.actor_opt_state = actor_opt_state
-    #     self.critic_params = critic_params
-    #     self.critic_opt_state = critic_opt_state
-    #     self.target_critic_params = target_critic_params
-    #
-    #     log_alpha = self.log_alpha.apply(self.alpha_params)
-    #     _, std = self.actor.apply(self.actor_params, tran.obs)
-    #
-    #     summary = SACModelSummary(
-    #         actor_loss=actor_loss.item(),
-    #         entropy=-log_a.mean().item(),
-    #         actor_std=std.mean().item(),
-    #         critic_loss=critic_loss.item(),
-    #         v_loss=v_loss.item(),
-    #         q_loss=q_loss.item(),
-    #         alpha_loss=alpha_loss.item(),
-    #         log_alpha=log_alpha.item(),
-    #         critic_grad_norm=critic_grad_norm.item(),
-    #         actor_grad_norm=actor_grad_norm.item(),
-    #         alpha_grad_norm=alpha_grad_norm.item(),
-    #         target_v_term=target_v_term.item(),
-    #         target_q_term=target_q_term.item(),
-    #         entropy_term=entropy_term.item(),
-    #         max_reward=jnp.max(tran.reward).item(),
-    #         min_reward=jnp.min(tran.reward).item(),
-    #     )
-    #
-    #     return summary.dict()

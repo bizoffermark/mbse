@@ -2,6 +2,9 @@ import functools
 
 import jax
 import math
+
+import numpy as np
+
 from mbse.models.dynamics_model import DynamicsModel, ModelSummary
 from mbse.optimizers.cem_trajectory_optimizer import CemTO
 from mbse.optimizers.trajax_trajectory_optimizer import TraJaxTO
@@ -90,12 +93,9 @@ class ModelBasedAgent(DummyAgent):
             rng = carry[0]
             model_params = carry[2]
             model_opt_state = carry[3]
-            idx = carry[5]
-            transition = carry[6]
-            val_transition = carry[7]
+            tran = ins[0]
+            val_tran = ins[1]
             train_rng, rng = jax.random.split(rng, 2)
-            tran = transition.get_idx(idx)
-            val_tran = val_transition.get_idx(idx)
 
             (
                 new_model_params,
@@ -114,10 +114,6 @@ class ModelBasedAgent(DummyAgent):
                 alpha,
                 new_model_params,
                 new_model_opt_state,
-                summary,
-                idx + 1,
-                transition,
-                val_transition,
             ]
             outs = [summary]
             return carry, outs
@@ -202,7 +198,7 @@ class ModelBasedAgent(DummyAgent):
                    validate: bool = True,
                    log_results: bool = True,
                    ):
-        max_train_steps_per_iter = 1000
+        max_train_steps_per_iter = 8000
         if self.num_epochs > 0:
             total_train_steps = math.ceil(buffer.size * self.num_epochs / self.batch_size)
         else:
@@ -233,12 +229,9 @@ class ModelBasedAgent(DummyAgent):
                 alpha,
                 model_params,
                 model_opt_state,
-                ModelSummary(),
-                0,
-                transitions,
-                val_transitions
             ]
-            carry, outs = jax.lax.scan(self.step, carry, xs=None, length=train_steps)
+            ins = [transitions, val_transitions]
+            carry, outs = jax.lax.scan(self.step, carry, ins, length=train_steps)
             model_params = carry[2]
             model_opt_state = carry[3]
             alpha = carry[1]
@@ -248,7 +241,9 @@ class ModelBasedAgent(DummyAgent):
                     for log_dict in summary:
                         wandb.log(log_dict)
                     else:
-                        wandb.log(summary[-1])
+                        idx = np.linspace(0, train_steps - 1, 5, dtype=int)
+                        for j in idx:
+                            wandb.log(summary[j])
         if self.calibrate_model:
             alpha = carry[1]
         self.update_models(model_params=model_params, model_opt_state=model_opt_state, alpha=alpha)

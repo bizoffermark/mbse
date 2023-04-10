@@ -16,12 +16,12 @@ def inverse_identitiy_transform(transformed_obs, transformed_action=None, transf
     return identity_transform(transformed_obs, transformed_action, transformed_next_state)
 
 
-def merge_transitions(tran_a, tran_b):
-    obs = np.concatenate([tran_a.obs, tran_b.obs], axis=0)
-    action = np.concatenate([tran_a.action, tran_b.action], axis=0)
-    next_obs = np.concatenate([tran_a.next_obs, tran_b.next_obs], axis=0)
-    reward = np.concatenate([tran_a.reward, tran_b.reward], axis=0)
-    done = np.concatenate([tran_a.done, tran_b.done], axis=0)
+def merge_transitions(tran_a, tran_b, axis=0):
+    obs = jnp.concatenate([tran_a.obs, tran_b.obs], axis=axis)
+    action = jnp.concatenate([tran_a.action, tran_b.action], axis=axis)
+    next_obs = jnp.concatenate([tran_a.next_obs, tran_b.next_obs], axis=axis)
+    reward = jnp.concatenate([tran_a.reward, tran_b.reward], axis=axis)
+    done = jnp.concatenate([tran_a.done, tran_b.done], axis=axis)
     return Transition(
         obs,
         action,
@@ -53,10 +53,6 @@ class Transition:
     def shape(self):
         return self.obs.shape[:-1]
 
-    @property
-    def shape(self):
-        return self.obs.shape[:-1]
-
     def reshape(self, dim_1, dim_2):
         tran = Transition(
             obs=self.obs.reshape(dim_1, dim_2, -1),
@@ -76,6 +72,10 @@ class Transition:
             done=self.done[idx]
         )
         return tran
+
+    def __iter__(self):
+        for index in range(self.shape[0]):
+            yield self.get_idx(index)
 
     def get_data(self):
         return self.obs, self.action, self.next_obs, self.reward, self.done

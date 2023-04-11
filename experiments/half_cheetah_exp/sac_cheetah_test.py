@@ -41,8 +41,8 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             'reward_model': reward_model_forward,
             'render_mode': 'rgb_array'
         }
-        from mbse.envs.pets_halfcheetah import HalfCheetahEnv
-        env = make_vec_env(env_id=HalfCheetahEnv, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed,
+        from mbse.envs.pets_halfcheetah import HalfCheetahEnvDM
+        env = make_vec_env(env_id=HalfCheetahEnvDM, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed,
                            env_kwargs=env_kwargs_forward)
     else:
         from dm_control.suite.cheetah import run

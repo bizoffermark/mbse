@@ -11,6 +11,7 @@ from mbse.optimizers.trajax_trajectory_optimizer import TraJaxTO
 from mbse.optimizers.sac_based_optimizer import SACOptimizer
 import gym
 from mbse.utils.replay_buffer import ReplayBuffer, Transition
+from mbse.utils.utils import get_idx
 from mbse.agents.dummy_agent import DummyAgent
 import jax.numpy as jnp
 import wandb
@@ -235,15 +236,14 @@ class ModelBasedAgent(DummyAgent):
             model_params = carry[2]
             model_opt_state = carry[3]
             alpha = carry[1]
-            summary = outs[0].dict()
+            summary = outs[0]
             if log_results:
                 if self.log_full_training:
-                    for log_dict in summary:
-                        wandb.log(log_dict)
-                    else:
-                        idx = np.linspace(0, train_steps - 1, 5, dtype=int)
-                        for j in idx:
-                            wandb.log(summary[j])
+                    for i in range(total_train_steps):
+                        wandb.log(get_idx(summary, i).dict())
+                else:
+                    for i in range(0, total_train_steps, 10):
+                        wandb.log(get_idx(summary, i).dict())
         if self.calibrate_model:
             alpha = carry[1]
         self.update_models(model_params=model_params, model_opt_state=model_opt_state, alpha=alpha)

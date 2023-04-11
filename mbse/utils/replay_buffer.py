@@ -63,19 +63,19 @@ class Transition:
         )
         return tran
 
-    def get_idx(self, idx):
-        tran = Transition(
-            obs=self.obs[idx],
-            action=self.action[idx],
-            next_obs=self.next_obs[idx],
-            reward=self.reward[idx],
-            done=self.done[idx]
-        )
-        return tran
-
-    def __iter__(self):
-        for index in range(self.shape[0]):
-            yield self.get_idx(index)
+    # def get_idx(self, idx):
+    #     tran = Transition(
+    #         obs=self.obs[idx],
+    #         action=self.action[idx],
+    #         next_obs=self.next_obs[idx],
+    #         reward=self.reward[idx],
+    #         done=self.done[idx]
+    #     )
+    #     return tran
+    #
+    # def __iter__(self):
+    #     for index in range(self.shape[0]):
+    #         yield self.get_idx(index)
 
     def get_data(self):
         return self.obs, self.action, self.next_obs, self.reward, self.done

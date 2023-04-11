@@ -1,12 +1,14 @@
 import time
 
+import flax.struct
 import numpy as np
 from typing import Sequence, Callable, Optional
 import optax
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
-from jax import jit, vmap, random, value_and_grad
+from jax import jit, random, value_and_grad
+from mbse.utils.utils import get_idx
 from mbse.utils.network_utils import MLP, mse
 from mbse.utils.replay_buffer import ReplayBuffer, Transition
 from flax import struct
@@ -15,9 +17,21 @@ import gym
 from mbse.utils.utils import gaussian_log_likelihood, sample_normal_dist
 from mbse.agents.dummy_agent import DummyAgent
 import wandb
+from typing import Any as Params
 
 EPS = 1e-6
 ZERO = 0.0
+
+
+@flax.struct.dataclass
+class SACTrainingState:
+    actor_opt_state: optax.OptState
+    actor_params: Params
+    critic_opt_state: optax.OptState
+    critic_params: Params
+    target_critic_params: Params
+    alpha_opt_state: optax.OptState
+    alpha_params: Params
 
 
 @jit
@@ -76,20 +90,6 @@ def get_soft_td_target(
         rng,
         reward_scale=1.0,
 ):
-    # Sample action from Pi to simulate expectation
-    # next_action, next_log_a = get_squashed_log_prob(
-    #    actor_fn=actor_fn,
-    #    params=actor_params,
-    #    obs=next_obs,
-    #    rng=next_rng,
-    # )
-    # current_action, current_log_a = get_squashed_log_prob(
-    #    actor_fn=actor_fn,
-    #    params=actor_params,
-    #    obs=obs,
-    #    rng=rng,
-    # )
-
     next_action, next_action_log_a = get_squashed_log_prob(
         actor_fn=actor_fn,
         params=actor_params,
@@ -101,27 +101,11 @@ def get_soft_td_target(
     next_q = jnp.minimum(next_q1, next_q2)
     entropy_term = - alpha * next_action_log_a
     next_q_target = next_q + entropy_term
-
-    # Get predictions for both Q functions and take the min
-    # _, _, target_v = critic_fn(critic_target_params, obs=next_obs,
-    #                           action=jnp.zeros_like(current_action))
-    # target_v_term = target_v.mean()
-    # target_q1, target_q2, _ = critic_fn(critic_params, obs=obs, action=current_action)
-    # Soft target update
-    # target_q = jnp.minimum(target_q1, target_q2)
-
-    # entropy_term = - alpha * current_log_a
-
-    # target_q_term = target_q.mean()
-    # target_q = target_q + entropy_term
-
-    # Td target = r_t + \gamma V_{t+1}
     target_v = reward_scale * reward + not_done * discount * next_q_target
     target_v_term = target_v.mean()
     return target_v, target_v_term, entropy_term.mean()
 
 
-# @partial(jit, static_argnums=(0, ))
 def get_action(actor_fn, actor_params, obs, rng=None, eval=False):
     mu, sig = actor_fn(actor_params, obs)
 
@@ -140,14 +124,9 @@ def get_action(actor_fn, actor_params, obs, rng=None, eval=False):
         rng
     )
 
-    # if rng is None or eval:
-    #    action = mu
-    # else:
-    #    action = sample_normal_dist(mu, sig, rng)
     return squash_action(action)
 
 
-# @partial(jit, static_argnums=(0, 1, 3))
 def update_actor(
         actor_fn,
         critic_fn,
@@ -174,7 +153,6 @@ def update_actor(
     return new_actor_params, new_actor_opt_state, loss, log_a, grad_norm
 
 
-# @partial(jit, static_argnums=(0, 1))
 def update_critic(
         critic_fn,
         critic_update_fn,
@@ -187,8 +165,6 @@ def update_critic(
     def loss(params):
         q1, q2 = critic_fn(params, obs, action)
         q_loss = jnp.mean(0.5 * (mse(q1, target_v) + mse(q2, target_v)))
-        # v_loss = 0.5 * jnp.mean(mse(v, target_q))
-        # critic_loss = q_loss + v_loss
         return q_loss
 
     loss, grads = value_and_grad(loss, has_aux=False)(critic_params)
@@ -198,8 +174,6 @@ def update_critic(
     grad_norm = optax.global_norm(grads)
     return new_critic_params, new_critic_opt_state, loss, grad_norm
 
-
-# @partial(jit, static_argnums=(0, 3))
 def update_alpha(log_alpha_fn, alpha_params, alpha_opt_state, alpha_update_fn, log_a, target_entropy):
     diff_entropy = jax.lax.stop_gradient(log_a + target_entropy)
 
@@ -224,34 +198,29 @@ class SACModelSummary:
     actor_loss: jnp.array = ZERO
     entropy: jnp.array = ZERO
     critic_loss: jnp.array = ZERO
-    # v_loss: jnp.array = ZERO
-    # q_loss: jnp.array = ZERO
     alpha_loss: jnp.array = ZERO
     log_alpha: jnp.array = ZERO
     actor_std: jnp.array = ZERO
     critic_grad_norm: jnp.array = ZERO
     actor_grad_norm: jnp.array = ZERO
     alpha_grad_norm: jnp.array = ZERO
-    # target_q_term: jnp.array = ZERO
     target_v_term: jnp.array = ZERO
     entropy_term: jnp.array = ZERO
     max_reward: jnp.array = ZERO
     min_reward: jnp.array = ZERO
 
     def dict(self):
+
         return {
             'actor_loss': self.actor_loss.item(),
             'entropy': self.entropy.item(),
             'actor_std': self.actor_std.item(),
             'critic_loss': self.critic_loss.item(),
-            # 'v_loss': self.v_loss.item(),
-            # 'q_loss': self.q_loss.item(),
             'alpha_loss': self.alpha_loss.item(),
             'log_alpha': self.log_alpha.item(),
             'critic_grad_norm': self.critic_grad_norm.item(),
             'actor_grad_norm': self.actor_grad_norm.item(),
             'alpha_grad_norm': self.alpha_grad_norm.item(),
-            # 'target_q_term': self.target_q_term.item(),
             'target_v_term': self.target_v_term.item(),
             'entropy_term': self.entropy_term.item(),
             'max_reward': self.max_reward.item(),
@@ -297,11 +266,7 @@ class Critic(nn.Module):
         obs_action = jnp.concatenate((obs, action), -1)
         value_1 = critic_1(obs_action)
         value_2 = critic_2(obs_action)
-        # value = MLP(
-        #    features=self.features,
-        #    output_dim=1,
-        #    non_linearity=self.non_linearity)
-        return value_1, value_2  # value(obs)
+        return value_1, value_2
 
 
 class ConstantModule(nn.Module):
@@ -367,26 +332,25 @@ class SACAgent(DummyAgent):
 
         rng, actor_rng, critic_rng, alpha_rng = random.split(rng, 4)
         actor_params = self.actor.init(actor_rng, sample_obs)
-        # print(self.actor.tabulate(actor_rng, sample_obs))
         actor_opt_state = self.actor_optimizer.init(actor_params)
-        self.actor_params = actor_params
-        self.actor_opt_state = actor_opt_state
-
         critic_params = self.critic.init(
             critic_rng, sample_obs, sample_act
         )
         target_critic_params = deepcopy(critic_params)
         critic_opt_state = self.critic_optimizer.init(critic_params)
-        # print(self.critic.tabulate(critic_rng, sample_obs, sample_act))
-        self.critic_params = critic_params
-        self.target_critic_params = target_critic_params
-        self.critic_opt_state = critic_opt_state
 
         alpha_params = self.log_alpha.init(alpha_rng)
-        # print(self.log_alpha.tabulate(alpha_rng, self.initial_log_alpha))
         alpha_opt_state = self.alpha_optimizer.init(alpha_params)
-        self.alpha_params = alpha_params
-        self.alpha_opt_state = alpha_opt_state
+        self.training_state = SACTrainingState(
+            actor_opt_state=actor_opt_state,
+            actor_params=actor_params,
+            critic_opt_state=critic_opt_state,
+            critic_params=critic_params,
+            target_critic_params=target_critic_params,
+            alpha_opt_state=alpha_opt_state,
+            alpha_params=alpha_params,
+        )
+
         self.q_update_frequency = q_update_frequency
         self.scale_reward = scale_reward
         self.tau = tau
@@ -473,53 +437,21 @@ class SACAgent(DummyAgent):
 
         def step(carry, ins):
             rng = carry[0]
-            alpha_params = carry[1]
-            alpha_opt_state = carry[2]
-            actor_params = carry[3]
-            actor_opt_state = carry[4]
-            critic_params = carry[5]
-            target_critic_params = carry[6]
-            critic_opt_state = carry[7]
+            training_state = carry[1]
             tran = ins[-1]
-            # if use_observations:
-            #  obs = ins[0]
-            # else:
-            #  obs = carry[1]
             train_rng, rng = jax.random.split(rng, 2)
 
             (
-                new_alpha_params,
-                new_alpha_opt_state,
-                new_actor_params,
-                new_actor_opt_state,
-                new_critic_params,
-                new_target_critic_params,
-                new_critic_opt_state,
-                summary,
+                new_training_state, summary
             ) = \
                 self._train_step_(
                     rng=train_rng,
                     tran=tran,
-                    alpha_params=alpha_params,
-                    alpha_opt_state=alpha_opt_state,
-                    actor_params=actor_params,
-                    actor_opt_state=actor_opt_state,
-                    critic_params=critic_params,
-                    target_critic_params=target_critic_params,
-                    critic_opt_state=critic_opt_state,
+                    training_state=training_state,
                 )
-            # if use_observations:
-            #  carry = seed, obs, hidden
-            # else:
             carry = [
                 rng,
-                new_alpha_params,
-                new_alpha_opt_state,
-                new_actor_params,
-                new_actor_opt_state,
-                new_critic_params,
-                new_target_critic_params,
-                new_critic_opt_state,
+                new_training_state
             ]
             outs = [summary]
             return carry, outs
@@ -529,13 +461,13 @@ class SACAgent(DummyAgent):
     def act_in_jax(self, obs, rng=None, eval=False, eval_idx=0):
         if eval:
             return self.get_eval_action(
-                actor_params=self.actor_params,
+                actor_params=self.training_state.actor_params,
                 obs=obs,
                 rng=rng,
             )
         else:
             return self.get_action(
-                actor_params=self.actor_params,
+                actor_params=self.training_state.actor_params,
                 obs=obs,
                 rng=rng,
             )
@@ -543,15 +475,16 @@ class SACAgent(DummyAgent):
     def _train_step_(self,
                      rng,
                      tran: Transition,
-                     alpha_params,
-                     alpha_opt_state,
-                     actor_params,
-                     actor_opt_state,
-                     critic_params,
-                     target_critic_params,
-                     critic_opt_state,
+                     training_state: SACTrainingState,
                      ):
 
+        alpha_params = training_state.alpha_params
+        alpha_opt_state = training_state.alpha_opt_state
+        actor_params = training_state.actor_params
+        actor_opt_state = training_state.actor_opt_state
+        critic_params = training_state.critic_params
+        target_critic_params = training_state.target_critic_params
+        critic_opt_state = training_state.critic_opt_state
         rng, actor_rng, td_rng = random.split(rng, 3)
         alpha = jax.lax.stop_gradient(
             jnp.exp(
@@ -574,7 +507,6 @@ class SACAgent(DummyAgent):
                     rng=target_q_rng,
                 )
             )
-        t = time.time()
         new_critic_params, new_critic_opt_state, critic_loss, critic_grad_norm = \
             self.update_critic(
                 critic_params=critic_params,
@@ -587,7 +519,7 @@ class SACAgent(DummyAgent):
         new_target_critic_params = self.soft_update(target_critic_params, new_critic_params)
         new_actor_params, new_actor_opt_state, actor_loss, log_a, actor_grad_norm = self.update_actor(
             actor_params=actor_params,
-            critic_params=critic_params,
+            critic_params=new_critic_params,
             alpha=alpha,
             actor_opt_state=actor_opt_state,
             obs=tran.obs,
@@ -607,51 +539,35 @@ class SACAgent(DummyAgent):
 
         log_alpha = self.log_alpha_apply(new_alpha_params)
         _, std = self.actor_apply(new_actor_params, tran.obs)
-        # summary = SACModelSummary(
-        #     actor_loss=actor_loss.astype(float),
-        #     entropy=-log_a.mean().astype(float),
-        #     actor_std=std.mean().astype(float),
-        #     critic_loss=critic_loss.astype(float),
-        #     v_loss=v_loss.astype(float),
-        #     q_loss=q_loss.astype(float),
-        #     alpha_loss=alpha_loss.astype(float),
-        #     log_alpha=log_alpha.astype(float),
-        #     critic_grad_norm=critic_grad_norm.astype(float),
-        #     actor_grad_norm=actor_grad_norm.astype(float),
-        #     alpha_grad_norm=alpha_grad_norm.astype(float),
-        #     target_v_term=target_v_term.astype(float),
-        #     target_q_term=target_q_term.astype(float),
-        #     entropy_term=entropy_term.astype(float),
-        #     max_reward=jnp.max(tran.reward).astype(float),
-        #     min_reward=jnp.min(tran.reward).astype(float),
-        # )
 
         summary = SACModelSummary(
             actor_loss=actor_loss,
             entropy=-log_a.mean(),
             actor_std=std.mean(),
             critic_loss=critic_loss,
-            # v_loss=v_loss,
-            # q_loss=q_loss,
             alpha_loss=alpha_loss,
             log_alpha=log_alpha,
             actor_grad_norm=actor_grad_norm,
             alpha_grad_norm=alpha_grad_norm,
+            critic_grad_norm=critic_grad_norm,
             target_v_term=target_v_term,
-            # target_q_term=target_q_term,
             entropy_term=entropy_term,
             max_reward=jnp.max(tran.reward),
             min_reward=jnp.min(tran.reward),
         )
 
+        new_training_state = SACTrainingState(
+            actor_opt_state=new_actor_opt_state,
+            actor_params=new_actor_params,
+            critic_opt_state=new_critic_opt_state,
+            critic_params=new_critic_params,
+            target_critic_params=new_target_critic_params,
+            alpha_opt_state=new_alpha_opt_state,
+            alpha_params=new_alpha_params,
+        )
+
         return (
-            new_alpha_params,
-            new_alpha_opt_state,
-            new_actor_params,
-            new_actor_opt_state,
-            new_critic_params,
-            new_target_critic_params,
-            new_critic_opt_state,
+            new_training_state,
             summary,
         )
 
@@ -671,24 +587,14 @@ class SACAgent(DummyAgent):
 
         carry = [
             rng,
-            self.alpha_params,
-            self.alpha_opt_state,
-            self.actor_params,
-            self.actor_opt_state,
-            self.critic_params,
-            self.target_critic_params,
-            self.critic_opt_state,
+            self.training_state,
         ]
         ins = [transitions]
         carry, outs = jax.lax.scan(self.step, carry, ins, length=self.train_steps)
-        self.alpha_params = carry[1]
-        self.alpha_opt_state = carry[2]
-        self.actor_params = carry[3]
-        self.actor_opt_state = carry[4]
-        self.critic_params = carry[5]
-        self.target_critic_params = carry[6]
-        self.critic_opt_state = carry[7]
-        summary = outs[-1]
+        self.training_state = carry[1]
+        summaries = outs[-1]
         if log_results:
-            wandb.log(summary.dict())
+            for idx in range(self.train_steps):
+                summary = get_idx(summaries, idx)
+                wandb.log(summary.dict())
         return self.train_steps

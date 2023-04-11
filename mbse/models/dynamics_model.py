@@ -16,47 +16,16 @@ class ModelSummary:
     calibration_error: jnp.array = 0.0
 
     def dict(self):
-        final_list = []
-        if self.model_likelihood.ndim >= 1:
-            if self.model_likelihood.shape[0] >= 1:
-                s = self.model_likelihood.shape[0]
-                for i in range(s):
-                    current_dict = {
-                        'model_likelihood': self.model_likelihood[i].item(),
-                        'grad_norm': self.grad_norm[i].item(),
-                        'val_logl': self.val_logl[i].item(),
-                        'val_mse': self.val_mse[i].item(),
-                        'val_al_std': self.val_al_std[i].item(),
-                        'val_eps_std': self.val_eps_std[i].item(),
-                        'calibration_alpha': self.calibration_alpha[i].item(),
-                        'calibration_error': self.calibration_error[i].item(),
-                    }
-                    final_list.append(current_dict)
-            else:
-                current_dict = {
-                    'model_likelihood': self.model_likelihood[0].item(),
-                    'grad_norm': self.grad_norm[0].item(),
-                    'val_logl': self.val_logl[0].item(),
-                    'val_mse': self.val_mse[0].item(),
-                    'val_al_std': self.val_al_std[0].item(),
-                    'val_eps_std': self.val_eps_std[0].item(),
-                    'calibration_alpha': self.calibration_alpha[0].item(),
-                    'calibration_error': self.calibration_error[0].item(),
-                }
-                final_list.append(current_dict)
-        else:
-            current_dict = {
-                'model_likelihood': self.model_likelihood.item(),
-                'grad_norm': self.grad_norm.item(),
-                'val_logl': self.val_logl.item(),
-                'val_mse': self.val_mse.item(),
-                'val_al_std': self.val_al_std.item(),
-                'val_eps_std': self.val_eps_std.item(),
-                'calibration_alpha': self.calibration_alpha.item(),
-                'calibration_error': self.calibration_error.item(),
-            }
-            final_list.append(current_dict)
-        return final_list
+        return {
+            'model_likelihood': self.model_likelihood.item(),
+            'grad_norm': self.grad_norm.item(),
+            'val_logl': self.val_logl.item(),
+            'val_mse': self.val_mse.item(),
+            'val_al_std': self.val_al_std.item(),
+            'val_eps_std': self.val_eps_std.item(),
+            'calibration_alpha': self.calibration_alpha.item(),
+            'calibration_error': self.calibration_error.item(),
+        }
 
 
 class DynamicsModel(object):

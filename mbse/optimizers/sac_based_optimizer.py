@@ -1,55 +1,20 @@
+import copy
 import time
 
 import jax.random
 
-from mbse.agents.actor_critic.sac import SACAgent, SACModelSummary
+from mbse.agents.actor_critic.sac import SACAgent, SACTrainingState
 from gym.spaces import Box
 from mbse.utils.replay_buffer import Transition, ReplayBuffer, JaxReplayBuffer
 from typing import Callable, Union, Optional
 import jax.numpy as jnp
-from mbse.utils.utils import sample_trajectories
+from mbse.utils.utils import sample_trajectories, get_idx, tree_stack
 import functools
 from mbse.optimizers.dummy_policy_optimizer import DummyPolicyOptimizer
 from mbse.models.active_learning_model import ActiveLearningHUCRLModel, ActiveLearningPETSModel
+import flax.struct
 
 EPS = 1e-6
-
-
-def tree_stack(trees, axis=0):
-    """Takes a list of trees and stacks every corresponding leaf.
-    For example, given two trees ((a, b), c) and ((a', b'), c'), returns
-    ((stack(a, a'), stack(b, b')), stack(c, c')).
-    Useful for turning a list of objects into something you can feed to a
-    vmapped function.
-    """
-    leaves_list = []
-    treedef_list = []
-    for tree in trees:
-        leaves, treedef = jax.tree_util.tree_flatten(tree)
-        leaves_list.append(leaves)
-        treedef_list.append(treedef)
-
-    grouped_leaves = zip(*leaves_list)
-    result_leaves = [jnp.stack(l, axis=axis) for l in grouped_leaves]
-    return treedef_list[0].unflatten(result_leaves)
-
-
-def tree_unstack(tree):
-    """Takes a tree and turns it into a list of trees. Inverse of tree_stack.
-    For example, given a tree ((a, b), c), where a, b, and c all have first
-    dimension k, will make k trees
-    [((a[0], b[0]), c[0]), ..., ((a[k], b[k]), c[k])]
-    Useful for turning the output of a vmapped function into normal objects.
-    """
-    leaves, treedef = jax.tree_util.tree_flatten(tree)
-    n_trees = leaves[0].shape[0]
-    new_leaves = [[] for _ in range(n_trees)]
-    for leaf in leaves:
-        for i in range(n_trees):
-            new_leaves[i].append(leaf[i])
-    new_trees = [treedef.unflatten(l) for l in new_leaves]
-    return new_trees
-
 
 @functools.partial(
     jax.jit, static_argnums=(0, 2, 4)
@@ -110,6 +75,13 @@ def _simulate_dynamics(horizon: int,
     return transitions
 
 
+@flax.struct.dataclass
+class SacOptimizerState:
+    agent_train_state: SACTrainingState
+    obs_bias: jnp.array
+    obs_scale: jnp.array
+
+
 class SACOptimizer(DummyPolicyOptimizer):
     def __init__(self,
                  action_dim: tuple,
@@ -150,19 +122,13 @@ class SACOptimizer(DummyPolicyOptimizer):
                 observation_space=dummy_obs_space,
             ) for model in self.dynamics_model_list]
 
-        self.init_agent_params = {
-            'alpha_params': [agent.alpha_params for agent in self.agent_list],
-            'actor_params': [agent.actor_params for agent in self.agent_list],
-            'critic_params': [agent.critic_params for agent in self.agent_list],
-            'target_critic_params': [agent.target_critic_params for agent in self.agent_list],
-        }
-
-        self.init_agent_opt_state = {
-            'alpha_opt_state': [agent.alpha_opt_state for agent in self.agent_list],
-            'actor_opt_state': [agent.actor_opt_state for agent in self.agent_list],
-            'critic_opt_state': [agent.critic_opt_state for agent in self.agent_list],
-        }
-
+        init_optimizer_state = [SacOptimizerState(
+            agent_train_state=agent.training_state,
+            obs_bias=jnp.zeros((obs_dim,)),
+            obs_scale=jnp.ones((obs_dim,)),
+        ) for agent in self.agent_list]
+        self.init_optimizer_state = tree_stack(init_optimizer_state)
+        self.optimizer_state = copy.deepcopy(self.init_optimizer_state)
         self.horizon = horizon
         self.n_particles = n_particles
         self.transitions_per_update = transitions_per_update
@@ -173,23 +139,15 @@ class SACOptimizer(DummyPolicyOptimizer):
         self.action_dim = action_dim
         self.train_steps_per_model_update = train_steps_per_model_update
         self.sim_transitions_ratio = sim_transitions_ratio
-        actor_bias_obs = jnp.zeros(obs_dim)
-        actor_scale_obs = jnp.ones_like(actor_bias_obs)
-        self.actor_normalizers = {
-            'actor_bias_obs': [actor_bias_obs for agent in self.agent_list],
-            'actor_scale_obs': [actor_scale_obs for agent in self.agent_list],
-        }
         self.reset_actor_params = reset_actor_params
         self._init_fn()
 
     def get_action_for_eval(self, obs: jax.Array, rng, agent_idx: int):
         policy = self.agent_list[0].get_eval_action
-        actor_params = self.agent_list[agent_idx].actor_params
-        actor_bias_obs = self.actor_normalizers['actor_bias_obs'][agent_idx]
-        actor_scale_obs = self.actor_normalizers['actor_scale_obs'][agent_idx]
-        normalized_obs = (obs - actor_bias_obs) / (actor_scale_obs + EPS)
+        agent_state = get_idx(self.optimizer_state, agent_idx)
+        normalized_obs = (obs - agent_state.obs_bias) / (agent_state.obs_scale + EPS)
         action = policy(
-            actor_params=actor_params,
+            actor_params=agent_state.agent_train_state.actor_params,
             obs=normalized_obs,
             rng=rng,
         )
@@ -201,23 +159,19 @@ class SACOptimizer(DummyPolicyOptimizer):
     def get_action_for_exploration(self, obs: jax.Array, rng, *args, **kwargs):
         if self.active_exploration_agent:
             policy = self.agent_list[0].get_action
-            actor_params = self.agent_list[-1].actor_params
-            actor_bias_obs = self.actor_normalizers['actor_bias_obs'][-1]
-            actor_scale_obs = self.actor_normalizers['actor_scale_obs'][-1]
-            normalized_obs = (obs - actor_bias_obs) / (actor_scale_obs + EPS)
+            agent_state = get_idx(self.optimizer_state, -1)
+            normalized_obs = (obs - agent_state.obs_bias) / (agent_state.obs_scale + EPS)
             action = policy(
-                actor_params=actor_params,
+                actor_params=agent_state.agent_train_state.actor_params,
                 obs=normalized_obs,
                 rng=rng,
             )
         else:
             policy = self.agent_list[0].get_action
-            actor_params = self.agent_list[0].actor_params
-            actor_bias_obs = self.actor_normalizers['actor_bias_obs'][0]
-            actor_scale_obs = self.actor_normalizers['actor_scale_obs'][0]
-            normalized_obs = (obs - actor_bias_obs) / (actor_scale_obs + EPS)
+            agent_state = get_idx(self.optimizer_state, 0)
+            normalized_obs = (obs - agent_state.obs_bias) / (agent_state.obs_scale + EPS)
             action = policy(
-                actor_params=actor_params,
+                actor_params=agent_state.agent_train_state.actor_params,
                 obs=normalized_obs,
                 rng=rng,
             )
@@ -227,24 +181,12 @@ class SACOptimizer(DummyPolicyOptimizer):
 
         def train_agent_step(
                 train_rng,
-                alpha_params,
-                alpha_opt_state,
-                actor_params,
-                actor_opt_state,
-                critic_params,
-                target_critic_params,
-                critic_opt_state,
+                train_state,
                 sim_transitions,
         ):
             return self.train_agent_step(
                 train_rng=train_rng,
-                alpha_params=alpha_params,
-                alpha_opt_state=alpha_opt_state,
-                actor_params=actor_params,
-                actor_opt_state=actor_opt_state,
-                critic_params=critic_params,
-                target_critic_params=target_critic_params,
-                critic_opt_state=critic_opt_state,
+                train_state=train_state,
                 sim_transitions=sim_transitions,
                 agent_train_fn=self.agent_list[0].step,
                 agent_train_steps=self.agent_list[0].train_steps,
@@ -254,39 +196,20 @@ class SACOptimizer(DummyPolicyOptimizer):
 
     @staticmethod
     def train_agent_step(train_rng,
-                         alpha_params,
-                         alpha_opt_state,
-                         actor_params,
-                         actor_opt_state,
-                         critic_params,
-                         target_critic_params,
-                         critic_opt_state,
+                         train_state,
                          sim_transitions,
                          agent_train_fn,
                          agent_train_steps,
                          ):
         carry = [
             train_rng,
-            alpha_params,
-            alpha_opt_state,
-            actor_params,
-            actor_opt_state,
-            critic_params,
-            target_critic_params,
-            critic_opt_state,
+            train_state
         ]
         ins = [sim_transitions]
         carry, outs = jax.lax.scan(agent_train_fn, carry, ins, length=agent_train_steps)
-        alpha_params = carry[1]
-        alpha_opt_state = carry[2]
-        actor_params = carry[3]
-        actor_opt_state = carry[4]
-        critic_params = carry[5]
-        target_critic_params = carry[6]
-        critic_opt_state = carry[7]
+        next_train_state = carry[1]
         summary = outs[-1]
-        return alpha_params, alpha_opt_state, actor_params, actor_opt_state, critic_params, target_critic_params, \
-            critic_opt_state, summary
+        return next_train_state, summary
 
     def train(self,
               rng,
@@ -312,45 +235,15 @@ class SACOptimizer(DummyPolicyOptimizer):
         simulation_buffers = [JaxReplayBuffer(
             learn_deltas=False,
             **sim_buffer_kwargs,
-        ) for agent in self.agent_list]
-        true_obs = buffer.obs[:buffer.size]
+        ) for _ in self.agent_list]
+        true_obs = jnp.asarray(buffer.obs[:buffer.size])
         train_steps = self.agent_list[0].train_steps
         batch_size = self.agent_list[0].batch_size
-        alpha_params_list = []
-        alpha_opt_state_list = []
-        actor_params_list = []
-        actor_opt_state_list = []
-        critic_params_list = []
-        target_critic_params_list = []
-        critic_opt_state_list = []
-        actor_obs_bias = []
-        actor_obs_scale = []
-        for j in range(len(self.agent_list)):
-            alpha_params = self.init_agent_params['alpha_params'][j]
-            alpha_opt_state = self.init_agent_opt_state['alpha_opt_state'][j]
-            actor_params = self.init_agent_params['actor_params'][j]
-            actor_opt_state = self.init_agent_opt_state['actor_opt_state'][j]
-            critic_params = self.init_agent_params['critic_params'][j]
-            target_critic_params = self.init_agent_params['target_critic_params'][j]
-            critic_opt_state = self.init_agent_opt_state['critic_opt_state'][j]
-            if not self.reset_actor_params and not self.is_active_exploration_agent(idx=j):
-                alpha_params = self.agent_list[j].alpha_params
-                actor_params = self.agent_list[j].actor_params
-                critic_params = self.agent_list[j].critic_params
-                target_critic_params = self.agent_list[j].target_critic_params
-                alpha_opt_state = self.agent_list[j].alpha_opt_state
-                actor_opt_state = self.agent_list[j].actor_opt_state
-                critic_opt_state = self.agent_list[j].critic_opt_state
-            alpha_params_list.append(alpha_params)
-            alpha_opt_state_list.append(alpha_opt_state)
-            actor_params_list.append(actor_params)
-            actor_opt_state_list.append(actor_opt_state)
-            critic_params_list.append(critic_params)
-            target_critic_params_list.append(target_critic_params)
-            critic_opt_state_list.append(critic_opt_state)
-            actor_obs_bias.append(self.actor_normalizers['actor_bias_obs'][j])
-            actor_obs_scale.append(self.actor_normalizers['actor_scale_obs'][j])
+        full_optimizer_state = self.init_optimizer_state
+        if not self.reset_actor_params:
+            full_optimizer_state = self.optimizer_state
         agent_summary = []
+        policy = self.agent_list[0].get_action
         for i in range(self.train_steps_per_model_update):
             actor_obs_bias = []
             actor_obs_scale = []
@@ -359,6 +252,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                 sim_buffer = simulation_buffers[j]
                 agent = self.agent_list[j]
                 evaluate_fn = self.dynamics_model_list[j].evaluate
+                optimizer_state = get_idx(full_optimizer_state, idx=j)
                 if self.is_active_exploration_agent(idx=j):
                     evaluate_fn = self.dynamics_model_list[j].evaluate_for_exploration
 
@@ -380,8 +274,8 @@ class SACOptimizer(DummyPolicyOptimizer):
                 simulation_key, rng = jax.random.split(rng, 2)
                 simulated_transitions = _simulate_dynamics(
                     obs=obs,
-                    policy=agent.get_action,
-                    actor_params=actor_params_list[j],
+                    policy=policy,
+                    actor_params=optimizer_state.agent_train_state.actor_params,
                     evaluate_fn=evaluate_fn,
                     dynamics_params=dynamics_params,
                     key=simulation_key,
@@ -394,8 +288,8 @@ class SACOptimizer(DummyPolicyOptimizer):
                     scale_out=scale_out,
                     sampling_idx=sampling_idx,
                     horizon=self.horizon,
-                    policy_bias_obs=sim_buffer.state_normalizer.mean,
-                    policy_scale_obs=sim_buffer.state_normalizer.std,
+                    policy_bias_obs=optimizer_state.obs_bias,
+                    policy_scale_obs=optimizer_state.obs_scale,
                 )
                 simulation_buffers[j].add(transition=simulated_transitions)
                 actor_obs_bias.append(simulation_buffers[j].state_normalizer.mean)
@@ -406,49 +300,25 @@ class SACOptimizer(DummyPolicyOptimizer):
                                                                )
                 sim_transitions = sim_transitions.reshape(train_steps, batch_size)
                 transitions_list.append(sim_transitions)
-            alpha_params = tree_stack(alpha_params_list, axis=0)
-            alpha_opt_state = tree_stack(alpha_opt_state_list, axis=0)
-            actor_params = tree_stack(actor_params_list, axis=0)
-            actor_opt_state = tree_stack(actor_opt_state_list, axis=0)
-            critic_params = tree_stack(critic_params_list, axis=0)
-            target_critic_params = tree_stack(target_critic_params_list, axis=0)
-            critic_opt_state = tree_stack(critic_opt_state_list, axis=0)
             sim_transitions = tree_stack(transitions_list)
             train_rng = jax.random.split(rng, len(self.agent_list) + 1)
             rng = train_rng[0]
             train_rng = train_rng[1:]
-            alpha_params, alpha_opt_state, actor_params, actor_opt_state, critic_params, target_critic_params, \
-                critic_opt_state, summary = self.train_step(
-                    train_rng=train_rng,
-                    alpha_params=alpha_params,
-                    alpha_opt_state=alpha_opt_state,
-                    actor_params=actor_params,
-                    actor_opt_state=actor_opt_state,
-                    critic_params=critic_params,
-                    target_critic_params=target_critic_params,
-                    critic_opt_state=critic_opt_state,
-                    sim_transitions=sim_transitions,
-                )
-            alpha_params_list = tree_unstack(alpha_params)
-            alpha_opt_state_list = tree_unstack(alpha_opt_state)
-            actor_params_list = tree_unstack(actor_params)
-            actor_opt_state_list = tree_unstack(actor_opt_state)
-            critic_params_list = tree_unstack(critic_params)
-            target_critic_params_list = tree_unstack(target_critic_params)
-            critic_opt_state_list = tree_unstack(critic_opt_state)
-            agent_summary.append(tree_unstack(summary))
-        for i in range(len(self.agent_list)):
-            self.agent_list[i].alpha_params = alpha_params_list[i]
-            self.agent_list[i].alpha_opt_state = alpha_opt_state_list[i]
-            self.agent_list[i].actor_params = actor_params_list[i]
-            self.agent_list[i].actor_opt_state = actor_opt_state_list[i]
-            self.agent_list[i].critic_params = critic_params_list[i]
-            self.agent_list[i].target_critic_params = target_critic_params_list[i]
-            self.agent_list[i].critic_opt_state = critic_opt_state_list[i]
-            self.actor_normalizers['actor_bias_obs'][i] = actor_obs_bias[i]
-            self.actor_normalizers['actor_scale_obs'][i] = actor_obs_scale[i]
+            agent_train_state, summary = self.train_step(
+                train_rng=train_rng,
+                train_state=full_optimizer_state.agent_train_state,
+                sim_transitions=sim_transitions,
+            )
+            obs_bias = tree_stack(actor_obs_bias)
+            obs_scale = tree_stack(actor_obs_scale)
+            full_optimizer_state = SacOptimizerState(
+                agent_train_state=agent_train_state,
+                obs_bias=obs_bias,
+                obs_scale=obs_scale,
+            )
+            agent_summary.append([get_idx(summary, i) for i in range(len(self.agent_list))])
+        self.optimizer_state = full_optimizer_state
         return agent_summary
-
     @property
     def dynamics_model(self):
         return self.dynamics_model_list[0]

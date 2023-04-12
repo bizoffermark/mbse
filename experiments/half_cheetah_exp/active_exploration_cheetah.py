@@ -30,6 +30,8 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     """ Run experiment for a given method and environment. """
 
     """ Environment """
+    from jax.config import config
+    config.update("jax_log_compiles", 1)
     action_repeat = 1
     import math
     time_lim = math.ceil(time_limit / action_repeat)
@@ -60,12 +62,12 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         'reward_model': reward_model_backward,
         'render_mode': 'rgb_array'
     }
-    from mbse.envs.pets_halfcheetah import HalfCheetahEnv
-    env = make_vec_env(env_id=HalfCheetahEnv, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed,
+    from mbse.envs.pets_halfcheetah import HalfCheetahEnvDM
+    env = make_vec_env(env_id=HalfCheetahEnvDM, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed,
                        env_kwargs=env_kwargs_forward)
-    test_env_forward = make_vec_env(HalfCheetahEnv, wrapper_class=wrapper_cls_test, seed=seed,
+    test_env_forward = make_vec_env(HalfCheetahEnvDM, wrapper_class=wrapper_cls_test, seed=seed,
                                     env_kwargs=env_kwargs_forward, n_envs=1)
-    test_env_backward = make_vec_env(HalfCheetahEnv, wrapper_class=wrapper_cls_test, seed=seed,
+    test_env_backward = make_vec_env(HalfCheetahEnvDM, wrapper_class=wrapper_cls_test, seed=seed,
                                      env_kwargs=env_kwargs_backward, n_envs=1)
     test_env = [test_env_forward, test_env_backward]
     features = [num_neurons] * hidden_layers
@@ -73,31 +75,31 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
 
     sac_kwargs = {
         'discount': 0.99,
-        'init_ent_coef': 1.0,
+        'init_ent_coef': 0.1,
         'lr_actor': 0.0005,
-        'weight_decay_actor': 1e-5,
+        'weight_decay_actor': 0.0,
         'lr_critic': 0.0005,
-        'weight_decay_critic': 1e-5,
+        'weight_decay_critic': 0.0,
         'lr_alpha': 0.0005,
         'weight_decay_alpha': 1e-5,
-        'actor_features': [256, 256],
-        'critic_features': [256, 256],
+        'actor_features': [250, 250],
+        'critic_features': [250, 250],
         'scale_reward': 1.0,
         'tune_entropy_coef': True,
         'tau': 0.005,
-        'batch_size': 256,
-        'train_steps': 100,
+        'batch_size': 128,
+        'train_steps': 1024,
     }
 
     optimizer_kwargs = {
         'num_samples': num_samples,
         'num_elites': num_elites,
         'num_steps': num_steps,
-        'train_steps_per_model_update': 5,
-        'transitions_per_update': 8000,
+        'train_steps_per_model_update': 250,
+        'transitions_per_update': 150,
         'sac_kwargs': sac_kwargs,
         'sim_transitions_ratio': 0.0,
-        'reset_actor_params': True,
+        'reset_actor_params': False,
     }
 
     if exploration_strategy == 'Mean':
@@ -206,7 +208,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         policy_optimizer_name=optimizer_type,
         horizon=horizon,
         optimizer_kwargs=optimizer_kwargs,
-        start_optimizer_update=10
+        start_optimizer_update=5,
     )
 
     USE_WANDB = use_wandb
@@ -307,7 +309,7 @@ def main(args):
         normalize=args.normalize,
         action_normalize=args.action_normalize,
         validate=args.validate,
-        record_test_video=False, #args.record_test_video,
+        record_test_video=args.record_test_video,
         validation_buffer_size=args.validation_buffer_size,
         validation_batch_size=args.validation_batch_size,
         seed=args.seed,
@@ -360,7 +362,7 @@ if __name__ == '__main__':
     # agent experiment args
     parser.add_argument('--discount', type=float, default=1.0)
     parser.add_argument('--n_particles', type=int, default=5)
-    parser.add_argument('--reset_model', default=True, action="store_true")
+    parser.add_argument('--reset_model', default=False, action="store_true")
 
     # dynamics_model experiment args
     parser.add_argument('--num_ensembles', type=int, default=5)

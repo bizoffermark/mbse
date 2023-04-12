@@ -242,6 +242,12 @@ class SACOptimizer(DummyPolicyOptimizer):
         full_optimizer_state = self.init_optimizer_state
         if not self.reset_actor_params:
             full_optimizer_state = self.optimizer_state
+            if self.active_exploration_agent:
+                active_exploration_state = get_idx(self.init_optimizer_state, -1)
+                full_optimizer_state = \
+                    jax.tree_util.tree_map(lambda x, y: x.at[-1].set(y),
+                                           full_optimizer_state, active_exploration_state)
+
         agent_summary = []
         policy = self.agent_list[0].get_action
         for i in range(self.train_steps_per_model_update):
@@ -250,7 +256,6 @@ class SACOptimizer(DummyPolicyOptimizer):
             transitions_list = []
             for j in range(len(self.agent_list)):
                 sim_buffer = simulation_buffers[j]
-                agent = self.agent_list[j]
                 evaluate_fn = self.dynamics_model_list[j].evaluate
                 optimizer_state = get_idx(full_optimizer_state, idx=j)
                 if self.is_active_exploration_agent(idx=j):

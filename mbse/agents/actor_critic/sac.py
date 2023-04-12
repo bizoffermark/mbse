@@ -212,7 +212,10 @@ class SACModelSummary:
     def dict(self):
         def get_logging_value(x):
             if isinstance(x, jax.Array) or isinstance(x, np.ndarray):
-                return x[-1].item()
+                if x.ndim > 1:
+                    return x[-1].item()
+                else:
+                    return x.item()
             else:
                 return x.item()
 
@@ -327,9 +330,18 @@ class SACAgent(DummyAgent):
         self.target_entropy = -action_dim.astype(np.float32) if target_entropy is None else \
             target_entropy
         action_dim = int(action_dim)
-        self.actor_optimizer = optax.adamw(learning_rate=lr_actor, weight_decay=weight_decay_actor)
-        self.critic_optimizer = optax.adamw(learning_rate=lr_critic, weight_decay=weight_decay_critic)
-        self.alpha_optimizer = optax.adamw(learning_rate=lr_alpha, weight_decay=weight_decay_alpha)
+        self.actor_optimizer = \
+            optax.apply_if_finite(optax.adamw(learning_rate=lr_actor, weight_decay=weight_decay_actor),
+                                  10000000
+                                  )
+        self.critic_optimizer = optax.apply_if_finite(
+            optax.adamw(learning_rate=lr_critic, weight_decay=weight_decay_critic),
+            10000000
+        )
+        self.alpha_optimizer = optax.apply_if_finite(
+            optax.adamw(learning_rate=lr_alpha, weight_decay=weight_decay_alpha),
+            10000000
+        )
         self.actor = Actor(features=actor_features, action_dim=action_dim)
         self.critic = Critic(features=critic_features)
         self.log_alpha = ConstantModule(init_ent_coef)

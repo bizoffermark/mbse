@@ -3,12 +3,12 @@
 from setuptools import setup, find_packages
 
 required = [
-    'flax>=0.6.8',
-    'jax>=0.4.8',
-    'jaxlib>=0.4.7',
+    'flax>=0.4.1',
+    'jax>=0.3.4',
+    'jaxlib>=0.3.2',
     'matplotlib>=3.5.1',
     'numpy>=1.22.2',
-    'optax>=0.1.4',
+    'optax>=0.1.1',
     'scipy>=1.8.0',
     'wandb>=0.12.11',
     'termcolor>=1.1.0',

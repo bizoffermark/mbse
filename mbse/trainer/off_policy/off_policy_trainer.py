@@ -62,7 +62,9 @@ class OffPolicyTrainer(DummyTrainer):
             #    obs, _ = self.env.reset(seed=reset_seed)
             # transitions = self.rollout_policy(self.rollout_steps, policy, actor_rng)
             if self.use_wandb:
-                wandb.log({'env_steps':  step})
+                wandb.log({'learning_steps':  step,
+                           'env_steps': step * self.rollout_steps * self.num_envs,
+                           })
             if step % self.train_freq == 0:
                 train_rng, agent_rng = random.split(train_rng, 2)
                 total_train_steps = self.agent.train_step(

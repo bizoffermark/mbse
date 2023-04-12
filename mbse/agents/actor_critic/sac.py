@@ -210,21 +210,26 @@ class SACModelSummary:
     min_reward: jnp.array = ZERO
 
     def dict(self):
+        def get_logging_value(x):
+            if isinstance(x, jax.Array) or isinstance(x, np.ndarray):
+                return x[-1].item()
+            else:
+                return x.item()
 
         return {
-            'actor_loss': self.actor_loss.item(),
-            'entropy': self.entropy.item(),
-            'actor_std': self.actor_std.item(),
-            'critic_loss': self.critic_loss.item(),
-            'alpha_loss': self.alpha_loss.item(),
-            'log_alpha': self.log_alpha.item(),
-            'critic_grad_norm': self.critic_grad_norm.item(),
-            'actor_grad_norm': self.actor_grad_norm.item(),
-            'alpha_grad_norm': self.alpha_grad_norm.item(),
-            'target_v_term': self.target_v_term.item(),
-            'entropy_term': self.entropy_term.item(),
-            'max_reward': self.max_reward.item(),
-            'min_reward': self.min_reward.item(),
+            'actor_loss': get_logging_value(self.actor_loss),
+            'entropy': get_logging_value(self.entropy),
+            'actor_std': get_logging_value(self.actor_std),
+            'critic_loss': get_logging_value(self.critic_loss),
+            'alpha_loss': get_logging_value(self.alpha_loss),
+            'log_alpha': get_logging_value(self.log_alpha),
+            'critic_grad_norm': get_logging_value(self.critic_grad_norm),
+            'actor_grad_norm': get_logging_value(self.actor_grad_norm),
+            'alpha_grad_norm': get_logging_value(self.alpha_grad_norm),
+            'target_v_term': get_logging_value(self.target_v_term),
+            'entropy_term': get_logging_value(self.entropy_term),
+            'max_reward': get_logging_value(self.max_reward),
+            'min_reward': get_logging_value(self.min_reward),
         }
 
 

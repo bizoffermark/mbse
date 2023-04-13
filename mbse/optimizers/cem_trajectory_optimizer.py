@@ -5,6 +5,7 @@ from mbse.utils.utils import sample_trajectories
 import functools
 from typing import Optional, Union
 from mbse.optimizers.dummy_policy_optimizer import DummyPolicyOptimizer
+from mbse.models.dynamics_model import ModelProperties
 
 
 class CemTO(DummyPolicyOptimizer):
@@ -26,6 +27,7 @@ class CemTO(DummyPolicyOptimizer):
         self.optimizer = CrossEntropyOptimizer(action_dim=cem_action_dim, **cem_kwargs)
         assert isinstance(dynamics_model_list, list)
         self.dynamics_model_list = dynamics_model_list
+        self.init_mean = jnp.zeros(cem_action_dim)
         self._init_fn()
 
     def _init_fn(self):
@@ -35,13 +37,7 @@ class CemTO(DummyPolicyOptimizer):
                 obs,
                 key=None,
                 optimizer_key=None,
-                alpha: Union[jnp.ndarray, float] = 1.0,
-                bias_obs: Union[jnp.ndarray, float] = 0.0,
-                bias_act: Union[jnp.ndarray, float] = 0.0,
-                bias_out: Union[jnp.ndarray, float] = 0.0,
-                scale_obs: Union[jnp.ndarray, float] = 1.0,
-                scale_act: Union[jnp.ndarray, float] = 1.0,
-                scale_out: Union[jnp.ndarray, float] = 1.0,
+                model_props: ModelProperties = ModelProperties(),
                 initial_actions: Optional[jax.Array] = None,
                 sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
         ):
@@ -55,13 +51,7 @@ class CemTO(DummyPolicyOptimizer):
                 init_state=obs,
                 key=key,
                 optimizer_key=optimizer_key,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 sampling_idx=sampling_idx,
                 init_action_seq=initial_actions,
             )
@@ -78,13 +68,7 @@ class CemTO(DummyPolicyOptimizer):
                 obs,
                 key=None,
                 optimizer_key=None,
-                alpha: Union[jnp.ndarray, float] = 1.0,
-                bias_obs: Union[jnp.ndarray, float] = 0.0,
-                bias_act: Union[jnp.ndarray, float] = 0.0,
-                bias_out: Union[jnp.ndarray, float] = 0.0,
-                scale_obs: Union[jnp.ndarray, float] = 1.0,
-                scale_act: Union[jnp.ndarray, float] = 1.0,
-                scale_out: Union[jnp.ndarray, float] = 1.0,
+                model_props: ModelProperties = ModelProperties(),
                 initial_actions: Optional[jax.Array] = None,
                 sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
         ):
@@ -97,14 +81,8 @@ class CemTO(DummyPolicyOptimizer):
                 params=dynamics_params,
                 init_state=obs,
                 key=key,
-                alpha=alpha,
                 optimizer_key=optimizer_key,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 init_action_seq=initial_actions,
                 sampling_idx=sampling_idx,
             )
@@ -122,13 +100,7 @@ class CemTO(DummyPolicyOptimizer):
                                   init_state,
                                   key,
                                   optimizer_key,
-                                  alpha: Union[float, jax.Array],
-                                  bias_obs: Union[float, jax.Array],
-                                  bias_act: Union[float, jax.Array],
-                                  bias_out: Union[float, jax.Array],
-                                  scale_obs: Union[float, jax.Array],
-                                  scale_act: Union[float, jax.Array],
-                                  scale_out: Union[float, jax.Array],
+                                  model_props: ModelProperties = ModelProperties(),
                                   init_action_seq: Optional[jax.Array] = None,
                                   sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
                                   ):
@@ -139,13 +111,7 @@ class CemTO(DummyPolicyOptimizer):
             horizon=horizon,
             key=k,
             actions=seq,
-            alpha=alpha,
-            bias_obs=bias_obs,
-            bias_act=bias_act,
-            bias_out=bias_out,
-            scale_obs=scale_obs,
-            scale_act=scale_act,
-            scale_out=scale_out,
+            model_props=model_props,
             sampling_idx=sampling_idx,
         )
 

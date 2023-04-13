@@ -2,9 +2,9 @@ import jax.numpy as jnp
 from jax import jit
 import jax
 from functools import partial
+from mbse.utils.type_aliases import ModelProperties, PolicyProperties
 from mbse.utils.replay_buffer import Transition
-from mbse.models.dynamics_model import DynamicsModel
-from typing import Optional, Union, Tuple, Callable
+from typing import Optional, Union, Callable
 
 EPS = 1e-6
 
@@ -110,16 +110,9 @@ def sample_trajectories(
         policy: Optional[Callable] = None,
         actor_params=None,
         actions: Optional[jnp.ndarray] = None,
-        alpha: Union[jnp.ndarray, float] = 1.0,
-        bias_obs: Union[jnp.ndarray, float] = 0.0,
-        bias_act: Union[jnp.ndarray, float] = 0.0,
-        bias_out: Union[jnp.ndarray, float] = 0.0,
-        scale_obs: Union[jnp.ndarray, float] = 1.0,
-        scale_act: Union[jnp.ndarray, float] = 1.0,
-        scale_out: Union[jnp.ndarray, float] = 1.0,
+        model_props: ModelProperties = ModelProperties(),
         sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
-        policy_bias_obs: Union[jnp.ndarray, float] = 0.0,
-        policy_scale_obs: Union[jnp.ndarray, float] = 1.0,
+        policy_props: PolicyProperties = PolicyProperties(),
         # observations: Optional[jnp.ndarray] = None
 ) -> Transition:
     """
@@ -140,7 +133,8 @@ def sample_trajectories(
         obs = carry[1]
         if use_policy:
             seed, actor_seed = jax.random.split(seed, 2)
-            normalized_obs = (jax.lax.stop_gradient(obs) - policy_bias_obs)/(policy_scale_obs + EPS)
+            normalized_obs = (jax.lax.stop_gradient(obs) - policy_props.policy_bias_obs) / \
+                             (policy_props.policy_scale_obs + EPS)
             acs = policy(actor_params=actor_params, obs=normalized_obs, rng=actor_seed)
         else:
             acs = ins[-1]
@@ -153,13 +147,7 @@ def sample_trajectories(
             action=acs,
             rng=model_seed,
             sampling_idx=sampling_idx,
-            alpha=alpha,
-            bias_obs=bias_obs,
-            bias_act=bias_act,
-            bias_out=bias_out,
-            scale_obs=scale_obs,
-            scale_act=scale_act,
-            scale_out=scale_out,
+            model_props=model_props,
         )
         # if use_observations:
         #  carry = seed, obs, hidden
@@ -229,5 +217,13 @@ def tree_stack(trees, axis=0):
     result_leaves = [jnp.stack(l, axis=axis) for l in grouped_leaves]
     return treedef_list[0].unflatten(result_leaves)
 
+
 def get_idx(tree, idx):
     return jax.tree_util.tree_map(lambda x: x[idx], tree)
+
+
+def convert_to_jax(x):
+    if not isinstance(x, jax.Array):
+        return jnp.asarray(x)
+    else:
+        return x

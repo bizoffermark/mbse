@@ -3,7 +3,7 @@ from collections import OrderedDict
 from typing import Any, Dict, List, Tuple
 import numpy as np
 from gym import spaces
-from mbse.utils.type_aliases import GymEnv
+from mbse.utils.vec_env.env_type_aliases import GymEnv
 import warnings
 
 

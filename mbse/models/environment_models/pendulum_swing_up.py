@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import jax
 from functools import partial
 from typing import Union, Optional, Any
+from mbse.utils.type_aliases import ModelProperties
 
 
 class PendulumReward(RewardModel):
@@ -80,13 +81,7 @@ class PendulumReward(RewardModel):
                  action,
                  rng,
                  sampling_idx=None,
-                 alpha: Union[jnp.ndarray, float] = 1.0,
-                 bias_obs: Union[jnp.ndarray, float] = 0.0,
-                 bias_act: Union[jnp.ndarray, float] = 0.0,
-                 bias_out: Union[jnp.ndarray, float] = 0.0,
-                 scale_obs: Union[jnp.ndarray, float] = 1.0,
-                 scale_act: Union[jnp.ndarray, float] = 1.0,
-                 scale_out: Union[jnp.ndarray, float] = 1.0):
+                 model_props: ModelProperties = ModelProperties()):
         next_state = self.predict(obs=obs, action=action, rng=rng)
         reward = jnp.zeros(next_state.shape[0])
         return next_state, reward
@@ -211,13 +206,7 @@ class PendulumDynamicsModel(DynamicsModel):
                 action,
                 rng=None,
                 parameters=None,
-                alpha: Union[float, jax.Array] = 1.0,
-                bias_obs: Union[float, jax.Array] = 0.0,
-                bias_act: Union[float, jax.Array] = 0.0,
-                bias_out: Union[float, jax.Array] = 0.0,
-                scale_obs: Union[float, jax.Array] = 1.0,
-                scale_act: Union[float, jax.Array] = 1.0,
-                scale_out: Union[float, jax.Array] = 1.0,
+                model_props: ModelProperties = ModelProperties(),
                 sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
                 ):
         u = jnp.clip(self.rescale_action(action), -self.env.max_torque, self.env.max_torque)[0]
@@ -247,13 +236,7 @@ class PendulumDynamicsModel(DynamicsModel):
                  rng=None,
                  parameters=None,
                  sampling_idx=None,
-                 alpha: Union[jnp.ndarray, float] = 1.0,
-                 bias_obs: Union[jnp.ndarray, float] = 0.0,
-                 bias_act: Union[jnp.ndarray, float] = 0.0,
-                 bias_out: Union[jnp.ndarray, float] = 0.0,
-                 scale_obs: Union[jnp.ndarray, float] = 1.0,
-                 scale_act: Union[jnp.ndarray, float] = 1.0,
-                 scale_out: Union[jnp.ndarray, float] = 1.0,
+                 model_props: ModelProperties = ModelProperties(),
                  ):
         next_obs = self.predict(obs, action, rng)
         reward = self.reward_model.predict(obs, action, next_obs)

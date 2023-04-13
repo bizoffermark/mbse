@@ -1,5 +1,4 @@
 from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
-from mbse.optimizers.gradient_based_optimizer import GradientBasedOptimizer
 import jax.numpy as jnp
 import jax
 EPS = 5e-2

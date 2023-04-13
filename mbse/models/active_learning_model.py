@@ -1,9 +1,10 @@
-from typing import Optional, Union
+from typing import Optional
 import jax
 import jax.numpy as jnp
 from mbse.utils.utils import sample_normal_dist
 from mbse.models.hucrl_model import HUCRLModel
 from mbse.models.bayesian_dynamics_model import BayesianDynamicsModel, sample, SamplingType
+from mbse.utils.type_aliases import ModelProperties
 
 
 def evaluate_for_exploration(
@@ -12,13 +13,7 @@ def evaluate_for_exploration(
         obs,
         action,
         rng,
-        alpha: Union[jnp.ndarray, float] = 1.0,
-        bias_obs: Union[jnp.ndarray, float] = 0.0,
-        bias_act: Union[jnp.ndarray, float] = 0.0,
-        bias_out: Union[jnp.ndarray, float] = 0.0,
-        scale_obs: Union[jnp.ndarray, float] = 1.0,
-        scale_act: Union[jnp.ndarray, float] = 1.0,
-        scale_out: Union[jnp.ndarray, float] = 1.0,
+        model_props: ModelProperties = ModelProperties(),
         sampling_idx: Optional[int] = None,
         use_log_uncertainties: bool = False,
         use_al_uncertainties: bool = False,
@@ -31,13 +26,7 @@ def evaluate_for_exploration(
         obs=obs,
         action=action,
         rng=model_rng,
-        alpha=alpha,
-        bias_obs=bias_obs,
-        bias_act=bias_act,
-        bias_out=bias_out,
-        scale_obs=scale_obs,
-        scale_act=scale_act,
-        scale_out=scale_out,
+        model_props=model_props,
         sampling_idx=sampling_idx,
     )
     if use_log_uncertainties:
@@ -76,13 +65,7 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
                 action,
                 rng,
                 sampling_idx=self.sampling_idx,
-                alpha: Union[jnp.ndarray, float] = 1.0,
-                bias_obs: Union[jnp.ndarray, float] = 0.0,
-                bias_act: Union[jnp.ndarray, float] = 0.0,
-                bias_out: Union[jnp.ndarray, float] = 0.0,
-                scale_obs: Union[jnp.ndarray, float] = 1.0,
-                scale_act: Union[jnp.ndarray, float] = 1.0,
-                scale_out: Union[jnp.ndarray, float] = 1.0,
+                model_props: ModelProperties = ModelProperties(),
         ):
             return self._predict_with_uncertainty(
                 predict_fn=self.model._predict,
@@ -93,13 +76,7 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
                 sampling_type=self.sampling_type,
                 num_ensembles=self.model.num_ensembles,
                 sampling_idx=sampling_idx,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 pred_diff=self.pred_diff,
             )
 
@@ -110,13 +87,7 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
                 obs,
                 action,
                 rng,
-                alpha: Union[jnp.ndarray, float] = 1.0,
-                bias_obs: Union[jnp.ndarray, float] = 0.0,
-                bias_act: Union[jnp.ndarray, float] = 0.0,
-                bias_out: Union[jnp.ndarray, float] = 0.0,
-                scale_obs: Union[jnp.ndarray, float] = 1.0,
-                scale_act: Union[jnp.ndarray, float] = 1.0,
-                scale_out: Union[jnp.ndarray, float] = 1.0,
+                model_props: ModelProperties = ModelProperties(),
                 sampling_idx: Optional[int] = None,
         ):
             return evaluate_for_exploration(
@@ -125,13 +96,7 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
                 obs=obs,
                 action=action,
                 rng=rng,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 sampling_idx=sampling_idx,
                 use_log_uncertainties=self.use_log_uncertainties,
                 use_al_uncertainties=self.use_al_uncertainties,
@@ -140,18 +105,13 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
         self.evaluate_for_exploration = jax.jit(_evaluate_for_exploration)
         sampling_type = SamplingType()
         sampling_type.set_type('mean')
+
         def predict_with_mean(
                 parameters,
                 obs,
                 action,
                 rng,
-                alpha: Union[jnp.ndarray, float] = 1.0,
-                bias_obs: Union[jnp.ndarray, float] = 0.0,
-                bias_act: Union[jnp.ndarray, float] = 0.0,
-                bias_out: Union[jnp.ndarray, float] = 0.0,
-                scale_obs: Union[jnp.ndarray, float] = 1.0,
-                scale_act: Union[jnp.ndarray, float] = 1.0,
-                scale_out: Union[jnp.ndarray, float] = 1.0,
+                model_props: ModelProperties = ModelProperties(),
                 sampling_idx: int = 0,
         ):
             return self._predict(
@@ -163,13 +123,7 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
                 sampling_type=sampling_type,
                 num_ensembles=self.model.num_ensembles,
                 sampling_idx=sampling_idx,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 pred_diff=self.pred_diff,
             )
 
@@ -180,13 +134,7 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
                 obs,
                 action,
                 rng,
-                alpha: Union[jnp.ndarray, float] = 1.0,
-                bias_obs: Union[jnp.ndarray, float] = 0.0,
-                bias_act: Union[jnp.ndarray, float] = 0.0,
-                bias_out: Union[jnp.ndarray, float] = 0.0,
-                scale_obs: Union[jnp.ndarray, float] = 1.0,
-                scale_act: Union[jnp.ndarray, float] = 1.0,
-                scale_out: Union[jnp.ndarray, float] = 1.0,
+                model_props: ModelProperties = ModelProperties(),
                 sampling_idx: Optional[int] = None,
         ):
             return self._evaluate(
@@ -196,13 +144,7 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
                 obs=obs,
                 action=action,
                 rng=rng,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 sampling_idx=sampling_idx,
             )
 
@@ -219,15 +161,16 @@ class ActiveLearningPETSModel(BayesianDynamicsModel):
             sampling_type,
             num_ensembles,
             sampling_idx,
-            alpha: Union[jnp.ndarray, float] = 1.0,
-            bias_obs: Union[jnp.ndarray, float] = 0.0,
-            bias_act: Union[jnp.ndarray, float] = 0.0,
-            bias_out: Union[jnp.ndarray, float] = 0.0,
-            scale_obs: Union[jnp.ndarray, float] = 1.0,
-            scale_act: Union[jnp.ndarray, float] = 1.0,
-            scale_out: Union[jnp.ndarray, float] = 1.0,
+            model_props: ModelProperties = ModelProperties(),
             pred_diff: bool = 1,
     ):
+        alpha = model_props.alpha
+        bias_obs = model_props.bias_obs
+        bias_act = model_props.bias_act
+        bias_out = model_props.bias_out
+        scale_obs = model_props.scale_obs
+        scale_act = model_props.scale_act
+        scale_out = model_props.scale_out
         transformed_obs = (obs - bias_obs) / scale_obs
         transformed_act = (action - bias_act) / scale_act
         obs_action = jnp.concatenate([transformed_obs, transformed_act], axis=-1)
@@ -304,13 +247,7 @@ class ActiveLearningHUCRLModel(HUCRLModel):
                                      obs,
                                      action,
                                      rng,
-                                     alpha: Union[jnp.ndarray, float] = 1.0,
-                                     bias_obs: Union[jnp.ndarray, float] = 0.0,
-                                     bias_act: Union[jnp.ndarray, float] = 0.0,
-                                     bias_out: Union[jnp.ndarray, float] = 0.0,
-                                     scale_obs: Union[jnp.ndarray, float] = 1.0,
-                                     scale_act: Union[jnp.ndarray, float] = 1.0,
-                                     scale_out: Union[jnp.ndarray, float] = 1.0,
+                                     model_props: ModelProperties = ModelProperties(),
                                      sampling_idx: Optional[int] = None,
                                      ):
             return self._predict_with_uncertainty(
@@ -321,13 +258,7 @@ class ActiveLearningHUCRLModel(HUCRLModel):
                 action=action,
                 rng=rng,
                 beta=self.beta,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 pred_diff=self.pred_diff,
                 sampling_idx=sampling_idx,
             )
@@ -339,13 +270,7 @@ class ActiveLearningHUCRLModel(HUCRLModel):
                 obs,
                 action,
                 rng,
-                alpha: Union[jnp.ndarray, float] = 1.0,
-                bias_obs: Union[jnp.ndarray, float] = 0.0,
-                bias_act: Union[jnp.ndarray, float] = 0.0,
-                bias_out: Union[jnp.ndarray, float] = 0.0,
-                scale_obs: Union[jnp.ndarray, float] = 1.0,
-                scale_act: Union[jnp.ndarray, float] = 1.0,
-                scale_out: Union[jnp.ndarray, float] = 1.0,
+                model_props: ModelProperties = ModelProperties(),
                 sampling_idx: Optional[int] = None,
         ):
             return evaluate_for_exploration(
@@ -354,13 +279,7 @@ class ActiveLearningHUCRLModel(HUCRLModel):
                 obs=obs,
                 action=action,
                 rng=rng,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 sampling_idx=sampling_idx,
                 use_log_uncertainties=self.use_log_uncertainties,
                 use_al_uncertainties=self.use_al_uncertainties,
@@ -372,13 +291,7 @@ class ActiveLearningHUCRLModel(HUCRLModel):
                                      obs,
                                      action,
                                      rng,
-                                     alpha: Union[jnp.ndarray, float] = 1.0,
-                                     bias_obs: Union[jnp.ndarray, float] = 0.0,
-                                     bias_act: Union[jnp.ndarray, float] = 0.0,
-                                     bias_out: Union[jnp.ndarray, float] = 0.0,
-                                     scale_obs: Union[jnp.ndarray, float] = 1.0,
-                                     scale_act: Union[jnp.ndarray, float] = 1.0,
-                                     scale_out: Union[jnp.ndarray, float] = 1.0,
+                                     model_props: ModelProperties = ModelProperties(),
                                      sampling_idx: Optional[int] = None,
                                      ):
             return self._predict(
@@ -390,13 +303,7 @@ class ActiveLearningHUCRLModel(HUCRLModel):
                 rng=rng,
                 num_ensembles=self.model.num_ensembles,
                 beta=self.beta,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 pred_diff=self.pred_diff,
                 use_optimism=False,
                 sampling_idx=sampling_idx,
@@ -410,13 +317,7 @@ class ActiveLearningHUCRLModel(HUCRLModel):
                 obs,
                 action,
                 rng,
-                alpha: Union[jnp.ndarray, float] = 1.0,
-                bias_obs: Union[jnp.ndarray, float] = 0.0,
-                bias_act: Union[jnp.ndarray, float] = 0.0,
-                bias_out: Union[jnp.ndarray, float] = 0.0,
-                scale_obs: Union[jnp.ndarray, float] = 1.0,
-                scale_act: Union[jnp.ndarray, float] = 1.0,
-                scale_out: Union[jnp.ndarray, float] = 1.0,
+                model_props: ModelProperties = ModelProperties(),
                 sampling_idx: Optional[int] = None,
         ):
             return self._evaluate(
@@ -426,13 +327,7 @@ class ActiveLearningHUCRLModel(HUCRLModel):
                 obs=obs,
                 action=action,
                 rng=rng,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 sampling_idx=sampling_idx,
             )
 
@@ -447,16 +342,17 @@ class ActiveLearningHUCRLModel(HUCRLModel):
             action,
             rng,
             beta,
-            alpha: Union[jnp.ndarray, float] = 1.0,
-            bias_obs: Union[jnp.ndarray, float] = 0.0,
-            bias_act: Union[jnp.ndarray, float] = 0.0,
-            bias_out: Union[jnp.ndarray, float] = 0.0,
-            scale_obs: Union[jnp.ndarray, float] = 1.0,
-            scale_act: Union[jnp.ndarray, float] = 1.0,
-            scale_out: Union[jnp.ndarray, float] = 1.0,
+            model_props: ModelProperties = ModelProperties(),
             pred_diff: bool = 1,
             sampling_idx: Optional[int] = None,
     ):
+        alpha = model_props.alpha
+        bias_obs = model_props.bias_obs
+        bias_act = model_props.bias_act
+        bias_out = model_props.bias_out
+        scale_obs = model_props.scale_obs
+        scale_act = model_props.scale_act
+        scale_out = model_props.scale_out
         act, eta = jnp.split(action, axis=-1, indices_or_sections=[act_dim])
         transformed_obs = (obs - bias_obs) / scale_obs
         transformed_act = (act - bias_act) / scale_act
@@ -480,6 +376,7 @@ class ActiveLearningHUCRLModel(HUCRLModel):
                     rng,
                 )
                 return next_obs, next_obs_eps_std, al_uncertainty
+
             next_obs, next_obs_eps_std, al_uncertainty = get_epistemic_estimate(mean, std, eta, rng)
         next_obs = next_obs * scale_out + bias_out + pred_diff * obs
         return next_obs, next_obs_eps_std * scale_out, al_uncertainty * scale_out

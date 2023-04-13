@@ -1,11 +1,7 @@
-import functools
-
 import jax
 import math
 
-import numpy as np
-
-from mbse.models.dynamics_model import DynamicsModel, ModelSummary
+from mbse.models.dynamics_model import DynamicsModel
 from mbse.optimizers.cem_trajectory_optimizer import CemTO
 from mbse.optimizers.trajax_trajectory_optimizer import TraJaxTO
 from mbse.optimizers.sac_based_optimizer import SACOptimizer
@@ -137,13 +133,7 @@ class ModelBasedAgent(DummyAgent):
                         obs=init_state,
                         key=key,
                         optimizer_key=optimizer_key,
-                        alpha=self.dynamics_model.alpha,
-                        bias_obs=self.dynamics_model.bias_obs,
-                        bias_act=self.dynamics_model.bias_act,
-                        bias_out=self.dynamics_model.bias_out,
-                        scale_obs=self.dynamics_model.scale_obs,
-                        scale_act=self.dynamics_model.scale_act,
-                        scale_out=self.dynamics_model.scale_out,
+                        model_props=self.dynamics_model.model_props,
                     )
                     return action_seq, reward
 
@@ -169,13 +159,7 @@ class ModelBasedAgent(DummyAgent):
                         obs=init_state,
                         key=key,
                         optimizer_key=optimizer_key,
-                        alpha=self.dynamics_model.alpha,
-                        bias_obs=self.dynamics_model.bias_obs,
-                        bias_act=self.dynamics_model.bias_act,
-                        bias_out=self.dynamics_model.bias_out,
-                        scale_obs=self.dynamics_model.scale_obs,
-                        scale_act=self.dynamics_model.scale_act,
-                        scale_out=self.dynamics_model.scale_out,
+                        model_props=self.dynamics_model.model_props,
                     )
                     return action_seq, reward
 
@@ -255,13 +239,7 @@ class ModelBasedAgent(DummyAgent):
                 rng=policy_train_rng,
                 buffer=buffer,
                 dynamics_params=model_params,
-                alpha=alpha,
-                bias_obs=self.dynamics_model.bias_obs,
-                bias_act=self.dynamics_model.bias_act,
-                bias_out=self.dynamics_model.bias_out,
-                scale_obs=self.dynamics_model.scale_obs,
-                scale_act=self.dynamics_model.scale_act,
-                scale_out=self.dynamics_model.scale_out,
+                model_props=self.dynamics_model.model_props,
             )
             if log_results and self.log_agent_training:
                 for j in range(self.policy_optimizer.train_steps_per_model_update):
@@ -300,13 +278,7 @@ class ModelBasedAgent(DummyAgent):
         return self.dynamics_model.predict_raw(
             parameters=self.dynamics_model.model_params,
             tran=tran,
-            alpha=self.dynamics_model.alpha,
-            bias_obs=self.dynamics_model.bias_obs,
-            bias_act=self.dynamics_model.bias_act,
-            bias_out=self.dynamics_model.bias_out,
-            scale_obs=self.dynamics_model.scale_obs,
-            scale_act=self.dynamics_model.scale_act,
-            scale_out=self.dynamics_model.scale_out,
+            model_props=self.dynamics_model.model_props,
         )
 
     def update_models(self, model_params, model_opt_state, alpha: float = 1.0):

@@ -1,11 +1,11 @@
-import numpy as np
 from mbse.models.reward_model import RewardModel
 from mbse.models.dynamics_model import DynamicsModel
+from mbse.utils.type_aliases import ModelProperties
 import numpy as np
 import jax.numpy as jnp
 import jax
 from functools import partial
-from typing import Union, Optional, Any
+from typing import Union
 from flax import struct
 
 
@@ -31,16 +31,21 @@ class BicycleCarReward(RewardModel):
     def _predict(obs, action, x_target, rng=None, next_obs=None):
         obs = obs.reshape(-1, 6)
         action = action.reshape(-1, 2)
-        reward = - 0.1 * (jnp.sum(action ** 2, axis=-1) + 10 * jnp.sum((obs - x_target) ** 2, axis=-1))
+        diff = obs - x_target
+        sin_theta, cos_theta = jnp.sin(diff[..., 2]), jnp.cos(diff[..., 2])
+        diff = diff.at[..., 2].set(
+            jnp.arctan2(sin_theta, cos_theta)
+        )
+        reward = - 0.1 * (jnp.sum(action ** 2, axis=-1) + 10 * jnp.sum(diff ** 2, axis=-1))
         return reward.reshape(-1).squeeze()
 
 
 @struct.dataclass
 class CarParams:
-    m: float = 0.05
-    l: float = 0.06
+    m: float = 1.0
+    l: float = 1.0
     a: float = 0.25
-    b: float = 0.01
+    b: float = 0.8
     g: float = 9.81
     d_f: float = 0.2
     c_f: float = 1.25
@@ -60,7 +65,7 @@ class CarParams:
     room_boundary: float = 80.0
     velocity_limit: float = 100.0
     max_steering: float = 0.25
-    dt: float = 0.01
+    dt: float = 0.1
     control_freq: int = 1
 
     def _get_x_com(self):
@@ -223,11 +228,16 @@ class BicycleCarModel(DynamicsModel):
     def next_step(self, x: jax.Array, u: jax.Array, params: CarParams, control_freq: int):
         x_next = self.rk_integrator(x, u, params)
         x_next = x_next.reshape(-1, 6).squeeze()
+        sin_theta, cos_theta = jnp.sin(x_next[..., 2]), jnp.cos(x_next[..., 2])
+        x_next = x_next.at[2].set(
+            jnp.arctan2(sin_theta, cos_theta)
+        )
         return x_next
 
     def rk_integrator(self, x: jax.Array, u: jax.Array, params: CarParams):
         k1 = self._ode(x, u, params)
-        return x + k1 * params.dt
+        x_next = x + k1 * params.dt
+        return x_next
 
     @partial(jax.jit, static_argnums=(0, 4))
     def _predict(self, x: jax.Array, u: jax.Array, params: CarParams, control_freq: int):
@@ -242,13 +252,7 @@ class BicycleCarModel(DynamicsModel):
                  parameters=None,
                  rng=None,
                  sampling_idx=None,
-                 alpha: Union[jnp.ndarray, float] = 1.0,
-                 bias_obs: Union[jnp.ndarray, float] = 0.0,
-                 bias_act: Union[jnp.ndarray, float] = 0.0,
-                 bias_out: Union[jnp.ndarray, float] = 0.0,
-                 scale_obs: Union[jnp.ndarray, float] = 1.0,
-                 scale_act: Union[jnp.ndarray, float] = 1.0,
-                 scale_out: Union[jnp.ndarray, float] = 1.0):
+                 model_props: ModelProperties = ModelProperties()):
         next_state = self.predict(obs=obs, action=action, rng=rng)
         reward = self.reward_model.predict(obs=obs, action=action, next_obs=next_state)
         return next_state, reward
@@ -259,12 +263,6 @@ class BicycleCarModel(DynamicsModel):
                                 rng=None,
                                 parameters=None,
                                 sampling_idx=None,
-                                alpha: Union[jnp.ndarray, float] = 1.0,
-                                bias_obs: Union[jnp.ndarray, float] = 0.0,
-                                bias_act: Union[jnp.ndarray, float] = 0.0,
-                                bias_out: Union[jnp.ndarray, float] = 0.0,
-                                scale_obs: Union[jnp.ndarray, float] = 1.0,
-                                scale_act: Union[jnp.ndarray, float] = 1.0,
-                                scale_out: Union[jnp.ndarray, float] = 1.0):
+                                model_props: ModelProperties = ModelProperties()):
         next_state = self.predict(obs=obs, action=action, rng=rng)
         return next_state

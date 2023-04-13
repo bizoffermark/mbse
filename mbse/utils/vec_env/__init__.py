@@ -16,7 +16,7 @@ from mbse.utils.vec_env.vec_normalize import VecNormalize
 
 # Avoid circular import
 if typing.TYPE_CHECKING:
-    from mbse.utils.type_aliases import GymEnv
+    from mbse.utils.vec_env.env_type_aliases import GymEnv
 
 
 def unwrap_vec_wrapper(env: Union["GymEnv", VecEnv], vec_wrapper_class: Type[VecEnvWrapper]) -> Optional[VecEnvWrapper]:

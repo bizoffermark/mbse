@@ -1,7 +1,9 @@
-from mbse.utils.replay_buffer import Transition, identity_transform, inverse_identitiy_transform
-from typing import Optional, Callable, Union
+from mbse.utils.replay_buffer import Transition
+from typing import Optional, Union
 from flax import struct
 import jax.numpy as jnp
+from mbse.utils.utils import convert_to_jax
+from mbse.utils.type_aliases import ModelProperties
 
 
 @struct.dataclass
@@ -30,24 +32,13 @@ class ModelSummary:
 
 class DynamicsModel(object):
     def __init__(self,
-                 bias_obs: Union[jnp.ndarray, float] = 0.0,
-                 bias_act: Union[jnp.ndarray, float] = 0.0,
-                 bias_out: Union[jnp.ndarray, float] = 0.0,
-                 scale_obs: Union[jnp.ndarray, float] = 1.0,
-                 scale_act: Union[jnp.ndarray, float] = 1.0,
-                 scale_out: Union[jnp.ndarray, float] = 1.0,
+                 model_props: ModelProperties = ModelProperties(),
                  pred_diff: bool = False,
                  *args,
                  **kwargs
                  ):
-        self.bias_obs = bias_obs
-        self.bias_act = bias_act
-        self.bias_out = bias_out
-        self.scale_obs = scale_obs
-        self.scale_act = scale_act
-        self.scale_out = scale_out
+        self.model_props = model_props
         self.pred_diff = pred_diff
-        self.alpha = 1.0
         self.evaluate_for_exploration = self.evaluate
         pass
 
@@ -60,13 +51,7 @@ class DynamicsModel(object):
     def predict_raw(self,
                     parameters,
                     tran: Transition,
-                    alpha: Union[jnp.ndarray, float] = 1.0,
-                    bias_obs: Union[jnp.ndarray, float] = 0.0,
-                    bias_act: Union[jnp.ndarray, float] = 0.0,
-                    bias_out: Union[jnp.ndarray, float] = 0.0,
-                    scale_obs: Union[jnp.ndarray, float] = 1.0,
-                    scale_act: Union[jnp.ndarray, float] = 1.0,
-                    scale_out: Union[jnp.ndarray, float] = 1.0,
+                    model_props: ModelProperties = ModelProperties()
                     ):
         pass
 
@@ -76,13 +61,7 @@ class DynamicsModel(object):
                  action,
                  rng,
                  sampling_idx=None,
-                 alpha: Union[jnp.ndarray, float] = 1.0,
-                 bias_obs: Union[jnp.ndarray, float] = 0.0,
-                 bias_act: Union[jnp.ndarray, float] = 0.0,
-                 bias_out: Union[jnp.ndarray, float] = 0.0,
-                 scale_obs: Union[jnp.ndarray, float] = 1.0,
-                 scale_act: Union[jnp.ndarray, float] = 1.0,
-                 scale_out: Union[jnp.ndarray, float] = 1.0,
+                 model_props: ModelProperties = ModelProperties()
                  ):
         pass
 
@@ -110,6 +89,22 @@ class DynamicsModel(object):
         return None
 
     def update_model(self, model_params, model_opt_state, alpha):
+        alpha = convert_to_jax(alpha)
+        bias_obs = self.model_props.bias_obs
+        bias_act = self.model_props.bias_act
+        bias_out = self.model_props.bias_out
+        scale_obs = self.model_props.scale_obs
+        scale_act = self.model_props.scale_act
+        scale_out = self.model_props.scale_out
+        self.model_props = ModelProperties(
+            bias_obs=bias_obs,
+            bias_act=bias_act,
+            bias_out=bias_out,
+            scale_obs=scale_obs,
+            scale_act=scale_act,
+            scale_out=scale_out,
+            alpha=alpha,
+        )
         pass
 
     def set_transforms(self,
@@ -120,9 +115,19 @@ class DynamicsModel(object):
                        scale_act: Union[jnp.ndarray, float] = 1.0,
                        scale_out: Union[jnp.ndarray, float] = 1.0,
                        ):
-        self.bias_obs = bias_obs
-        self.bias_act = bias_act
-        self.bias_out = bias_out
-        self.scale_obs = scale_obs
-        self.scale_act = scale_act
-        self.scale_out = scale_out
+        alpha = self.model_props.alpha
+        bias_obs = convert_to_jax(bias_obs)
+        bias_act = convert_to_jax(bias_act)
+        bias_out = convert_to_jax(bias_out)
+        scale_obs = convert_to_jax(scale_obs)
+        scale_act = convert_to_jax(scale_act)
+        scale_out = convert_to_jax(scale_out)
+        self.model_props = ModelProperties(
+            bias_obs=bias_obs,
+            bias_act=bias_act,
+            bias_out=bias_out,
+            scale_obs=scale_obs,
+            scale_act=scale_act,
+            scale_out=scale_out,
+            alpha=alpha,
+        )

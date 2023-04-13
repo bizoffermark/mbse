@@ -8,8 +8,6 @@ from gym.wrappers.time_limit import TimeLimit
 from gym.wrappers.rescale_action import RescaleAction
 from mbse.utils.replay_buffer import ReplayBuffer, Transition
 from mbse.utils.vec_env.env_util import make_vec_env
-from jax.config import config
-config.update("jax_log_compiles", 1)
 
 def rollout_random_policy(env, num_steps, rng):
     rng, reset_rng = jax.random.split(rng, 2)
@@ -78,7 +76,7 @@ wrapper_cls = lambda x: RescaleAction(
 )
 env = wrapper_cls(CustomPendulumEnv(render_mode='human'))
 true_dynamics = PendulumDynamicsModel(env)
-dynamics_model_list = [true_dynamics, true_dynamics, true_dynamics]
+dynamics_model_list = [true_dynamics]
 
 horizon = 20
 
@@ -106,9 +104,10 @@ policy_optimizer = SACOptimizer(
     dynamics_model_list=dynamics_model_list,
     horizon=horizon,
     action_dim=(1,),
-    train_steps_per_model_update=15,
-    transitions_per_update=50,
-    sac_kwargs=sac_kwargs
+    train_steps_per_model_update=10,
+    transitions_per_update=200,
+    sac_kwargs=sac_kwargs,
+    reset_actor_params=False,
 )
 
 buffer = ReplayBuffer(
@@ -137,16 +136,7 @@ obs, _ = env.reset()
 # wandb.init(
 #     project="sac_opt_test"
 # )
-# for i in range(len(policy_optimizer.agent_list)):
-#     for j in range(policy_optimizer.train_steps_per_model_update):
-#         summary = train_summary[i][j]
-#         summary_dict = summary.dict()
-#         summary_relabeled_dict = {}
-#         for key, value in summary_dict.items():
-#             summary_relabeled_dict[key + '_agent_' + str(i)] = value
-#         wandb.log(
-#             summary_relabeled_dict
-#         )
+
 for run in range(5):
     t = time.time()
     train_summary = policy_optimizer.train(

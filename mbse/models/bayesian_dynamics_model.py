@@ -1,4 +1,5 @@
-from typing import Sequence, Callable, Optional, Union
+from typing import Sequence, Callable, Optional
+
 import numpy as np
 import gym
 from flax import linen as nn
@@ -8,6 +9,7 @@ import jax.numpy as jnp
 from mbse.utils.utils import sample_normal_dist
 from mbse.utils.replay_buffer import Transition
 from mbse.models.dynamics_model import DynamicsModel, ModelSummary
+from mbse.utils.type_aliases import ModelProperties
 from mbse.models.reward_model import RewardModel
 from typing import List
 from mbse.utils.utils import gaussian_log_likelihood
@@ -109,13 +111,7 @@ class BayesianDynamicsModel(DynamicsModel):
                     action,
                     rng,
                     sampling_idx=self.sampling_idx,
-                    alpha: Union[jnp.ndarray, float] = 1.0,
-                    bias_obs: Union[jnp.ndarray, float] = 0.0,
-                    bias_act: Union[jnp.ndarray, float] = 0.0,
-                    bias_out: Union[jnp.ndarray, float] = 0.0,
-                    scale_obs: Union[jnp.ndarray, float] = 1.0,
-                    scale_act: Union[jnp.ndarray, float] = 1.0,
-                    scale_out: Union[jnp.ndarray, float] = 1.0,
+                    model_props: ModelProperties = ModelProperties(),
                     ):
             return self._predict(
                 predict_fn=self.model._predict,
@@ -126,13 +122,7 @@ class BayesianDynamicsModel(DynamicsModel):
                 sampling_type=self.sampling_type,
                 num_ensembles=self.model.num_ensembles,
                 sampling_idx=sampling_idx,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 pred_diff=self.pred_diff,
             )
 
@@ -144,13 +134,7 @@ class BayesianDynamicsModel(DynamicsModel):
                 action,
                 rng,
                 sampling_idx=self.sampling_idx,
-                alpha: Union[jnp.ndarray, float] = 1.0,
-                bias_obs: Union[jnp.ndarray, float] = 0.0,
-                bias_act: Union[jnp.ndarray, float] = 0.0,
-                bias_out: Union[jnp.ndarray, float] = 0.0,
-                scale_obs: Union[jnp.ndarray, float] = 1.0,
-                scale_act: Union[jnp.ndarray, float] = 1.0,
-                scale_out: Union[jnp.ndarray, float] = 1.0,
+                model_props: ModelProperties = ModelProperties(),
         ):
             return self._evaluate(
                 pred_fn=self.predict,
@@ -159,14 +143,8 @@ class BayesianDynamicsModel(DynamicsModel):
                 obs=obs,
                 action=action,
                 rng=rng,
-                alpha=alpha,
                 sampling_idx=sampling_idx,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
             )
 
         self.evaluate = jax.jit(evaluate)
@@ -192,25 +170,13 @@ class BayesianDynamicsModel(DynamicsModel):
         def _predict_raw(
                 parameters,
                 tran: Transition,
-                alpha: Union[jnp.ndarray, float] = 1.0,
-                bias_obs: Union[jnp.ndarray, float] = 0.0,
-                bias_act: Union[jnp.ndarray, float] = 0.0,
-                bias_out: Union[jnp.ndarray, float] = 0.0,
-                scale_obs: Union[jnp.ndarray, float] = 1.0,
-                scale_act: Union[jnp.ndarray, float] = 1.0,
-                scale_out: Union[jnp.ndarray, float] = 1.0,
+                model_props: ModelProperties = ModelProperties(),
         ):
             return self._predict_raw(
                 predict_fn=self.model._predict,
                 parameters=parameters,
                 tran=tran,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 pred_diff=self.pred_diff,
             )
 
@@ -231,15 +197,16 @@ class BayesianDynamicsModel(DynamicsModel):
             predict_fn,
             parameters,
             tran: Transition,
-            alpha: Union[jnp.ndarray, float] = 1.0,
-            bias_obs: Union[jnp.ndarray, float] = 0.0,
-            bias_act: Union[jnp.ndarray, float] = 0.0,
-            bias_out: Union[jnp.ndarray, float] = 0.0,
-            scale_obs: Union[jnp.ndarray, float] = 1.0,
-            scale_act: Union[jnp.ndarray, float] = 1.0,
-            scale_out: Union[jnp.ndarray, float] = 1.0,
+            model_props: ModelProperties = ModelProperties(),
             pred_diff: bool = 1,
     ):
+        alpha = model_props.alpha
+        bias_obs = model_props.bias_obs
+        bias_act = model_props.bias_act
+        bias_out = model_props.bias_out
+        scale_obs = model_props.scale_obs
+        scale_act = model_props.scale_act
+        scale_out = model_props.scale_out
         obs = tran.obs
         action = tran.action
         transformed_obs = (obs - bias_obs) / scale_obs
@@ -260,13 +227,7 @@ class BayesianDynamicsModel(DynamicsModel):
                  sampling_type,
                  num_ensembles,
                  sampling_idx,
-                 alpha: Union[jnp.ndarray, float] = 1.0,
-                 bias_obs: Union[jnp.ndarray, float] = 0.0,
-                 bias_act: Union[jnp.ndarray, float] = 0.0,
-                 bias_out: Union[jnp.ndarray, float] = 0.0,
-                 scale_obs: Union[jnp.ndarray, float] = 1.0,
-                 scale_act: Union[jnp.ndarray, float] = 1.0,
-                 scale_out: Union[jnp.ndarray, float] = 1.0,
+                 model_props: ModelProperties = ModelProperties(),
                  pred_diff: bool = 1,
                  ):
         """
@@ -277,6 +238,13 @@ class BayesianDynamicsModel(DynamicsModel):
                 :return:
 
                 """
+        alpha = model_props.alpha
+        bias_obs = model_props.bias_obs
+        bias_act = model_props.bias_act
+        bias_out = model_props.bias_out
+        scale_obs = model_props.scale_obs
+        scale_act = model_props.scale_act
+        scale_out = model_props.scale_out
         transformed_obs = (obs - bias_obs) / scale_obs
         transformed_act = (action - bias_act) / scale_act
         obs_action = jnp.concatenate([transformed_obs, transformed_act], axis=-1)
@@ -338,7 +306,8 @@ class BayesianDynamicsModel(DynamicsModel):
         return next_obs
 
     @staticmethod
-    def _train(train_fn, predict_fn, calibrate_fn, tran: Transition, model_params, model_opt_state, val: Transition = None):
+    def _train(train_fn, predict_fn, calibrate_fn, tran: Transition, model_params, model_opt_state,
+               val: Transition = None):
         alpha = jnp.ones(tran.obs.shape[-1])
         best_score = 0.0
         x = jnp.concatenate([tran.obs, tran.action], axis=-1)
@@ -399,9 +368,9 @@ class BayesianDynamicsModel(DynamicsModel):
         return self.model.init_opt_state
 
     def update_model(self, model_params, model_opt_state, alpha):
+        super().update_model(model_params, model_opt_state, alpha)
         self.model.particles = model_params
         self.model.opt_state = model_opt_state
-        self.alpha = alpha
 
     @staticmethod
     def _evaluate(
@@ -412,13 +381,7 @@ class BayesianDynamicsModel(DynamicsModel):
             action,
             rng,
             sampling_idx,
-            alpha: Union[jnp.ndarray, float] = 1.0,
-            bias_obs: Union[jnp.ndarray, float] = 0.0,
-            bias_act: Union[jnp.ndarray, float] = 0.0,
-            bias_out: Union[jnp.ndarray, float] = 0.0,
-            scale_obs: Union[jnp.ndarray, float] = 1.0,
-            scale_act: Union[jnp.ndarray, float] = 1.0,
-            scale_out: Union[jnp.ndarray, float] = 1.0,
+            model_props: ModelProperties = ModelProperties()
     ):
         model_rng = None
         reward_rng = None
@@ -431,13 +394,7 @@ class BayesianDynamicsModel(DynamicsModel):
             action=action,
             rng=model_rng,
             sampling_idx=sampling_idx,
-            alpha=alpha,
-            bias_obs=bias_obs,
-            bias_act=bias_act,
-            bias_out=bias_out,
-            scale_obs=scale_obs,
-            scale_act=scale_act,
-            scale_out=scale_out
+            model_props=model_props,
         )
         reward = reward_fn(obs, action, next_obs, reward_rng)
         return next_obs, reward

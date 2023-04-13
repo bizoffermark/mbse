@@ -1,9 +1,10 @@
-from typing import Optional, Union
+from typing import Optional
 import jax
 import jax.numpy as jnp
 from mbse.utils.utils import sample_normal_dist
 from mbse.utils.replay_buffer import Transition
 from mbse.models.bayesian_dynamics_model import BayesianDynamicsModel
+from mbse.utils.type_aliases import ModelProperties
 
 
 @jax.jit
@@ -47,13 +48,7 @@ class HUCRLModel(BayesianDynamicsModel):
                     obs,
                     action,
                     rng,
-                    alpha: Union[jnp.ndarray, float] = 1.0,
-                    bias_obs: Union[jnp.ndarray, float] = 0.0,
-                    bias_act: Union[jnp.ndarray, float] = 0.0,
-                    bias_out: Union[jnp.ndarray, float] = 0.0,
-                    scale_obs: Union[jnp.ndarray, float] = 1.0,
-                    scale_act: Union[jnp.ndarray, float] = 1.0,
-                    scale_out: Union[jnp.ndarray, float] = 1.0,
+                    model_props: ModelProperties = ModelProperties(),
                     sampling_idx: Optional[int] = None,
                     ):
             return self._predict(
@@ -65,14 +60,7 @@ class HUCRLModel(BayesianDynamicsModel):
                 rng=rng,
                 num_ensembles=self.model.num_ensembles,
                 beta=self.beta,
-                # batch_size=obs.shape[0],
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 pred_diff=self.pred_diff,
                 use_optimism=True,
                 sampling_idx=sampling_idx,
@@ -85,13 +73,7 @@ class HUCRLModel(BayesianDynamicsModel):
                 obs,
                 action,
                 rng,
-                alpha: Union[jnp.ndarray, float] = 1.0,
-                bias_obs: Union[jnp.ndarray, float] = 0.0,
-                bias_act: Union[jnp.ndarray, float] = 0.0,
-                bias_out: Union[jnp.ndarray, float] = 0.0,
-                scale_obs: Union[jnp.ndarray, float] = 1.0,
-                scale_act: Union[jnp.ndarray, float] = 1.0,
-                scale_out: Union[jnp.ndarray, float] = 1.0,
+                model_props: ModelProperties = ModelProperties(),
                 sampling_idx: Optional[int] = None,
         ):
             return self._evaluate(
@@ -101,13 +83,7 @@ class HUCRLModel(BayesianDynamicsModel):
                 obs=obs,
                 action=action,
                 rng=rng,
-                alpha=alpha,
-                bias_obs=bias_obs,
-                bias_act=bias_act,
-                bias_out=bias_out,
-                scale_obs=scale_obs,
-                scale_act=scale_act,
-                scale_out=scale_out,
+                model_props=model_props,
                 sampling_idx=sampling_idx,
             )
 
@@ -140,17 +116,18 @@ class HUCRLModel(BayesianDynamicsModel):
                  rng,
                  num_ensembles,
                  beta,
-                 alpha: Union[jnp.ndarray, float] = 1.0,
-                 bias_obs: Union[jnp.ndarray, float] = 0.0,
-                 bias_act: Union[jnp.ndarray, float] = 0.0,
-                 bias_out: Union[jnp.ndarray, float] = 0.0,
-                 scale_obs: Union[jnp.ndarray, float] = 1.0,
-                 scale_act: Union[jnp.ndarray, float] = 1.0,
-                 scale_out: Union[jnp.ndarray, float] = 1.0,
+                 model_props: ModelProperties = ModelProperties(),
                  pred_diff: bool = 1,
                  use_optimism: bool = 1,
                  sampling_idx: Optional[int] = None,
                  ):
+        alpha = model_props.alpha
+        bias_obs = model_props.bias_obs
+        bias_act = model_props.bias_act
+        bias_out = model_props.bias_out
+        scale_obs = model_props.scale_obs
+        scale_act = model_props.scale_act
+        scale_out = model_props.scale_out
         act, eta = jnp.split(action, axis=-1, indices_or_sections=[act_dim])
         transformed_obs = (obs - bias_obs) / scale_obs
         transformed_act = (act - bias_act) / scale_act
@@ -196,13 +173,7 @@ class HUCRLModel(BayesianDynamicsModel):
             obs,
             action,
             rng,
-            alpha: Union[jnp.ndarray, float] = 1.0,
-            bias_obs: Union[jnp.ndarray, float] = 0.0,
-            bias_act: Union[jnp.ndarray, float] = 0.0,
-            bias_out: Union[jnp.ndarray, float] = 0.0,
-            scale_obs: Union[jnp.ndarray, float] = 1.0,
-            scale_act: Union[jnp.ndarray, float] = 1.0,
-            scale_out: Union[jnp.ndarray, float] = 1.0,
+            model_props: ModelProperties = ModelProperties(),
             sampling_idx: Optional[int] = None,
     ):
         model_rng = None
@@ -215,13 +186,7 @@ class HUCRLModel(BayesianDynamicsModel):
             obs=obs,
             action=action,
             rng=model_rng,
-            alpha=alpha,
-            bias_obs=bias_obs,
-            bias_act=bias_act,
-            bias_out=bias_out,
-            scale_obs=scale_obs,
-            scale_act=scale_act,
-            scale_out=scale_out,
+            model_props=model_props,
         )
         # transformed_obs, transformed_action, _ = self.transforms(obs, action)
         # transformed_next_obs = self.predict(transformed_obs, transformed_action, model_rng)

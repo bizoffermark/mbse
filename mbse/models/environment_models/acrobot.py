@@ -2,9 +2,9 @@ import jax
 
 from mbse.models.reward_model import RewardModel
 from mbse.models.dynamics_model import DynamicsModel
+from mbse.utils.type_aliases import ModelProperties
 import jax.numpy as jnp
 from functools import partial
-from typing import Union
 
 from gym.envs.classic_control.acrobot import AcrobotEnv
 
@@ -64,13 +64,7 @@ class AcrobotDynamics(DynamicsModel):
                  parameters=None,
                  rng=None,
                  sampling_idx=None,
-                 alpha: Union[jnp.ndarray, float] = 1.0,
-                 bias_obs: Union[jnp.ndarray, float] = 0.0,
-                 bias_act: Union[jnp.ndarray, float] = 0.0,
-                 bias_out: Union[jnp.ndarray, float] = 0.0,
-                 scale_obs: Union[jnp.ndarray, float] = 1.0,
-                 scale_act: Union[jnp.ndarray, float] = 1.0,
-                 scale_out: Union[jnp.ndarray, float] = 1.0):
+                 model_props: ModelProperties = ModelProperties()):
         next_state = self.predict(obs=obs, action=action, rng=rng)
         reward = self.reward_model.predict(obs=obs, action=action, next_obs=next_state)
         return next_state, reward

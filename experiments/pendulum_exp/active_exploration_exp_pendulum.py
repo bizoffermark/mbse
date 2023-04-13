@@ -44,16 +44,16 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         'scale_reward': 1,
         'tune_entropy_coef': True,
         'tau': 0.005,
-        'batch_size': 128,
-        'train_steps': 350,
+        'batch_size': 256,
+        'train_steps': 500,
     }
 
     optimizer_kwargs = {
         'num_samples': num_samples,
         'num_elites': num_elites,
         'num_steps': num_steps,
-        'train_steps_per_model_update': 20,
-        'transitions_per_update': 50,
+        'train_steps_per_model_update': 25,
+        'transitions_per_update': 500,
         'sac_kwargs': sac_kwargs,
         'sim_transitions_ratio': 0.0,
         'reset_actor_params': True,

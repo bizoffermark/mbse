@@ -1,11 +1,20 @@
-"""Common aliases for type hints"""
-from typing import Any, Dict, Tuple, Union
+from typing import Union
+import jax
+import flax.struct as struct
 
-import gym
-import numpy as np
 
-from mbse.utils.vec_env import VecEnv
+@struct.dataclass
+class ModelProperties:
+    alpha: Union[jax.Array, float] = 1.0
+    bias_obs: Union[jax.Array, float] = 0.0
+    bias_act: Union[jax.Array, float] = 0.0
+    bias_out: Union[jax.Array, float] = 0.0
+    scale_obs: Union[jax.Array, float] = 1.0
+    scale_act: Union[jax.Array, float] = 1.0
+    scale_out: Union[jax.Array, float] = 1.0
 
-GymEnv = Union[gym.Env, VecEnv]
-GymObs = Union[Tuple, Dict[str, Any], np.ndarray, int]
-GymStepReturn = Tuple[GymObs, float, bool, Dict]
+
+@struct.dataclass
+class PolicyProperties:
+    policy_bias_obs: Union[jax.Array, float] = 0.0
+    policy_scale_obs: Union[jax.Array, float] = 0.0

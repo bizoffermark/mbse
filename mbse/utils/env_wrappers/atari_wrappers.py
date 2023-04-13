@@ -9,7 +9,7 @@ try:
 except ImportError:
     cv2 = None
 
-from mbse.utils.type_aliases import GymObs, GymStepReturn
+from mbse.utils.vec_env.env_type_aliases import GymObs, GymStepReturn
 
 
 class NoopResetEnv(gym.Wrapper):

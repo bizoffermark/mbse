@@ -11,7 +11,7 @@ import gym
 import numpy as np
 import pandas
 
-from mbse.utils.type_aliases import GymObs, GymStepReturn
+from mbse.utils.vec_env.env_type_aliases import GymObs, GymStepReturn
 
 
 class Monitor(gym.Wrapper):

@@ -1,5 +1,3 @@
-import time
-
 import flax.struct
 import numpy as np
 from typing import Sequence, Callable, Optional
@@ -18,6 +16,8 @@ from mbse.utils.utils import gaussian_log_likelihood, sample_normal_dist
 from mbse.agents.dummy_agent import DummyAgent
 import wandb
 from typing import Any as Params
+from mbse.utils.type_aliases import PolicyProperties
+from mbse.utils.utils import convert_to_jax
 
 EPS = 1e-6
 ZERO = 0.0
@@ -106,7 +106,11 @@ def get_soft_td_target(
     return target_v, target_v_term, entropy_term.mean()
 
 
-def get_action(actor_fn, actor_params, obs, rng=None, eval=False):
+def get_action(actor_fn,
+               actor_params,
+               obs,
+               rng=None,
+               eval=False):
     mu, sig = actor_fn(actor_params, obs)
 
     def get_mean(mu, sig, rng):
@@ -173,6 +177,7 @@ def update_critic(
     new_critic_params = optax.apply_updates(critic_params, updates)
     grad_norm = optax.global_norm(grads)
     return new_critic_params, new_critic_opt_state, loss, grad_norm
+
 
 def update_alpha(log_alpha_fn, alpha_params, alpha_opt_state, alpha_update_fn, log_a, target_entropy):
     diff_entropy = jax.lax.stop_gradient(log_a + target_entropy)
@@ -367,6 +372,7 @@ class SACAgent(DummyAgent):
             alpha_opt_state=alpha_opt_state,
             alpha_params=alpha_params,
         )
+        self.policy_props = PolicyProperties()
 
         self.q_update_frequency = q_update_frequency
         self.scale_reward = scale_reward
@@ -414,8 +420,7 @@ class SACAgent(DummyAgent):
                                                   reward_scale=self.scale_reward,
                                               ))
 
-        self.update_critic = jax.jit(lambda critic_params, critic_opt_state, obs, action, target_v: \
-                                         update_critic(
+        self.update_critic = jax.jit(lambda critic_params, critic_opt_state, obs, action, target_v: update_critic(
                                              critic_fn=self.critic.apply,
                                              critic_params=critic_params,
                                              critic_opt_state=critic_opt_state,
@@ -476,6 +481,9 @@ class SACAgent(DummyAgent):
         self.step = jax.jit(step)
 
     def act_in_jax(self, obs, rng=None, eval=False, eval_idx=0):
+        bias_obs = self.policy_props.policy_bias_obs
+        bias_scale = self.policy_props.policy_scale_obs
+        obs = (obs - bias_obs) / (bias_scale + EPS)
         if eval:
             return self.get_eval_action(
                 actor_params=self.training_state.actor_params,
@@ -609,6 +617,12 @@ class SACAgent(DummyAgent):
         ins = [transitions]
         carry, outs = jax.lax.scan(self.step, carry, ins, length=self.train_steps)
         self.training_state = carry[1]
+        bias_obs = convert_to_jax(buffer.state_normalizer.mean)
+        scale_obs = convert_to_jax(buffer.state_normalizer.std)
+        self.policy_props = PolicyProperties(
+            policy_bias_obs=bias_obs,
+            policy_scale_obs=scale_obs,
+        )
         summaries = outs[-1]
         if log_results:
             for idx in range(self.train_steps):

@@ -86,18 +86,18 @@ obs, _ = env.reset()
 sac_kwargs = {
     'discount': 0.99,
     'init_ent_coef': 1.0,
-    'lr_actor': 0.001,
+    'lr_actor': 0.01,
     'weight_decay_actor': 1e-5,
-    'lr_critic': 0.001,
+    'lr_critic': 0.01,
     'weight_decay_critic': 1e-5,
-    'lr_alpha': 0.0005,
+    'lr_alpha': 0.001,
     'weight_decay_alpha': 0.0,
     'actor_features': [64, 64],
-    'critic_features': [256, 256],
+    'critic_features': [64, 64],
     'scale_reward': 1,
     'tune_entropy_coef': True,
-    'tau': 0.005,
-    'batch_size': 32,
+    'tau': 0.01,
+    'batch_size': 256,
     'train_steps': 300,
 }
 
@@ -105,7 +105,7 @@ policy_optimizer = SACOptimizer(
     dynamics_model_list=dynamics_model_list,
     horizon=horizon,
     action_dim=(1,),
-    train_steps_per_model_update=15,
+    train_steps_per_model_update=10,
     transitions_per_update=500,
     sac_kwargs=sac_kwargs,
     reset_actor_params=False,
@@ -134,7 +134,7 @@ train_summary = policy_optimizer.train(
 )
 print("Time take to train in [s]", time.time() - t)
 obs, _ = env.reset()
-for i in range(500):
+for i in range(200):
     start_time = time.time()
     action = policy_optimizer.get_action(obs=obs, rng=rng)
     obs, reward, terminate, truncate, info = env.step(action)
@@ -146,7 +146,7 @@ train_summary2 = policy_optimizer.train(
 )
 print("Time take to train in [s]", time.time() - t)
 obs, _ = env.reset()
-for i in range(500):
+for i in range(200):
     start_time = time.time()
     action = policy_optimizer.get_action(obs=obs, rng=rng)
     obs, reward, terminate, truncate, info = env.step(action)

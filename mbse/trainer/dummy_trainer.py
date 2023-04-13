@@ -127,6 +127,7 @@ class DummyTrainer(object):
         #        cloudpickle.dump(self.agent, outp)
 
     def step_env(self, obs, policy, num_steps, rng):
+        self.agent.prepare_agent_for_rollout()
         rng, reset_rng = jax.random.split(rng, 2)
         num_points = int(num_steps*self.num_envs)
         obs_shape = (num_points,) + self.env.observation_space.shape
@@ -164,6 +165,7 @@ class DummyTrainer(object):
         return transitions, last_obs, last_done
 
     def rollout_policy(self, num_steps, policy, rng):
+        self.agent.prepare_agent_for_rollout()
         rng, reset_rng = jax.random.split(rng, 2)
         reset_seed = jax.random.randint(
             reset_rng,
@@ -225,6 +227,7 @@ class DummyTrainer(object):
         reward_log = {
 
         }
+        self.agent.prepare_agent_for_rollout()
         for i, env in enumerate(self.test_env):
             pbar = tqdm()
             avg_reward = 0.0

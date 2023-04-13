@@ -27,3 +27,6 @@ class DummyAgent(object):
                    log_results: bool = True,
                    ):
         NotImplementedError
+
+    def prepare_agent_for_rollout(self):
+        pass

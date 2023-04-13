@@ -4,7 +4,7 @@ from mbse.optimizers.cross_entropy_optimizer import CrossEntropyOptimizer
 from mbse.utils.utils import sample_trajectories
 import functools
 from typing import Optional, Union
-from mbse.optimizers.dummy_policy_optimizer import DummyPolicyOptimizer
+from mbse.optimizers.dummy_policy_optimizer import DummyPolicyOptimizer, BestSequences
 from mbse.models.dynamics_model import ModelProperties
 
 
@@ -27,71 +27,97 @@ class CemTO(DummyPolicyOptimizer):
         self.optimizer = CrossEntropyOptimizer(action_dim=cem_action_dim, **cem_kwargs)
         assert isinstance(dynamics_model_list, list)
         self.dynamics_model_list = dynamics_model_list
-        self.init_mean = jnp.zeros(cem_action_dim)
+        self.best_sequences = BestSequences(
+            evaluation_sequences=jnp.zeros((len(self.dynamics_model_list), ) + cem_action_dim),
+            exploration_sequence=jnp.zeros(cem_action_dim),
+        )
         self._init_fn()
 
     def _init_fn(self):
-        def _get_action_sequence(
-                model_index,
-                dynamics_params,
-                obs,
-                key=None,
-                optimizer_key=None,
-                model_props: ModelProperties = ModelProperties(),
-                initial_actions: Optional[jax.Array] = None,
-                sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
-        ):
-            obs = jnp.repeat(jnp.expand_dims(obs, 0), self.n_particles, 0)
-            return self._optimize_action_sequence(
-                eval_fn=self.dynamics_model_list[model_index].evaluate,
-                optimize_fn=self.optimizer.optimize,
-                n_particles=self.n_particles,
-                horizon=self.horizon,
-                params=dynamics_params,
-                init_state=obs,
-                key=key,
-                optimizer_key=optimizer_key,
-                model_props=model_props,
-                sampling_idx=sampling_idx,
-                init_action_seq=initial_actions,
-            )
 
         self.optimize_for_eval_fns = []
         for i in range(len(self.dynamics_model_list)):
-            self.optimize_for_eval_fns.append(jax.jit(functools.partial(
-                _get_action_sequence, model_index=i
-            )))
+            self.optimize_for_eval_fns.append(functools.partial(
+                self._get_action_sequence, model_index=i
+            ))
         self.optimize = self.optimize_for_eval_fns[0]
 
-        def _get_action_sequence_for_exploration(
-                dynamics_params,
-                obs,
-                key=None,
-                optimizer_key=None,
-                model_props: ModelProperties = ModelProperties(),
-                initial_actions: Optional[jax.Array] = None,
-                sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
-        ):
-            obs = jnp.repeat(jnp.expand_dims(obs, 0), self.n_particles, 0)
-            return self._optimize_action_sequence(
-                eval_fn=self.dynamics_model.evaluate_for_exploration,
-                optimize_fn=self.optimizer.optimize,
-                n_particles=self.n_particles,
-                horizon=self.horizon,
-                params=dynamics_params,
-                init_state=obs,
-                key=key,
-                optimizer_key=optimizer_key,
-                model_props=model_props,
-                init_action_seq=initial_actions,
-                sampling_idx=sampling_idx,
-            )
-
-        self.optimize_for_exploration = jax.jit(
-            _get_action_sequence_for_exploration
+    def optimize_for_exploration(
+            self,
+            dynamics_params,
+            obs,
+            key=None,
+            optimizer_key=None,
+            model_props: ModelProperties = ModelProperties(),
+            initial_actions: Optional[jax.Array] = None,
+            sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
+    ):
+        obs = jnp.repeat(jnp.expand_dims(obs, 0), self.n_particles, 0)
+        if initial_actions is None:
+            prev_best = jnp.zeros_like(self.best_sequences.exploration_sequence)
+            prev_best = prev_best.at[:-1].set(self.best_sequences.exploration_sequence)
+            last_input = self.best_sequences.exploration_sequence[-1]
+            prev_best = prev_best.at[-1].set(last_input)
+            initial_actions = prev_best
+        best_sequence, best_reward = self._optimize_action_sequence(
+            eval_fn=self.dynamics_model.evaluate_for_exploration,
+            optimize_fn=self.optimizer.optimize,
+            n_particles=self.n_particles,
+            horizon=self.horizon,
+            params=dynamics_params,
+            init_state=obs,
+            key=key,
+            optimizer_key=optimizer_key,
+            model_props=model_props,
+            init_action_seq=initial_actions,
+            sampling_idx=sampling_idx,
         )
+        self.best_sequences = BestSequences(
+            evaluation_sequences=self.best_sequences.evaluation_sequences,
+            exploration_sequence=best_sequence,
+        )
+        return best_sequence, best_reward
+
+    def _get_action_sequence(
+            self,
+            model_index,
+            dynamics_params,
+            obs,
+            key=None,
+            optimizer_key=None,
+            model_props: ModelProperties = ModelProperties(),
+            initial_actions: Optional[jax.Array] = None,
+            sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
+    ):
+        if initial_actions is None:
+            prev_best = jnp.zeros_like(self.best_sequences.evaluation_sequences[model_index])
+            prev_best = prev_best.at[:-1].set(self.best_sequences.evaluation_sequences[model_index][1:])
+            last_input = self.best_sequences.evaluation_sequences[model_index][-1]
+            prev_best = prev_best.at[-1].set(last_input)
+            initial_actions = prev_best
+        obs = jnp.repeat(jnp.expand_dims(obs, 0), self.n_particles, 0)
+        best_sequence, best_reward = self._optimize_action_sequence(
+            eval_fn=self.dynamics_model_list[model_index].evaluate,
+            optimize_fn=self.optimizer.optimize,
+            n_particles=self.n_particles,
+            horizon=self.horizon,
+            params=dynamics_params,
+            init_state=obs,
+            key=key,
+            optimizer_key=optimizer_key,
+            model_props=model_props,
+            sampling_idx=sampling_idx,
+            init_action_seq=initial_actions,
+        )
+        sequence_copy = self.best_sequences.evaluation_sequences.at[model_index].set(best_sequence)
+        self.best_sequences = BestSequences(
+            evaluation_sequences=sequence_copy,
+            exploration_sequence=self.best_sequences.exploration_sequence,
+        )
+        return best_sequence, best_reward
 
     @staticmethod
+    @functools.partial(jax.jit, static_argnums=(0, 1, 2, 3))
     def _optimize_action_sequence(eval_fn,
                                   optimize_fn,
                                   n_particles,
@@ -139,3 +165,9 @@ class CemTO(DummyPolicyOptimizer):
     @property
     def dynamics_model(self):
         return self.dynamics_model_list[0]
+
+    def reset(self):
+        self.best_sequences = BestSequences(
+            evaluation_sequences=jnp.zeros_like(self.best_sequences.evaluation_sequences),
+            exploration_sequence=jnp.zeros_like(self.best_sequences.exploration_sequence)
+        )

@@ -231,27 +231,27 @@ class ModelBasedAgent(DummyAgent):
         if self.calibrate_model:
             alpha = carry[1]
         self.update_models(model_params=model_params, model_opt_state=model_opt_state, alpha=alpha)
-        if (buffer.size > self.policy_optimizer.transitions_per_update and self.update_optimizer) and \
-                isinstance(self.policy_optimizer, SACOptimizer):
-            train_rng = carry[0]
-            policy_train_rng, train_rng = jax.random.split(train_rng, 2)
-            policy_agent_train_summary = self.policy_optimizer.train(
-                rng=policy_train_rng,
-                buffer=buffer,
-                dynamics_params=model_params,
-                model_props=self.dynamics_model.model_props,
-            )
-            if log_results and self.log_agent_training:
-                for j in range(self.policy_optimizer.train_steps_per_model_update):
-                    for i in range(len(self.policy_optimizer.agent_list)):
-                        summary = policy_agent_train_summary[j][i]
-                        summary_dict = summary.dict()
-                        summary_relabeled_dict = {}
-                        for key, value in summary_dict.items():
-                            summary_relabeled_dict[key + '_agent_' + str(i)] = value
-                        wandb.log(
-                            summary_relabeled_dict
-                        )
+        if isinstance(self.policy_optimizer, SACOptimizer):
+            if buffer.size > self.policy_optimizer.transitions_per_update and self.update_optimizer:
+                train_rng = carry[0]
+                policy_train_rng, train_rng = jax.random.split(train_rng, 2)
+                policy_agent_train_summary = self.policy_optimizer.train(
+                    rng=policy_train_rng,
+                    buffer=buffer,
+                    dynamics_params=model_params,
+                    model_props=self.dynamics_model.model_props,
+                )
+                if log_results and self.log_agent_training:
+                    for j in range(self.policy_optimizer.train_steps_per_model_update):
+                        for i in range(len(self.policy_optimizer.agent_list)):
+                            summary = policy_agent_train_summary[j][i]
+                            summary_dict = summary.dict()
+                            summary_relabeled_dict = {}
+                            for key, value in summary_dict.items():
+                                summary_relabeled_dict[key + '_agent_' + str(i)] = value
+                            wandb.log(
+                                summary_relabeled_dict
+                            )
         return total_train_steps
 
     def set_transforms(self,
@@ -296,3 +296,6 @@ class ModelBasedAgent(DummyAgent):
     @property
     def update_optimizer(self):
         return self.update_steps >= self.start_optimizer_update
+
+    def prepare_agent_for_rollout(self):
+        self.policy_optimizer.reset()

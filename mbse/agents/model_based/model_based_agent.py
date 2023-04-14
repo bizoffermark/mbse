@@ -143,36 +143,29 @@ class ModelBasedAgent(DummyAgent):
                 rollout_rng, optimizer_rng = jax.random.split(rng, 2)
                 rollout_rng = jax.random.split(rollout_rng, n_envs)
                 optimizer_rng = jax.random.split(optimizer_rng, n_envs)
-                action_sequence, best_reward = jax.vmap(optimize_for_eval, in_axes=(0, 0, 0))(
-                    obs,
-                    rollout_rng,
-                    optimizer_rng
+                optimize_fn = self.policy_optimizer.optimize_for_eval_fns[eval_idx]
+                action_sequence, best_reward = optimize_fn(
+                    dynamics_params=self.dynamics_model.model_params,
+                    obs=obs,
+                    key=rollout_rng,
+                    optimizer_key=optimizer_rng,
+                    model_props=self.dynamics_model.model_props,
                 )
                 action = action_sequence[:, 0, ...]
                 if action.shape[0] == 1:
                     action = action.squeeze(0)
             else:
-                def optimize(init_state, key, optimizer_key):
-
-                    action_seq, reward = self.policy_optimizer.optimize_for_exploration(
-                        dynamics_params=self.dynamics_model.model_params,
-                        obs=init_state,
-                        key=key,
-                        optimizer_key=optimizer_key,
-                        model_props=self.dynamics_model.model_props,
-                    )
-                    return action_seq, reward
-
                 n_envs = obs.shape[0]
                 rollout_rng, optimizer_rng = jax.random.split(rng, 2)
                 rollout_rng = jax.random.split(rollout_rng, n_envs)
                 optimizer_rng = jax.random.split(optimizer_rng, n_envs)
-
-                action_sequence, best_reward = jax.vmap(optimize)(
-                    obs,
-                    rollout_rng,
-                    optimizer_rng
-                )
+                action_sequence, best_reward = self.policy_optimizer.optimize_for_exploration(
+                        dynamics_params=self.dynamics_model.model_params,
+                        obs=obs,
+                        key=rollout_rng,
+                        optimizer_key=optimizer_rng,
+                        model_props=self.dynamics_model.model_props,
+                    )
                 action = action_sequence[:, 0, ...]
             action = action[..., :self.action_space.shape[0]]
         return action

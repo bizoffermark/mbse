@@ -28,7 +28,7 @@ class CemTO(DummyPolicyOptimizer):
         assert isinstance(dynamics_model_list, list)
         self.dynamics_model_list = dynamics_model_list
         self.best_sequences = BestSequences(
-            evaluation_sequences=jnp.zeros((len(self.dynamics_model_list), ) + cem_action_dim),
+            evaluation_sequences=jnp.zeros((len(self.dynamics_model_list),) + cem_action_dim),
             exploration_sequence=jnp.zeros(cem_action_dim),
         )
         self._init_fn()
@@ -52,29 +52,31 @@ class CemTO(DummyPolicyOptimizer):
             initial_actions: Optional[jax.Array] = None,
             sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
     ):
-        obs = jnp.repeat(jnp.expand_dims(obs, 0), self.n_particles, 0)
         if initial_actions is None:
             prev_best = jnp.zeros_like(self.best_sequences.exploration_sequence)
-            prev_best = prev_best.at[:-1].set(self.best_sequences.exploration_sequence)
+            prev_best = prev_best.at[:-1].set(self.best_sequences.exploration_sequence[1:])
             last_input = self.best_sequences.exploration_sequence[-1]
             prev_best = prev_best.at[-1].set(last_input)
             initial_actions = prev_best
-        best_sequence, best_reward = self._optimize_action_sequence(
-            eval_fn=self.dynamics_model.evaluate_for_exploration,
-            optimize_fn=self.optimizer.optimize,
-            n_particles=self.n_particles,
-            horizon=self.horizon,
-            params=dynamics_params,
-            init_state=obs,
-            key=key,
-            optimizer_key=optimizer_key,
-            model_props=model_props,
-            init_action_seq=initial_actions,
-            sampling_idx=sampling_idx,
-        )
+
+        def optimize(init_state, rng, opt_rng):
+            return self._optimize_action_sequence(
+                eval_fn=self.dynamics_model.evaluate_for_exploration,
+                optimize_fn=self.optimizer.optimize,
+                n_particles=self.n_particles,
+                horizon=self.horizon,
+                params=dynamics_params,
+                init_state=init_state,
+                key=rng,
+                optimizer_key=opt_rng,
+                model_props=model_props,
+                init_action_seq=initial_actions,
+                sampling_idx=sampling_idx,
+            )
+        best_sequence, best_reward = jax.vmap(optimize)(obs, key, optimizer_key)
         self.best_sequences = BestSequences(
             evaluation_sequences=self.best_sequences.evaluation_sequences,
-            exploration_sequence=best_sequence,
+            exploration_sequence=best_sequence[0],
         )
         return best_sequence, best_reward
 
@@ -95,21 +97,24 @@ class CemTO(DummyPolicyOptimizer):
             last_input = self.best_sequences.evaluation_sequences[model_index][-1]
             prev_best = prev_best.at[-1].set(last_input)
             initial_actions = prev_best
-        obs = jnp.repeat(jnp.expand_dims(obs, 0), self.n_particles, 0)
-        best_sequence, best_reward = self._optimize_action_sequence(
-            eval_fn=self.dynamics_model_list[model_index].evaluate,
-            optimize_fn=self.optimizer.optimize,
-            n_particles=self.n_particles,
-            horizon=self.horizon,
-            params=dynamics_params,
-            init_state=obs,
-            key=key,
-            optimizer_key=optimizer_key,
-            model_props=model_props,
-            sampling_idx=sampling_idx,
-            init_action_seq=initial_actions,
-        )
-        sequence_copy = self.best_sequences.evaluation_sequences.at[model_index].set(best_sequence)
+
+        def optimize(init_state, rng, opt_rng):
+            return self._optimize_action_sequence(
+                eval_fn=self.dynamics_model_list[model_index].evaluate,
+                optimize_fn=self.optimizer.optimize,
+                n_particles=self.n_particles,
+                horizon=self.horizon,
+                params=dynamics_params,
+                init_state=init_state,
+                key=rng,
+                optimizer_key=opt_rng,
+                model_props=model_props,
+                sampling_idx=sampling_idx,
+                init_action_seq=initial_actions,
+            )
+
+        best_sequence, best_reward = jax.vmap(optimize)(obs, key, optimizer_key)
+        sequence_copy = self.best_sequences.evaluation_sequences.at[model_index].set(best_sequence[0])
         self.best_sequences = BestSequences(
             evaluation_sequences=sequence_copy,
             exploration_sequence=self.best_sequences.exploration_sequence,
@@ -130,6 +135,7 @@ class CemTO(DummyPolicyOptimizer):
                                   init_action_seq: Optional[jax.Array] = None,
                                   sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
                                   ):
+        init_state = jnp.repeat(jnp.expand_dims(init_state, 0), n_particles, 0)
         eval_func = lambda seq, x, k: sample_trajectories(
             evaluate_fn=eval_fn,
             parameters=params,

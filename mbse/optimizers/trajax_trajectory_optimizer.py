@@ -232,6 +232,7 @@ class TraJaxTO(DummyPolicyOptimizer):
         def reward_fn(state, action, *args, **kwargs):
             reward = state[-1]
             return reward.mean()
+
         return self.get_sequence_and_returns_for_init_state(
             predict_fn=predict_fn,
             reward_fn=reward_fn,
@@ -245,7 +246,12 @@ class TraJaxTO(DummyPolicyOptimizer):
             initial_actions=initial_actions,
         )
 
-
     @property
     def dynamics_model(self):
         return self.dynamics_model_list[0]
+
+    def reset(self):
+        self.best_sequences = BestSequences(
+            evaluation_sequences=jnp.zeros_like(self.best_sequences.evaluation_sequences),
+            exploration_sequence=jnp.zeros_like(self.best_sequences.exploration_sequence)
+        )

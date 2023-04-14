@@ -7,9 +7,10 @@ from mbse.optimizers.dummy_policy_optimizer import DummyPolicyOptimizer, BestSeq
 from mbse.utils.type_aliases import ModelProperties
 
 
-@functools.partial(jax.jit, static_argnums=(0, 1))
+@functools.partial(jax.jit, static_argnums=(0, 1, 2))
 def _optimize_with_params(reward_fn: Callable,
                           dynamics_fn: Callable,
+                          horizon: int,
                           initial_state: jax.Array,
                           initial_actions: jax.Array,
                           optimizer_params: ILQRHyperparams,
@@ -34,7 +35,7 @@ def _optimize_with_params(reward_fn: Callable,
 
     def cost_fn(x, u, t, params):
         action = jnp.tanh(u)
-        return - reward_fn(x, action).sum()
+        return - reward_fn(x, action).sum()/horizon
 
     if optimizer_key is not None:
         sampled_action = jax.random.multivariate_normal(
@@ -187,6 +188,7 @@ class TraJaxTO(DummyPolicyOptimizer):
             return _optimize_with_params(
                 reward_fn=reward_fn,
                 dynamics_fn=predict_fn,
+                horizon=self.horizon,
                 initial_state=init_state,
                 initial_actions=initial_actions,
                 optimizer_params=optimizer_params,

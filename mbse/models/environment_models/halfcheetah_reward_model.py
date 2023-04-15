@@ -23,11 +23,12 @@ class HalfCheetahReward(RewardModel):
         reward_ctrl = -self.ctrl_cost_weight * jnp.square(action).sum(axis=- 1)
         reward_run = self.forward_velocity_weight*obs[..., 0] - 0.0 * jnp.square(obs[..., 2])
         heading_penalty_factor = 10
+        reward = reward_run + reward_ctrl
         if self.penalise_flipping and self.forward_velocity_weight > 0:
             root_angle = obs[..., 2]
             heading_penalty = (root_angle > jnp.pi / 2) * heading_penalty_factor + \
                               (root_angle < -jnp.pi / 2) * heading_penalty_factor
-            reward = reward_run + reward_ctrl - heading_penalty
+            reward = reward - heading_penalty
         reward = reward.reshape(-1).squeeze()
         # # reward_ctrl = -self.ctrl_cost_weight * jnp.square(action).sum(axis=-1)
         # # reward_run = self.forward_velocity_weight * (next_obs[..., 0] - 0.0 * jnp.square(next_obs[..., 2]))

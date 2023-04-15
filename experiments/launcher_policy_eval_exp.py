@@ -93,7 +93,7 @@ def main(args):
         else:
             logs_dir = './'
         [flags.pop(key) for key in ['seed', 'num_hparam_samples', 'num_seeds_per_hparam', 'num_cpus',
-                                    'num_gpus', 'launch_mode', 'env_name', 'user_name', 'long_run']]
+                                    'num_gpus', 'launch_mode', 'env_name', 'user_name', 'long_run', 'num_hours']]
 
         # randomly sample flags
         for flag in default_configs:
@@ -116,6 +116,7 @@ def main(args):
     # submit jobs
     generate_run_commands(command_list, num_cpus=args.num_cpus, num_gpus=args.num_gpus, mode=args.launch_mode,
                           long=args.long_run,
+                          num_hours=args.num_hours,
                           promt=True,
                           mem=16000)
 
@@ -135,6 +136,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_al', default=False, action="store_true")
     parser.add_argument('--beta', type=float, default=2.0)
     parser.add_argument('--long_run', default=False, action="store_true")
+    parser.add_argument('--num_hours', type=int, default=None)
 
     args = parser.parse_args()
     main(args)

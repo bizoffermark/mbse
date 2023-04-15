@@ -30,8 +30,8 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     """ Run experiment for a given method and environment. """
 
     """ Environment """
-    from jax.config import config
-    config.update("jax_log_compiles", 1)
+    # from jax.config import config
+    # config.update("jax_log_compiles", 1)
     action_repeat = 1
     import math
     time_lim = math.ceil(time_limit / action_repeat)
@@ -52,8 +52,10 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             min_action=-1,
             max_action=1,
         )
-    reward_model_forward = HalfCheetahReward(forward_velocity_weight=1.0, ctrl_cost_weight=0.1)
-    reward_model_backward = HalfCheetahReward(forward_velocity_weight=-1.0, ctrl_cost_weight=0.1)
+    reward_model_forward = HalfCheetahReward(forward_velocity_weight=1.0, ctrl_cost_weight=0.1,
+                                             penalise_flipping=False)
+    reward_model_backward = HalfCheetahReward(forward_velocity_weight=-1.0, ctrl_cost_weight=0.1,
+                                              penalise_flipping=False)
     env_kwargs_forward = {
         'reward_model': reward_model_forward,
         'render_mode': 'rgb_array'
@@ -72,6 +74,11 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     test_env = [test_env_forward, test_env_backward]
     features = [num_neurons] * hidden_layers
     video_prefix = ""
+
+    reward_model_forward = HalfCheetahReward(forward_velocity_weight=1.0, ctrl_cost_weight=0.1,
+                                             penalise_flipping=True)
+    reward_model_backward = HalfCheetahReward(forward_velocity_weight=-1.0, ctrl_cost_weight=0.1,
+                                              penalise_flipping=True)
 
     sac_kwargs = {
         'discount': 0.99,
@@ -352,7 +359,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_envs', type=int, default=1)
 
     # optimizer experiment args
-    parser.add_argument('--optimizer_type', type=str, default='SacOpt')
+    parser.add_argument('--optimizer_type', type=str, default='TraJaxTO')
     parser.add_argument('--num_samples', type=int, default=500)
     parser.add_argument('--num_elites', type=int, default=50)
     parser.add_argument('--num_steps', type=int, default=5)

@@ -9,16 +9,25 @@ _RUN_SPEED = 10
 class HalfCheetahReward(RewardModel):
     """Get Pendulum Reward."""
 
-    def __init__(self, forward_velocity_weight: float = 1.0, ctrl_cost_weight: float = 0.1):
+    def __init__(self,
+                 forward_velocity_weight: float = 1.0,
+                 ctrl_cost_weight: float = 0.1,
+                 penalise_flipping: bool = True):
         super().__init__()
         self.ctrl_cost_weight = ctrl_cost_weight
         self.forward_velocity_weight = forward_velocity_weight
+        self.penalise_flipping = penalise_flipping
 
     @partial(jax.jit, static_argnums=0)
     def predict(self, obs, action, next_obs=None, rng=None):
         reward_ctrl = -self.ctrl_cost_weight * jnp.square(action).sum(axis=- 1)
         reward_run = self.forward_velocity_weight*obs[..., 0] - 0.0 * jnp.square(obs[..., 2])
-        reward = reward_run + reward_ctrl
+        heading_penalty_factor = 10
+        if self.penalise_flipping and self.forward_velocity_weight > 0:
+            root_angle = obs[..., 2]
+            heading_penalty = (root_angle > jnp.pi / 2) * heading_penalty_factor + \
+                              (root_angle < -jnp.pi / 2) * heading_penalty_factor
+            reward = reward_run + reward_ctrl - heading_penalty
         reward = reward.reshape(-1).squeeze()
         # # reward_ctrl = -self.ctrl_cost_weight * jnp.square(action).sum(axis=-1)
         # # reward_run = self.forward_velocity_weight * (next_obs[..., 0] - 0.0 * jnp.square(next_obs[..., 2]))

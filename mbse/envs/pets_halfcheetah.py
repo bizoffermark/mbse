@@ -62,7 +62,6 @@ class HalfCheetahEnvDM(DeepMindBridge):
         env = run(time_limit=float('inf'), environment_kwargs={'flat_observation': True})
         super().__init__(env=env, *args, **kwargs)
         self.env = env
-        self.observation_space
 
     def step(self, action):
         obs, reward, terminate, truncate, info = super().step(action)

@@ -10,6 +10,7 @@ class CustomMountainCar(Continuous_MountainCarEnv):
     def __init__(self, dynamics_model: MountainCarDynamics = MountainCarDynamics(), *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.dynamics_model = dynamics_model
+        self.observation_space.sample = self.sample_obs
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)

@@ -13,7 +13,7 @@ class CrossEntropyOptimizer(DummyOptimizer):
             num_samples: int = 500,
             num_elites: int = 50,
             seed: int = 0,
-            init_std: float = 0.5,
+            init_std: float = 5,
             alpha: float = 0.0,
             *args,
             **kwargs,

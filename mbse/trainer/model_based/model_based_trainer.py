@@ -153,6 +153,10 @@ class ModelBasedTrainer(DummyTrainer):
         step = 0
         for step in tqdm(range(learning_steps)):
             actor_rng, train_rng = random.split(rng_keys[step], 2)
+            policy = self.agent.act_in_train if not self.uniform_exploration else exploration_policy
+            actor_rng, val_rng = random.split(actor_rng, 2)
+            transitions, obs, done = self.step_env(obs, policy, self.rollout_steps, actor_rng)
+            self.buffer.add(transitions)
             self.agent.set_transforms(
                 bias_obs=self.buffer.state_normalizer.mean,
                 bias_act=self.buffer.action_normalizer.mean,
@@ -160,12 +164,7 @@ class ModelBasedTrainer(DummyTrainer):
                 scale_obs=self.buffer.state_normalizer.std,
                 scale_act=self.buffer.action_normalizer.std,
                 scale_out=self.buffer.next_state_normalizer.std,
-
             )
-            policy = self.agent.act_in_train if not self.uniform_exploration else exploration_policy
-            actor_rng, val_rng = random.split(actor_rng, 2)
-            transitions, obs, done = self.step_env(obs, policy, self.rollout_steps, actor_rng)
-            self.buffer.add(transitions)
             reward_log = {}
             train_step_log = {}
             model_log = {}

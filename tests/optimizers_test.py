@@ -14,12 +14,13 @@ def optimize_for_bias(bias):
     sequence, value = optimizer.optimize(func)
     return sequence, value
 opt_cls = CrossEntropyOptimizer
-num_steps = 25
+num_steps = 20
 action_dim = (10, 2)
 for bias in jnp.linspace(-5, 5, 10):
     optimizer = opt_cls(
         action_dim=action_dim,
         num_steps=num_steps,
+        upper_bound=jnp.inf,
         lr=0.1,
     )
     sequence, value = optimize_for_bias(bias)

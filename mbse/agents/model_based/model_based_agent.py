@@ -28,7 +28,7 @@ class ModelBasedAgent(DummyAgent):
             horizon: int = 100,
             n_particles: int = 10,
             reset_model: bool = False,
-            calibrate_model: bool = True,
+            calibrate_model: bool = False,
             init_function: bool = True,
             optimizer_kwargs: Optional[Dict[str, Any]] = None,
             start_optimizer_update: int = 0,
@@ -126,17 +126,6 @@ class ModelBasedAgent(DummyAgent):
             action = action[..., :self.action_space.shape[0]]
         else:
             if eval:
-                def optimize_for_eval(init_state, key, optimizer_key):
-                    optimize_fn = self.policy_optimizer.optimize_for_eval_fns[eval_idx]
-                    action_seq, reward = optimize_fn(
-                        dynamics_params=self.dynamics_model.model_params,
-                        obs=init_state,
-                        key=key,
-                        optimizer_key=optimizer_key,
-                        model_props=self.dynamics_model.model_props,
-                    )
-                    return action_seq, reward
-
                 dim_state = obs.shape[-1]
                 obs = obs.reshape(-1, dim_state)
                 n_envs = obs.shape[0]

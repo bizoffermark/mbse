@@ -7,8 +7,9 @@ from gym.envs.classic_control import utils
 
 class CustomMountainCar(Continuous_MountainCarEnv):
 
-    def __init__(self, dynamics_model: MountainCarDynamics = MountainCarDynamics(), *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, dynamics_model: MountainCarDynamics = MountainCarDynamics(), render_mode='rgb_array',
+                 *args, **kwargs):
+        super().__init__(render_mode=render_mode, *args, **kwargs)
         self.dynamics_model = dynamics_model
         self.observation_space.sample = self.sample_obs
 

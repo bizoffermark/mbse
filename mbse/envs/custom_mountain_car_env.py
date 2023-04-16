@@ -29,7 +29,7 @@ class CustomMountainCar(Continuous_MountainCarEnv):
         self.state = next_obs
         if self.render_mode == "human":
             self.render()
-        return next_obs, reward, False, False, {}
+        return next_obs, reward.squeeze().item(), False, False, {}
 
     def sample_obs(self):
         pos = self.np_random.uniform(low=self.min_position, high=self.max_position)

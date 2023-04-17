@@ -226,9 +226,9 @@ class SACOptimizer(DummyPolicyOptimizer):
         if not self.reset_actor_params:
             full_optimizer_state = SacOptimizerState(
                 agent_train_state=SACTrainingState(
-                    actor_opt_state=self.init_optimizer_state.agent_train_state.actor_opt_state,
+                    actor_opt_state=self.optimizer_state.agent_train_state.actor_opt_state,
                     actor_params=self.optimizer_state.agent_train_state.actor_params,
-                    critic_opt_state=self.init_optimizer_state.agent_train_state.critic_opt_state,
+                    critic_opt_state=self.optimizer_state.agent_train_state.critic_opt_state,
                     critic_params=self.optimizer_state.agent_train_state.critic_params,
                     target_critic_params=self.optimizer_state.agent_train_state.target_critic_params,
                     alpha_opt_state=self.init_optimizer_state.agent_train_state.alpha_opt_state,

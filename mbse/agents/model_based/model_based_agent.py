@@ -28,7 +28,7 @@ class ModelBasedAgent(DummyAgent):
             horizon: int = 100,
             n_particles: int = 10,
             reset_model: bool = False,
-            calibrate_model: bool = False,
+            calibrate_model: bool = True,
             init_function: bool = True,
             optimizer_kwargs: Optional[Dict[str, Any]] = None,
             start_optimizer_update: int = 0,

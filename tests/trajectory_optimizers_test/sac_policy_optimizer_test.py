@@ -37,21 +37,7 @@ def rollout_random_policy(env, num_steps, rng):
         reward_vec[step: (step + 1)] = reward.reshape(-1)
         next_obs_vec[step: (step + 1)] = next_obs
         done_vec[step: (step + 1)] = terminate.reshape(-1)
-        # obs_vec = obs_vec.at[step].set(jnp.asarray(obs))
-        # action_vec = action_vec.at[step].set(jnp.asarray(action))
-        # reward_vec = reward_vec.at[step].set(jnp.asarray(reward))
-        # next_obs_vec = next_obs_vec.at[step].set(jnp.asarray(next_obs))
-        # done_vec = done_vec.at[step].set(jnp.asarray(terminate))
-        # obs = np.concatenate([x['current_env_state'].reshape(1, -1) for x in info], axis=0)
-        # for idx, done in enumerate(dones):
-        #    if done:
-        #        reset_rng, next_reset_rng = jax.random.split(reset_rng, 2)
-        #        reset_seed = jax.random.randint(
-        #            reset_rng,
-        #            (1,),
-        #            minval=0,
-        #            maxval=num_steps).item()
-        #        obs[idx], _ = self.env.reset(seed=reset_seed)
+
 
     transitions = Transition(
         obs=obs_vec,

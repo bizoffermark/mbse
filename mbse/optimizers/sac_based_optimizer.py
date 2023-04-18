@@ -90,12 +90,18 @@ class SACOptimizer(DummyPolicyOptimizer):
         self.dynamics_model_list = dynamics_model_list
         obs_dim = self.dynamics_model.obs_dim
         self.active_exploration_agent = False
+        
+        # only for special case of doing active learning (PETS and HUCRL)
         if isinstance(self.dynamics_model, ActiveLearningPETSModel) or isinstance(
                 self.dynamics_model, ActiveLearningHUCRLModel):
             self.dynamics_model_list.append(dynamics_model_list[0])
             self.active_exploration_agent = True
+        
+        # define action space and observation space for SAC agent
         dummy_obs_space = Box(low=-1, high=1, shape=(obs_dim,))
         dummy_act_space = Box(low=-1, high=1, shape=action_dim)
+        
+        # instantiate SAC agent for each dynamics model
         if sac_kwargs is not None:
             self.agent_list = [SACAgent(
                 action_space=dummy_act_space,
@@ -108,13 +114,14 @@ class SACOptimizer(DummyPolicyOptimizer):
                 observation_space=dummy_obs_space,
             ) for model in self.dynamics_model_list]
 
+        # initialize optimizer state for each SAC agent
         init_optimizer_state = [SacOptimizerState(
             agent_train_state=agent.training_state,
             policy_props=agent.policy_props,
-
         ) for agent in self.agent_list]
+        
         self.init_optimizer_state = tree_stack(init_optimizer_state)
-        self.optimizer_state = copy.deepcopy(self.init_optimizer_state)
+        self.optimizer_state = copy.deepcopy(self.init_optimizer_state) 
         self.horizon = horizon
         self.n_particles = n_particles
         self.transitions_per_update = transitions_per_update
@@ -129,8 +136,14 @@ class SACOptimizer(DummyPolicyOptimizer):
         self._init_fn()
 
     def get_action_for_eval(self, obs: jax.Array, rng, agent_idx: int):
-        policy = self.agent_list[0].get_eval_action
+        '''
+            Get action for evaluation
+        '''
+        
+        # @HONG: why only use the first agent?
+        policy = self.agent_list[0].get_eval_action 
         agent_state = get_idx(self.optimizer_state, agent_idx)
+        # basically just s_t = (s_t - mu) / sigma
         normalized_obs = (obs - agent_state.policy_props.policy_bias_obs) / (agent_state.policy_props.policy_scale_obs
                                                                              + EPS)
         action = policy(
@@ -141,9 +154,15 @@ class SACOptimizer(DummyPolicyOptimizer):
         return action
 
     def get_action(self, obs: jax.Array, rng):
+        '''
+            Get action for evaluation
+        '''
         return self.get_action_for_eval(obs=obs, rng=rng, agent_idx=0)
 
     def get_action_for_exploration(self, obs: jax.Array, rng, *args, **kwargs):
+        '''
+            Get action for exploration
+        '''
         if self.active_exploration_agent:
             policy = self.agent_list[0].get_action
             agent_state = get_idx(self.optimizer_state, -1)

@@ -46,7 +46,7 @@ def safe_clip_grads(grad_tree, max_norm=1e8):
 # Perform Polyak averaging provided two network parameters and the averaging value tau.
 # @partial(jit, static_argnums=(2, ))
 def soft_update(
-        target_params, online_params, tau=0.005
+    target_params, online_params, tau=0.005
 ):
     updated_params = jax.tree_util.tree_map(
         lambda old, new: (1 - tau) * old + tau * new, target_params, online_params
@@ -56,14 +56,20 @@ def soft_update(
 
 @jit
 def squash_action(action):
+    '''
+        Squash the action to be between -1 and 1
+    '''
     squashed_action = nn.tanh(action)
-    # sanity check to clip between -1 and 1
+    # sanity check to clip between -1 and 1 => @hong: is this still needed?
     squashed_action = jnp.clip(squashed_action, -0.999, 0.999)
     return squashed_action
 
 
 # @partial(jit, static_argnums=(0,))
 def get_squashed_log_prob(actor_fn, params, obs, rng):
+    '''
+        Get the squashed action and the log probability of the squashed action
+    '''
     mu, sig = actor_fn(params, obs)
     u = sample_normal_dist(mu, sig, rng)
     log_l = gaussian_log_likelihood(u, mu, sig)
@@ -95,12 +101,12 @@ def get_soft_td_target(
         params=actor_params,
         obs=next_obs,
         rng=rng,
-    )
+    ) # a_{t+1}, log P(1 - a_{t+1}^2)
 
     next_q1, next_q2 = critic_fn(critic_target_params, obs=next_obs, action=next_action)
     next_q = jnp.minimum(next_q1, next_q2)
     entropy_term = - alpha * next_action_log_a
-    next_q_target = next_q + entropy_term
+    next_q_target = next_q + entropy_term # 
     target_v = reward_scale * reward + not_done * discount * next_q_target
     target_v_term = target_v.mean()
     return target_v, target_v_term, entropy_term.mean()
@@ -111,6 +117,10 @@ def get_action(actor_fn,
                obs,
                rng=None,
                eval=False):
+    '''
+        Generate random actions from the actor policy if rng is not None or eval is True
+        otherwise return the mean of the actor policy
+    '''
     mu, sig = actor_fn(actor_params, obs)
 
     def get_mean(mu, sig, rng):
@@ -142,9 +152,13 @@ def update_actor(
         obs,
         rng
 ):
+    '''
+        Update the actor policy using the current critic parameters
+        by maximizing the Q value
+    '''
     def loss(params):
-        action, log_l = get_squashed_log_prob(actor_fn, params, obs, rng)
-        q1, q2 = critic_fn(critic_params, obs=obs, action=action)
+        action, log_l = get_squashed_log_prob(actor_fn, params, obs, rng) # negative loglikelihood + action
+        q1, q2 = critic_fn(critic_params, obs=obs, action=action) # use 2 Q functions to reduce overestimation bias
         min_q = jnp.minimum(q1, q2)
         actor_loss = - min_q + alpha * log_l
         return jnp.mean(actor_loss), log_l
@@ -166,6 +180,9 @@ def update_critic(
         action,
         target_v,
 ):
+    '''
+        Update the critic parameters using the current actor parameters
+    '''
     def loss(params):
         q1, q2 = critic_fn(params, obs, action)
         q_loss = jnp.mean(0.5 * (mse(q1, target_v) + mse(q2, target_v)))
@@ -256,7 +273,7 @@ class Actor(nn.Module):
 
         out = actor_net(obs)
         mu, sig = jnp.split(out, 2, axis=-1)
-        sig = nn.softplus(sig)
+        sig = nn.softplus(sig) # smooth relu
         sig = jnp.clip(sig, self.sig_min, self.sig_max)
         return mu, sig
 

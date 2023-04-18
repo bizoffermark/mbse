@@ -8,8 +8,7 @@ import jax
 from functools import partial
 from typing import Union, Optional, Any
 from mbse.utils.type_aliases import ModelProperties
-
-
+from ens_model import EnsembleModel
 class PendulumReward(RewardModel):
     """Get Pendulum Reward."""
 
@@ -131,6 +130,31 @@ class CustomPendulumEnv(PendulumEnv):
         return next_obs, reward, terminate, truncate, output_dict
 
 
+class Ur5PendulumEnv(PendulumEnv):
+    def __init__(self, ctrl_cost=0.001, *args, **kwargs):
+        self.state = None
+        super(Ur5PendulumEnv, self).__init__(*args, **kwargs)
+        self.observation_space.sample = self.sample_obs
+        self.standard_ctrl_cost = 0.001
+        self.ctrl_cost = ctrl_cost
+        self.model = EnsembleModel()
+        super().set_bounds(max_action=0.7, min_action=-0.7)
+                
+    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+        super().reset(seed=seed, options=options)
+        self.state = np.array([0.0, 0.0])
+        return self._get_obs(), {}
+    
+    def sample_obs(self, mask: Optional[Any] = None):
+        high = np.array([np.pi, 1.0])
+        low = -high
+        theta, thetadot = self.np_random.uniform(low=low, high=high)
+        obs = np.asarray([np.cos(theta), np.sin(theta), thetadot], dtype=np.float32)
+        return obs
+    
+    def step(self, u):
+        next_obs = self.model.predict(self._get_obs(), u)
+    
 class PendulumSwingUpEnv(PendulumEnv):
     """Pendulum Swing-up Environment."""
 
@@ -188,6 +212,93 @@ class PendulumSwingUpEnv(PendulumEnv):
 
 
 class PendulumDynamicsModel(DynamicsModel):
+    def __init__(self, env: PendulumEnv, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.env = env
+        reward_model = PendulumReward(
+            action_space=self.env.action_space,
+            ctrl_cost_weight=ctrl_cost_weight,
+            sparse=sparse
+        )
+        self.reward_model = reward_model
+        self.pred_diff = False
+        self.obs_dim = 3
+
+    @partial(jax.jit, static_argnums=0)
+    def predict(self,
+                obs,
+                action,
+                rng=None,
+                parameters=None,
+                model_props: ModelProperties = ModelProperties(),
+                sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
+                ):
+        u = jnp.clip(self.rescale_action(action), -self.env.max_torque, self.env.max_torque)[0]
+        theta, omega = self._get_reduced_state(obs)
+
+        g = self.env.g
+        m = self.env.m
+        l = self.env.l
+        dt = self.env.dt
+        th, omega = self._get_reduced_state(obs)
+
+        omega_dot = (3 * g / (2 * l) * jnp.sin(th) + 3.0 / (m * l ** 2) * u)
+
+        new_omega = omega + omega_dot * dt
+        new_theta = theta + new_omega * dt  # Simplectic integration new_omega.
+
+        new_omega = jnp.clip(new_omega, -self.env.max_speed, self.env.max_speed)
+
+        new_state = jnp.asarray([new_theta, new_omega]).T
+        next_obs = self._get_obs(new_state)
+        next_obs = next_obs.squeeze()
+        return next_obs
+
+    def evaluate(self,
+                 obs,
+                 action,
+                 rng=None,
+                 parameters=None,
+                 sampling_idx=None,
+                 model_props: ModelProperties = ModelProperties(),
+                 ):
+        next_obs = self.predict(obs, action, rng)
+        reward = self.reward_model.predict(obs, action, next_obs)
+        return next_obs, reward
+
+    @staticmethod
+    @jax.jit
+    def _get_obs(state):
+        theta, thetadot = state[..., 0], state[..., 1]
+        return jnp.asarray([jnp.cos(theta), jnp.sin(theta), thetadot], dtype=jnp.float32)
+
+    @staticmethod
+    @jax.jit
+    def _get_reduced_state(obs):
+        cos_theta, sin_theta = obs[..., 0], obs[..., 1]
+        theta = jnp.arctan2(sin_theta, cos_theta)
+        return theta, obs[..., -1]
+
+    @partial(jax.jit, static_argnums=0)
+    def rescale_action(self, action):
+        """Rescales the action affinely from  [:attr:`min_action`, :attr:`max_action`] to the action space of the base environment, :attr:`env`.
+
+        Args:
+            action: The action to rescale
+
+        Returns:
+            The rescaled action
+        """
+        action = jnp.clip(action, self.env.min_action, self.env.max_action)
+        low = self.env.action_space.low
+        high = self.env.action_space.high
+        action = low + (high - low) * (
+                (action - self.env.min_action) / (self.env.max_action - self.env.min_action)
+        )
+        action = jnp.clip(action, low, high)
+        return action
+
+class Ur5PendulumDynamicsModel(DynamicsModel):
     def __init__(self, env: PendulumEnv, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.env = env

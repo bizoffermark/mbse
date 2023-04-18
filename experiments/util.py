@@ -116,11 +116,13 @@ def generate_base_command(module, flags: Optional[Dict[str, Any]] = None, unbuff
 
 def generate_run_commands(command_list: List[str], num_cpus: int = 1, num_gpus: int = 0,
                           dry: bool = False, n_hosts: int = 1, mem: int = 6000, long: bool = False,
-                          mode: str = 'local', promt: bool = True) -> None:
+                          mode: str = 'local', promt: bool = True, num_hours: int = None) -> None:
     if mode == 'euler':
         cluster_cmds = []
+        if num_hours is None:
+            num_hours = 23 if long else 3
         sbatch_cmd = 'sbatch ' + \
-                     f'--time={23 if long else 3}:59:00 ' + \
+                     f'--time={num_hours}:59:00 ' + \
                      f'--mem-per-cpu={mem} ' + \
                      f'-n {num_cpus} '
 

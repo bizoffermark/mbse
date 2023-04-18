@@ -13,7 +13,7 @@ from experiments.util import Logger, hash_dict, NumpyArrayEncoder
 import wandb
 from typing import Optional
 from mbse.models.hucrl_model import HUCRLModel
-from mbse.models.environment_models.halfcheetah_reward_model import HalfCheetahReward
+from mbse.models.environment_models.reacher_reward_model import ReacherRewardModel
 from mbse.envs.wrappers.action_repeat import ActionRepeat
 
 
@@ -30,8 +30,8 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     """ Run experiment for a given method and environment. """
 
     """ Environment """
-    # from jax.config import config
-    # config.update("jax_log_compiles", 1)
+    from jax.config import config
+    config.update("jax_log_compiles", 1)
     action_repeat = 1
     import math
     time_lim = math.ceil(time_limit / action_repeat)
@@ -52,42 +52,29 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             min_action=-1,
             max_action=1,
         )
-    reward_model_forward = HalfCheetahReward(forward_velocity_weight=1.0, ctrl_cost_weight=0.1,
-                                             penalise_flipping=False)
-    reward_model_backward = HalfCheetahReward(forward_velocity_weight=-1.0, ctrl_cost_weight=0.1,
-                                              penalise_flipping=False)
-    env_kwargs_forward = {
-        'reward_model': reward_model_forward,
+    reward_model = ReacherRewardModel()
+    env_kwargs = {
+        'reward_model': reward_model,
         'render_mode': 'rgb_array'
     }
-    env_kwargs_backward = {
-        'reward_model': reward_model_backward,
-        'render_mode': 'rgb_array'
-    }
-    from mbse.envs.pets_halfcheetah import HalfCheetahEnvDM
-    env = make_vec_env(env_id=HalfCheetahEnvDM, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed,
-                       env_kwargs=env_kwargs_forward)
-    test_env_forward = make_vec_env(HalfCheetahEnvDM, wrapper_class=wrapper_cls_test, seed=seed,
-                                    env_kwargs=env_kwargs_forward, n_envs=1)
-    test_env_backward = make_vec_env(HalfCheetahEnvDM, wrapper_class=wrapper_cls_test, seed=seed,
-                                     env_kwargs=env_kwargs_backward, n_envs=1)
-    test_env = [test_env_forward, test_env_backward]
+
+    from mbse.envs.reacher import ReacherEnvDM
+    env = make_vec_env(env_id=ReacherEnvDM, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed,
+                       env_kwargs=env_kwargs)
+    test_env = make_vec_env(ReacherEnvDM, wrapper_class=wrapper_cls_test, seed=seed,
+                            env_kwargs=env_kwargs, n_envs=1)
+    test_env = [test_env]
     features = [num_neurons] * hidden_layers
     video_prefix = ""
-
-    reward_model_forward = HalfCheetahReward(forward_velocity_weight=1.0, ctrl_cost_weight=0.1,
-                                             penalise_flipping=True)
-    reward_model_backward = HalfCheetahReward(forward_velocity_weight=-1.0, ctrl_cost_weight=0.1,
-                                              penalise_flipping=True)
 
     sac_kwargs = {
         'discount': 0.99,
         'init_ent_coef': 0.1,
-        'lr_actor': 0.0005,
+        'lr_actor': 0.001,
         'weight_decay_actor': 0.0,
-        'lr_critic': 0.0005,
+        'lr_critic': 0.001,
         'weight_decay_critic': 0.0,
-        'lr_alpha': 0.0005,
+        'lr_alpha': 0.001,
         'weight_decay_alpha': 1e-5,
         'actor_features': [250, 250],
         'critic_features': [250, 250],
@@ -102,7 +89,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         'num_samples': num_samples,
         'num_elites': num_elites,
         'num_steps': num_steps,
-        'train_steps_per_model_update': 200,
+        'train_steps_per_model_update': 250,
         'transitions_per_update': 1000,
         'sac_kwargs': sac_kwargs,
         'sim_transitions_ratio': 0.0,
@@ -113,11 +100,11 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         beta = 0.0
         video_prefix += 'Mean'
     if exploration_strategy == 'PETS':
-        dynamics_model_forward = ActiveLearningPETSModel(
+        dynamics_model = ActiveLearningPETSModel(
             action_space=env.action_space,
             observation_space=env.observation_space,
             num_ensemble=num_ensembles,
-            reward_model=reward_model_forward,
+            reward_model=reward_model,
             features=features,
             pred_diff=pred_diff,
             beta=beta,
@@ -127,29 +114,15 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             deterministic=deterministic,
         )
 
-        dynamics_model_backward = ActiveLearningPETSModel(
-            action_space=env.action_space,
-            observation_space=env.observation_space,
-            num_ensemble=num_ensembles,
-            reward_model=reward_model_backward,
-            features=features,
-            pred_diff=pred_diff,
-            beta=beta,
-            seed=seed,
-            use_log_uncertainties=use_log,
-            use_al_uncertainties=use_al,
-            deterministic=deterministic,
-        )
-
-        dynamics_model = [dynamics_model_forward, dynamics_model_backward]
+        dynamics_model = [dynamics_model]
         video_prefix += 'PETS'
     else:
         if exploration_strategy == 'HUCRL':
-            dynamics_model_forward = HUCRLModel(
+            dynamics_model = HUCRLModel(
                 action_space=env.action_space,
                 observation_space=env.observation_space,
                 num_ensemble=num_ensembles,
-                reward_model=reward_model_forward,
+                reward_model=reward_model,
                 features=features,
                 pred_diff=pred_diff,
                 beta=beta,
@@ -157,24 +130,13 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                 deterministic=deterministic,
             )
 
-            dynamics_model_backward = HUCRLModel(
-                action_space=env.action_space,
-                observation_space=env.observation_space,
-                num_ensemble=num_ensembles,
-                reward_model=reward_model_backward,
-                features=features,
-                pred_diff=pred_diff,
-                beta=beta,
-                seed=seed,
-                deterministic=deterministic,
-            )
             video_prefix += 'HUCRL'
         else:
-            dynamics_model_forward = ActiveLearningHUCRLModel(
+            dynamics_model = ActiveLearningHUCRLModel(
                 action_space=env.action_space,
                 observation_space=env.observation_space,
                 num_ensemble=num_ensembles,
-                reward_model=reward_model_forward,
+                reward_model=reward_model,
                 features=features,
                 pred_diff=pred_diff,
                 beta=beta,
@@ -184,21 +146,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                 deterministic=deterministic,
             )
 
-            dynamics_model_backward = ActiveLearningHUCRLModel(
-                action_space=env.action_space,
-                observation_space=env.observation_space,
-                num_ensemble=num_ensembles,
-                reward_model=reward_model_backward,
-                features=features,
-                pred_diff=pred_diff,
-                beta=beta,
-                seed=seed,
-                use_log_uncertainties=use_log,
-                use_al_uncertainties=use_al,
-                deterministic=deterministic,
-            )
-
-        dynamics_model = [dynamics_model_forward, dynamics_model_backward]
+        dynamics_model = [dynamics_model]
 
         video_prefix += 'Optimistic'
 
@@ -351,7 +299,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Active-Exploration-run')
 
     # general experiment args
-    parser.add_argument('--exp_name', type=str, required=True, default='active_exploration')
+    parser.add_argument('--exp_name', type=str, default='active_exploration')
     parser.add_argument('--logs_dir', type=str, default='./')
     parser.add_argument('--use_wandb', default=False, action="store_true")
     # env experiment args
@@ -394,7 +342,7 @@ if __name__ == '__main__':
     parser.add_argument('--normalize', default=True, action="store_true")
     parser.add_argument('--action_normalize', default=True, action="store_true")
     parser.add_argument('--validate', default=True, action="store_true")
-    parser.add_argument('--record_test_video', default=True, action="store_true")
+    parser.add_argument('--record_test_video', default=False, action="store_true")
     parser.add_argument('--validation_buffer_size', type=int, default=100000)
     parser.add_argument('--validation_batch_size', type=int, default=4096)
     parser.add_argument('--exploration_strategy', type=str, default='Optimistic')

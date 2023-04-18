@@ -59,12 +59,16 @@ search_ranges = {
 def main(args):
     env_name = args.env_name
     file_path = os.path.dirname(os.path.abspath(__file__))
-    assert env_name in ['Pendulum', 'Cheetah', 'MountainCar'], "Only cheetah and pendulum environment work"
+    assert env_name in ['Pendulum', 'Cheetah', 'MountainCar', 'Reacher'], "Only cheetah, mountain car, " \
+                                                                          "pendulum, and reacher environment work"
     if env_name in ['Pendulum', 'MountainCar']:
         EXPLORATION_STRATEGY = ['Uniform', 'Optimistic', 'Mean', 'PETS']
         if env_name == 'Pendulum':
             import experiments.pendulum_exp.active_exploration_exp_pendulum as active_exploration_exp
             default_configs = yaml.safe_load(open(file_path + '/pendulum_exp/hyperparams.yaml', 'r'))
+        elif env_name == 'Reacher':
+            import experiments.reacher_exp.active_exploration_reacher as active_exploration_exp
+            default_configs = yaml.safe_load(open(file_path + '/reacher_exp/hyperparams.yaml', 'r'))
         else:
             import experiments.mountain_car_exp.active_exploration_exp_mountain_car as active_exploration_exp
             default_configs = yaml.safe_load(open(file_path + '/mountain_car_exp/hyperparams.yaml', 'r'))
@@ -93,7 +97,7 @@ def main(args):
         else:
             logs_dir = './'
         [flags.pop(key) for key in ['seed', 'num_hparam_samples', 'num_seeds_per_hparam', 'num_cpus',
-                                    'num_gpus', 'launch_mode', 'env_name', 'user_name', 'long_run']]
+                                    'num_gpus', 'launch_mode', 'env_name', 'user_name', 'long_run', 'num_hours']]
 
         # randomly sample flags
         for flag in default_configs:
@@ -116,6 +120,7 @@ def main(args):
     # submit jobs
     generate_run_commands(command_list, num_cpus=args.num_cpus, num_gpus=args.num_gpus, mode=args.launch_mode,
                           long=args.long_run,
+                          num_hours=args.num_hours,
                           promt=True,
                           mem=16000)
 
@@ -135,6 +140,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_al', default=False, action="store_true")
     parser.add_argument('--beta', type=float, default=2.0)
     parser.add_argument('--long_run', default=False, action="store_true")
+    parser.add_argument('--num_hours', type=int, default=None)
 
     args = parser.parse_args()
     main(args)

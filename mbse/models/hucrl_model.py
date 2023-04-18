@@ -79,6 +79,7 @@ class HUCRLModel(BayesianDynamicsModel):
             return self._evaluate(
                 pred_fn=self.predict,
                 reward_fn=self.reward_model.predict,
+                act_dim=self.act_dim,
                 parameters=parameters,
                 obs=obs,
                 action=action,
@@ -169,6 +170,7 @@ class HUCRLModel(BayesianDynamicsModel):
     def _evaluate(
             pred_fn,
             reward_fn,
+            act_dim,
             parameters,
             obs,
             action,
@@ -188,9 +190,6 @@ class HUCRLModel(BayesianDynamicsModel):
             rng=model_rng,
             model_props=model_props,
         )
-        # transformed_obs, transformed_action, _ = self.transforms(obs, action)
-        # transformed_next_obs = self.predict(transformed_obs, transformed_action, model_rng)
-        # _, _, next_obs = self.inverse_transforms(transformed_obs=transformed_obs, transformed_action=None,
-        #                                         transformed_next_state=transformed_next_obs)
-        reward = reward_fn(obs, action, next_obs, reward_rng)
+        act, _ = jnp.split(action, axis=-1, indices_or_sections=[act_dim])
+        reward = reward_fn(obs, act, next_obs, reward_rng)
         return next_obs, reward

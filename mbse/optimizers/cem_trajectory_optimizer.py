@@ -155,8 +155,8 @@ class CemTO(DummyPolicyOptimizer):
                 return transition.reward.mean()
 
             if key is not None:
-                optimizer_key = jax.random.split(key=key, num=n_particles)
-                returns = jax.vmap(get_average_reward)(init_state, optimizer_key)
+                rollout_key = jax.random.split(key=key, num=n_particles)
+                returns = jax.vmap(get_average_reward)(init_state, rollout_key)
             else:
                 returns = jax.vmap(get_average_reward, in_axes=(0, None))(init_state, key)
             return returns.mean()

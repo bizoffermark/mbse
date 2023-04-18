@@ -7,9 +7,11 @@ from gym.envs.classic_control import utils
 
 class CustomMountainCar(Continuous_MountainCarEnv):
 
-    def __init__(self, dynamics_model: MountainCarDynamics = MountainCarDynamics(), *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, dynamics_model: MountainCarDynamics = MountainCarDynamics(), render_mode='rgb_array',
+                 *args, **kwargs):
+        super().__init__(render_mode=render_mode, *args, **kwargs)
         self.dynamics_model = dynamics_model
+        self.observation_space.sample = self.sample_obs
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
@@ -27,7 +29,7 @@ class CustomMountainCar(Continuous_MountainCarEnv):
         self.state = next_obs
         if self.render_mode == "human":
             self.render()
-        return next_obs, reward, False, False, {}
+        return next_obs, reward.squeeze().item(), False, False, {}
 
     def sample_obs(self):
         pos = self.np_random.uniform(low=self.min_position, high=self.max_position)

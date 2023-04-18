@@ -323,6 +323,7 @@ class ActiveLearningHUCRLModel(HUCRLModel):
             return self._evaluate(
                 pred_fn=self.predict_without_optimism,
                 reward_fn=self.reward_model.predict,
+                act_dim=self.act_dim,
                 parameters=parameters,
                 obs=obs,
                 action=action,

@@ -1,7 +1,8 @@
 import gym
 from gym.utils import seeding
 import numpy as np
-from dm_control.rl.control import Environment, flatten_observation
+from dm_control.rl.control import Environment
+from typing import Optional
 
 
 class DeepMindBridge(gym.Env):
@@ -38,7 +39,7 @@ class DeepMindBridge(gym.Env):
             kwargs['camera_id'] = 0
         return self._env.physics.render(**kwargs)
 
-    def reset(self, seed=None):
+    def reset(self, seed: [Optional] = None):
         if seed is not None:
             self._np_random, seed = seeding.np_random(seed)
         time_step = self._env.reset()

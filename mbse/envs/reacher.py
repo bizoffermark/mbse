@@ -1,7 +1,3 @@
-""" Taken from:  https://github.com/facebookresearch/mbrl-lib/blob/main/mbrl/env/pets_halfcheetah.py"""
-from abc import ABC
-from copy import deepcopy
-import numpy as np
 from mbse.models.environment_models.reacher_reward_model import ReacherRewardModel
 from mbse.envs.dm_control_env import DeepMindBridge
 from dm_control.suite.reacher import Reacher, _DEFAULT_TIME_LIMIT, get_model_and_assets, Physics

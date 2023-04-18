@@ -20,12 +20,15 @@ class HalfCheetahReward(RewardModel):
 
     @partial(jax.jit, static_argnums=0)
     def predict(self, obs, action, next_obs=None, rng=None):
-        reward_ctrl = -self.ctrl_cost_weight * jnp.square(action).sum(axis=- 1)
-        reward_run = self.forward_velocity_weight*obs[..., 0] - 0.0 * jnp.square(obs[..., 2])
+        velocity = obs[..., 9]
+        reward_ctrl = -self.ctrl_cost_weight * jnp.square(action).sum(axis=-1)
+        reward_run = self.forward_velocity_weight * velocity
         heading_penalty_factor = 10
         reward = reward_run + reward_ctrl
         if self.penalise_flipping and self.forward_velocity_weight > 0:
             root_angle = obs[..., 2]
+            sin_root_angle, cos_root_angle = jnp.sin(root_angle), jnp.cos(root_angle)
+            root_angle = jnp.arctan2(sin_root_angle, cos_root_angle)
             heading_penalty = (root_angle > jnp.pi / 2) * heading_penalty_factor + \
                               (root_angle < -jnp.pi / 2) * heading_penalty_factor
             reward = reward - heading_penalty

@@ -12,6 +12,7 @@ import os
 from gym import utils
 from gym.envs.mujoco import mujoco_env
 from gym.spaces import Box
+from typing import Optional
 
 SUITE = containers.TaggedTasks()
 
@@ -34,7 +35,7 @@ class PetsCheetah(Cheetah):
         """Returns an observation of the state, ignoring horizontal position."""
         obs = collections.OrderedDict()
         # Ignores horizontal position to maintain translational invariance.
-        obs['position'] = np.concatenate([np.asarray(physics.speed()).reshape(-1), physics.data.qpos[1:].copy()])
+        obs["position"] = physics.data.qpos.copy()
         obs['velocity'] = physics.velocity()
         return obs
 

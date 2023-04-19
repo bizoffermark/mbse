@@ -42,6 +42,7 @@ class DeepMindBridge(gym.Env):
     def reset(self, seed: [Optional] = None):
         if seed is not None:
             self._np_random, seed = seeding.np_random(seed)
+            self._env._task._random = np.random.RandomState(seed)
         time_step = self._env.reset()
         obs = time_step.observation['observations']
         return obs, {}

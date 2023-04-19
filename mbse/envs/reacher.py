@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     env = ReacherEnvDM(reward_model=ReacherRewardModel())
     env = TimeLimit(env, max_episode_steps=1000)
-    obs, _ = env.reset()
+    obs, _ = env.reset(seed=0)
     for i in range(1999):
         obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
         if terminated or truncated:

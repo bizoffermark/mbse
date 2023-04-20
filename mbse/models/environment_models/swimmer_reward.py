@@ -16,6 +16,6 @@ class SwimmerRewardModel(RewardModel):
         nose_to_target = obs[..., -2:]
         reward_dist = -jnp.linalg.norm(nose_to_target, axis=-1)
         reward_ctrl = -jnp.square(action).sum(-1)
-        reward = reward_dist + self.ctrl_cost * reward_ctrl
+        reward = reward_dist + self.ctrl_cost_weight * reward_ctrl
         reward = reward.reshape(-1).squeeze()
         return reward

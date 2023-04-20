@@ -197,7 +197,7 @@ class SACOptimizer(DummyPolicyOptimizer):
         ins = [sim_transitions]
         carry, outs = jax.lax.scan(agent_train_fn, carry, ins, length=agent_train_steps)
         next_train_state = carry[1]
-        summary = outs[-1]
+        summary = get_idx(outs[-1], -1)
         return next_train_state, summary
 
     def train(self,

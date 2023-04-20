@@ -206,6 +206,7 @@ class SACOptimizer(DummyPolicyOptimizer):
               dynamics_params: Optional = None,
               model_props: ModelProperties = ModelProperties(),
               sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
+              reset_params: bool = True
               ):
         sim_buffer_kwargs = {
             'obs_shape': self.obs_dim,
@@ -223,7 +224,7 @@ class SACOptimizer(DummyPolicyOptimizer):
         train_steps = self.agent_list[0].train_steps
         batch_size = self.agent_list[0].batch_size
         full_optimizer_state = self.init_optimizer_state
-        if not self.reset_actor_params:
+        if not self.reset_actor_params and not reset_params:
             full_optimizer_state = SacOptimizerState(
                 agent_train_state=SACTrainingState(
                     actor_opt_state=self.optimizer_state.agent_train_state.actor_opt_state,
@@ -231,8 +232,8 @@ class SACOptimizer(DummyPolicyOptimizer):
                     critic_opt_state=self.optimizer_state.agent_train_state.critic_opt_state,
                     critic_params=self.optimizer_state.agent_train_state.critic_params,
                     target_critic_params=self.optimizer_state.agent_train_state.target_critic_params,
-                    alpha_opt_state=self.init_optimizer_state.agent_train_state.alpha_opt_state,
-                    alpha_params=self.init_optimizer_state.agent_train_state.alpha_params,
+                    alpha_opt_state=self.optimizer_state.agent_train_state.alpha_opt_state,
+                    alpha_params=self.optimizer_state.agent_train_state.alpha_params,
                 ),
                 policy_props=self.optimizer_state.policy_props,
             )

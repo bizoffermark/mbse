@@ -31,7 +31,7 @@ class ModelBasedAgent(DummyAgent):
             calibrate_model: bool = True,
             init_function: bool = True,
             optimizer_kwargs: Optional[Dict[str, Any]] = None,
-            start_optimizer_update: int = 0,
+            reset_optimizer_params: int = 5,
             log_full_training: bool = False,
             log_agent_training: bool = False,
             *args,
@@ -78,7 +78,7 @@ class ModelBasedAgent(DummyAgent):
         self.n_particles = n_particles
         self.reset_model = reset_model
         self.calibrate_model = calibrate_model
-        self.start_optimizer_update = start_optimizer_update
+        self._reset_optimizer_params = reset_optimizer_params
         self.update_steps = 0
         self.log_agent_training = log_agent_training
         self.log_full_training = log_full_training
@@ -214,7 +214,7 @@ class ModelBasedAgent(DummyAgent):
             alpha = carry[1]
         self.update_models(model_params=model_params, model_opt_state=model_opt_state, alpha=alpha)
         if isinstance(self.policy_optimizer, SACOptimizer):
-            if buffer.size > self.policy_optimizer.transitions_per_update and self.update_optimizer:
+            if buffer.size > self.policy_optimizer.transitions_per_update:
                 train_rng = carry[0]
                 policy_train_rng, train_rng = jax.random.split(train_rng, 2)
                 policy_agent_train_summary = self.policy_optimizer.train(
@@ -222,6 +222,7 @@ class ModelBasedAgent(DummyAgent):
                     buffer=buffer,
                     dynamics_params=model_params,
                     model_props=self.dynamics_model.model_props,
+                    reset_params=self.reset_optimizer_params,
                 )
                 if log_results and self.log_agent_training:
                     for j in range(self.policy_optimizer.train_steps_per_model_update):
@@ -276,8 +277,8 @@ class ModelBasedAgent(DummyAgent):
         return self.dynamics_model_list[0]
 
     @property
-    def update_optimizer(self):
-        return self.update_steps >= self.start_optimizer_update
+    def reset_optimizer_params(self):
+        return self.update_steps < self._reset_optimizer_params
 
     def prepare_agent_for_rollout(self):
         self.policy_optimizer.reset()

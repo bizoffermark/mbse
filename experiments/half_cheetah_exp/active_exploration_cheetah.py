@@ -1,5 +1,4 @@
 from gym.wrappers import RescaleAction, TimeLimit
-from mbse.utils.vec_env.env_util import make_vec_env
 from mbse.models.active_learning_model import ActiveLearningHUCRLModel, ActiveLearningPETSModel
 from mbse.agents.model_based.model_based_agent import ModelBasedAgent
 from mbse.trainer.model_based.model_based_trainer import ModelBasedTrainer as Trainer
@@ -30,6 +29,8 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     """ Run experiment for a given method and environment. """
 
     """ Environment """
+    from mbse.utils.vec_env.env_util import make_vec_env
+    from mbse.utils.vec_env.subproc_vec_env import SubprocVecEnv
     # from jax.config import config
     # config.update("jax_log_compiles", 1)
     action_repeat = 1
@@ -56,6 +57,11 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                                              penalise_flipping=False)
     reward_model_backward = HalfCheetahReward(forward_velocity_weight=-1.0, ctrl_cost_weight=0.1,
                                               penalise_flipping=False)
+    env_kwargs_train = {
+        'reward_model': reward_model_forward,
+        'render_mode': None,
+    }
+
     env_kwargs_forward = {
         'reward_model': reward_model_forward,
         'render_mode': 'rgb_array'
@@ -66,7 +72,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     }
     from mbse.envs.pets_halfcheetah import HalfCheetahEnvDM
     env = make_vec_env(env_id=HalfCheetahEnvDM, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed,
-                       env_kwargs=env_kwargs_forward)
+                       env_kwargs=env_kwargs_train, vec_env_cls=SubprocVecEnv)
     test_env_forward = make_vec_env(HalfCheetahEnvDM, wrapper_class=wrapper_cls_test, seed=seed,
                                     env_kwargs=env_kwargs_forward, n_envs=1)
     test_env_backward = make_vec_env(HalfCheetahEnvDM, wrapper_class=wrapper_cls_test, seed=seed,
@@ -75,19 +81,19 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     features = [num_neurons] * hidden_layers
     video_prefix = ""
 
-    reward_model_forward = HalfCheetahReward(forward_velocity_weight=1.0, ctrl_cost_weight=0.1,
-                                             penalise_flipping=True)
-    reward_model_backward = HalfCheetahReward(forward_velocity_weight=-1.0, ctrl_cost_weight=0.1,
-                                              penalise_flipping=True)
+    # reward_model_forward = HalfCheetahReward(forward_velocity_weight=1.0, ctrl_cost_weight=0.1,
+    #                                         penalise_flipping=True)
+    # reward_model_backward = HalfCheetahReward(forward_velocity_weight=-1.0, ctrl_cost_weight=0.1,
+    #                                          penalise_flipping=True)
 
     sac_kwargs = {
         'discount': 0.99,
         'init_ent_coef': 0.1,
-        'lr_actor': 0.0005,
+        'lr_actor': 0.001,
         'weight_decay_actor': 0.0,
-        'lr_critic': 0.0005,
+        'lr_critic': 0.001,
         'weight_decay_critic': 0.0,
-        'lr_alpha': 0.0005,
+        'lr_alpha': 0.001,
         'weight_decay_alpha': 1e-5,
         'actor_features': [250, 250],
         'critic_features': [250, 250],
@@ -102,7 +108,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         'num_samples': num_samples,
         'num_elites': num_elites,
         'num_steps': num_steps,
-        'train_steps_per_model_update': 200,
+        'train_steps_per_model_update': 250,
         'transitions_per_update': 1000,
         'sac_kwargs': sac_kwargs,
         'sim_transitions_ratio': 0.0,
@@ -215,7 +221,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         policy_optimizer_name=optimizer_type,
         horizon=horizon,
         optimizer_kwargs=optimizer_kwargs,
-        start_optimizer_update=5,
+        reset_optimizer_params_for=20,
     )
 
     USE_WANDB = use_wandb
@@ -356,10 +362,10 @@ if __name__ == '__main__':
     parser.add_argument('--use_wandb', default=False, action="store_true")
     # env experiment args
     parser.add_argument('--time_limit', type=int, default=1000)
-    parser.add_argument('--n_envs', type=int, default=1)
+    parser.add_argument('--n_envs', type=int, default=10)
 
     # optimizer experiment args
-    parser.add_argument('--optimizer_type', type=str, default='TraJaxTO')
+    parser.add_argument('--optimizer_type', type=str, default='SacOpt')
     parser.add_argument('--num_samples', type=int, default=500)
     parser.add_argument('--num_elites', type=int, default=50)
     parser.add_argument('--num_steps', type=int, default=5)
@@ -394,7 +400,7 @@ if __name__ == '__main__':
     parser.add_argument('--normalize', default=True, action="store_true")
     parser.add_argument('--action_normalize', default=True, action="store_true")
     parser.add_argument('--validate', default=True, action="store_true")
-    parser.add_argument('--record_test_video', default=True, action="store_true")
+    parser.add_argument('--record_test_video', default=False, action="store_true")
     parser.add_argument('--validation_buffer_size', type=int, default=100000)
     parser.add_argument('--validation_batch_size', type=int, default=4096)
     parser.add_argument('--exploration_strategy', type=str, default='Optimistic')

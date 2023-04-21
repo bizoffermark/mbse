@@ -82,6 +82,8 @@ class SACOptimizer(DummyPolicyOptimizer):
                  action_normalize: bool = False,
                  sac_kwargs: Optional[dict] = None,
                  reset_actor_params: bool = False,
+                 reset_optimizer: bool = True,
+                 reset_buffer: bool = True,
                  *args,
                  **kwargs,
                  ):
@@ -138,6 +140,9 @@ class SACOptimizer(DummyPolicyOptimizer):
             learn_deltas=False,
             **self.sim_buffer_kwargs,
         ) for _ in self.agent_list]
+
+        self.reset_optimizer = reset_optimizer
+        self.reset_buffer = reset_buffer
         self._init_fn()
 
     def get_action_for_eval(self, obs: jax.Array, rng, agent_idx: int):
@@ -218,16 +223,8 @@ class SACOptimizer(DummyPolicyOptimizer):
               dynamics_params: Optional = None,
               model_props: ModelProperties = ModelProperties(),
               sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
-              reset_params: bool = True
+              reset_agent: bool = True
               ):
-        sim_buffer_kwargs = {
-            'obs_shape': self.obs_dim,
-            'action_shape': self.action_dim,
-            'max_size': self.simulated_buffer_size,
-            'normalize': self.normalize,
-            'action_normalize': self.action_normalize,
-        }
-
         # simulation_buffers = [JaxReplayBuffer(
         #    learn_deltas=False,
         #    **sim_buffer_kwargs,
@@ -236,25 +233,51 @@ class SACOptimizer(DummyPolicyOptimizer):
         train_steps = self.agent_list[0].train_steps
         batch_size = self.agent_list[0].batch_size
         full_optimizer_state = self.init_optimizer_state
-        if not self.reset_actor_params and not reset_params:
-            full_optimizer_state = SacOptimizerState(
-                agent_train_state=SACTrainingState(
-                    actor_opt_state=self.optimizer_state.agent_train_state.actor_opt_state,
-                    actor_params=self.optimizer_state.agent_train_state.actor_params,
-                    critic_opt_state=self.optimizer_state.agent_train_state.critic_opt_state,
-                    critic_params=self.optimizer_state.agent_train_state.critic_params,
-                    target_critic_params=self.optimizer_state.agent_train_state.target_critic_params,
-                    alpha_opt_state=self.optimizer_state.agent_train_state.alpha_opt_state,
-                    alpha_params=self.optimizer_state.agent_train_state.alpha_params,
-                ),
-                policy_props=self.optimizer_state.policy_props,
-            )
+
+        # If previous agent parameters should be used
+        if not self.reset_actor_params and not reset_agent:
+            # if optimizer should be reset use init optimizer params.
+            if self.reset_optimizer:
+                full_optimizer_state = SacOptimizerState(
+                    agent_train_state=SACTrainingState(
+                        actor_opt_state=self.init_optimizer_state.agent_train_state.actor_opt_state,
+                        actor_params=self.optimizer_state.agent_train_state.actor_params,
+                        critic_opt_state=self.init_optimizer_state.agent_train_state.critic_opt_state,
+                        critic_params=self.optimizer_state.agent_train_state.critic_params,
+                        target_critic_params=self.optimizer_state.agent_train_state.target_critic_params,
+                        alpha_opt_state=self.init_optimizer_state.agent_train_state.alpha_opt_state,
+                        alpha_params=self.optimizer_state.agent_train_state.alpha_params,
+                    ),
+                    policy_props=self.optimizer_state.policy_props,
+                )
+            # use params from optimizer
+            else:
+                full_optimizer_state = SacOptimizerState(
+                    agent_train_state=SACTrainingState(
+                        actor_opt_state=self.optimizer_state.agent_train_state.actor_opt_state,
+                        actor_params=self.optimizer_state.agent_train_state.actor_params,
+                        critic_opt_state=self.optimizer_state.agent_train_state.critic_opt_state,
+                        critic_params=self.optimizer_state.agent_train_state.critic_params,
+                        target_critic_params=self.optimizer_state.agent_train_state.target_critic_params,
+                        alpha_opt_state=self.optimizer_state.agent_train_state.alpha_opt_state,
+                        alpha_params=self.optimizer_state.agent_train_state.alpha_params,
+                    ),
+                    policy_props=self.optimizer_state.policy_props,
+                )
+            # if this is an active exploration agent. Reset the last agent by default
             if self.active_exploration_agent:
                 active_exploration_state = get_idx(self.init_optimizer_state, -1)
                 full_optimizer_state = \
                     jax.tree_util.tree_map(lambda x, y: x.at[-1].set(y),
                                            full_optimizer_state, active_exploration_state)
                 self.simulation_buffers[-1].reset()
+
+            # if replay buffer should be reset.
+            if self.reset_buffer:
+                self.simulation_buffers = [JaxReplayBuffer(
+                    learn_deltas=False,
+                    **self.sim_buffer_kwargs,
+                ) for _ in self.agent_list]
         else:
             self.simulation_buffers = [JaxReplayBuffer(
                 learn_deltas=False,

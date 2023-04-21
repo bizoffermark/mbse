@@ -31,7 +31,7 @@ class ModelBasedAgent(DummyAgent):
             calibrate_model: bool = True,
             init_function: bool = True,
             optimizer_kwargs: Optional[Dict[str, Any]] = None,
-            reset_optimizer_params: int = 5,
+            reset_optimizer_params_for: int = 5,
             log_full_training: bool = False,
             log_agent_training: bool = False,
             *args,
@@ -78,7 +78,7 @@ class ModelBasedAgent(DummyAgent):
         self.n_particles = n_particles
         self.reset_model = reset_model
         self.calibrate_model = calibrate_model
-        self._reset_optimizer_params = reset_optimizer_params
+        self.reset_optimizer_params_for = reset_optimizer_params_for
         self.update_steps = 0
         self.log_agent_training = log_agent_training
         self.log_full_training = log_full_training
@@ -222,7 +222,7 @@ class ModelBasedAgent(DummyAgent):
                     buffer=buffer,
                     dynamics_params=model_params,
                     model_props=self.dynamics_model.model_props,
-                    reset_params=self.reset_optimizer_params,
+                    reset_agent=self.reset_agent_params,
                 )
                 if log_results and self.log_agent_training:
                     for j in range(self.policy_optimizer.train_steps_per_model_update):
@@ -277,8 +277,8 @@ class ModelBasedAgent(DummyAgent):
         return self.dynamics_model_list[0]
 
     @property
-    def reset_optimizer_params(self):
-        return self.update_steps < self._reset_optimizer_params
+    def reset_agent_params(self):
+        return self.update_steps < self.reset_optimizer_params_for
 
     def prepare_agent_for_rollout(self):
         self.policy_optimizer.reset()

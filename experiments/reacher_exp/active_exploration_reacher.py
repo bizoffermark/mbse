@@ -52,7 +52,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             min_action=-1,
             max_action=1,
         )
-    reward_model = ReacherRewardModel()
+    reward_model = ReacherRewardModel(scarce_reward=True)
     env_kwargs = {
         'reward_model': reward_model,
         'render_mode': 'rgb_array'
@@ -82,7 +82,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         'tune_entropy_coef': True,
         'tau': 0.005,
         'batch_size': 128,
-        'train_steps': 1024,
+        'train_steps': 512,
     }
 
     optimizer_kwargs = {
@@ -90,7 +90,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         'num_elites': num_elites,
         'num_steps': num_steps,
         'train_steps_per_model_update': 250,
-        'transitions_per_update': 1000,
+        'transitions_per_update': 500,
         'sac_kwargs': sac_kwargs,
         'sim_transitions_ratio': 0.0,
         'reset_actor_params': False,

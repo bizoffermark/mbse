@@ -1,7 +1,7 @@
 from gym.wrappers import RescaleAction, TimeLimit
 from mbse.utils.vec_env.env_util import make_vec_env
 from mbse.models.environment_models.mountain_car import MountainCarRewardModel, MountainCarDynamics
-from mbse.envs.custom_mountain_car_env import Continuous_MountainCarEnv
+from mbse.envs.custom_mountain_car_env import CustomMountainCar
 from mbse.models.active_learning_model import ActiveLearningHUCRLModel, ActiveLearningPETSModel
 from mbse.agents.model_based.model_based_agent import ModelBasedAgent
 from mbse.trainer.model_based.model_based_trainer import ModelBasedTrainer as Trainer
@@ -52,11 +52,11 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         'num_samples': num_samples,
         'num_elites': num_elites,
         'num_steps': num_steps,
-        'train_steps_per_model_update': 25,
+        'train_steps_per_model_update': 35,
         'transitions_per_update': 500,
         'sac_kwargs': sac_kwargs,
         'sim_transitions_ratio': 0.0,
-        'reset_actor_params': True,
+        'reset_actor_params': False,
     }
 
 
@@ -73,9 +73,9 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             min_action=-1,
             max_action=1,
         )
-    env = make_vec_env(env_id=Continuous_MountainCarEnv, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed)
+    env = make_vec_env(env_id=CustomMountainCar, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed)
                        # vec_env_cls=SubprocVecEnv)
-    test_env = make_vec_env(env_id=Continuous_MountainCarEnv, wrapper_class=wrapper_cls_test, n_envs=1, seed=seed)
+    test_env = make_vec_env(env_id=CustomMountainCar, wrapper_class=wrapper_cls_test, n_envs=1, seed=seed)
     test_env = test_env.envs[0]
     features = [num_neurons] * hidden_layers
     reward_model = MountainCarRewardModel(action_space=env.action_space)
@@ -134,6 +134,8 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         policy_optimizer_name=optimizer_type,
         optimizer_kwargs=optimizer_kwargs,
         horizon=horizon,
+        log_agent_training=True,
+        reset_optimizer_params_for=10,
     )
 
     USE_WANDB = use_wandb
@@ -270,7 +272,7 @@ if __name__ == '__main__':
     # general experiment args
     parser.add_argument('--exp_name', type=str, default='active_exploration')
     parser.add_argument('--logs_dir', type=str, default='./')
-    parser.add_argument('--use_wandb', default=False, action="store_true")
+    parser.add_argument('--use_wandb', default=True, action="store_true")
     # env experiment args
     parser.add_argument('--time_limit', type=int, default=200)
     parser.add_argument('--n_envs', type=int, default=5)

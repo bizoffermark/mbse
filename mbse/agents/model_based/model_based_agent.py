@@ -28,6 +28,7 @@ class ModelBasedAgent(DummyAgent):
             horizon: int = 100,
             n_particles: int = 10,
             reset_model: bool = False,
+            reset_model_opt_state: bool = True,
             calibrate_model: bool = True,
             init_function: bool = True,
             optimizer_kwargs: Optional[Dict[str, Any]] = None,
@@ -77,6 +78,7 @@ class ModelBasedAgent(DummyAgent):
             )
         self.n_particles = n_particles
         self.reset_model = reset_model
+        self.reset_model_opt_state = reset_model_opt_state
         self.calibrate_model = calibrate_model
         self.reset_optimizer_params_for = reset_optimizer_params_for
         self.update_steps = 0
@@ -180,7 +182,10 @@ class ModelBasedAgent(DummyAgent):
             model_opt_state = self.dynamics_model.init_model_opt_state
         else:
             model_params = self.dynamics_model.model_params
-            model_opt_state = self.dynamics_model.model_opt_state
+            if self.reset_model_opt_state:
+                model_opt_state = self.dynamics_model.init_model_opt_state
+            else:
+                model_opt_state = self.dynamics_model.model_opt_state
         alpha = jnp.ones(self.observation_space.shape)
         for i in range(train_loops):
             train_rng, rng = jax.random.split(rng, 2)

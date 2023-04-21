@@ -255,6 +255,11 @@ class SACOptimizer(DummyPolicyOptimizer):
                     jax.tree_util.tree_map(lambda x, y: x.at[-1].set(y),
                                            full_optimizer_state, active_exploration_state)
                 self.simulation_buffers[-1].reset()
+        else:
+            self.simulation_buffers = [JaxReplayBuffer(
+                learn_deltas=False,
+                **self.sim_buffer_kwargs,
+            ) for _ in self.agent_list]
 
         agent_summary = []
         policy = self.agent_list[0].get_action

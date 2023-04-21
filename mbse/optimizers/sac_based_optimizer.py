@@ -126,6 +126,18 @@ class SACOptimizer(DummyPolicyOptimizer):
         self.train_steps_per_model_update = train_steps_per_model_update
         self.sim_transitions_ratio = sim_transitions_ratio
         self.reset_actor_params = reset_actor_params
+        self.sim_buffer_kwargs = {
+            'obs_shape': self.obs_dim,
+            'action_shape': self.action_dim,
+            'max_size': self.simulated_buffer_size,
+            'normalize': self.normalize,
+            'action_normalize': self.action_normalize,
+        }
+
+        self.simulation_buffers = [JaxReplayBuffer(
+            learn_deltas=False,
+            **self.sim_buffer_kwargs,
+        ) for _ in self.agent_list]
         self._init_fn()
 
     def get_action_for_eval(self, obs: jax.Array, rng, agent_idx: int):
@@ -216,10 +228,10 @@ class SACOptimizer(DummyPolicyOptimizer):
             'action_normalize': self.action_normalize,
         }
 
-        simulation_buffers = [JaxReplayBuffer(
-            learn_deltas=False,
-            **sim_buffer_kwargs,
-        ) for _ in self.agent_list]
+        # simulation_buffers = [JaxReplayBuffer(
+        #    learn_deltas=False,
+        #    **sim_buffer_kwargs,
+        # ) for _ in self.agent_list]
         true_obs = jnp.asarray(buffer.obs[:buffer.size])
         train_steps = self.agent_list[0].train_steps
         batch_size = self.agent_list[0].batch_size
@@ -242,6 +254,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                 full_optimizer_state = \
                     jax.tree_util.tree_map(lambda x, y: x.at[-1].set(y),
                                            full_optimizer_state, active_exploration_state)
+                self.simulation_buffers[-1].reset()
 
         agent_summary = []
         policy = self.agent_list[0].get_action
@@ -249,7 +262,7 @@ class SACOptimizer(DummyPolicyOptimizer):
             agents_policy_props = []
             transitions_list = []
             for j in range(len(self.agent_list)):
-                sim_buffer = simulation_buffers[j]
+                sim_buffer = self.simulation_buffers[j]
                 evaluate_fn = self.dynamics_model_list[j].evaluate
                 optimizer_state = get_idx(full_optimizer_state, idx=j)
                 if self.is_active_exploration_agent(idx=j):
@@ -283,15 +296,15 @@ class SACOptimizer(DummyPolicyOptimizer):
                     horizon=self.horizon,
                     policy_props=optimizer_state.policy_props,
                 )
-                simulation_buffers[j].add(transition=simulated_transitions)
+                self.simulation_buffers[j].add(transition=simulated_transitions)
                 agents_policy_props.append(PolicyProperties(
-                    policy_bias_obs=convert_to_jax(simulation_buffers[j].state_normalizer.mean),
-                    policy_scale_obs=convert_to_jax(simulation_buffers[j].state_normalizer.std),
+                    policy_bias_obs=convert_to_jax(self.simulation_buffers[j].state_normalizer.mean),
+                    policy_scale_obs=convert_to_jax(self.simulation_buffers[j].state_normalizer.std),
                 ))
                 sim_buffer_rng, rng = jax.random.split(rng, 2)
-                sim_transitions = simulation_buffers[j].sample(sim_buffer_rng,
-                                                               batch_size=int(train_steps * batch_size)
-                                                               )
+                sim_transitions = self.simulation_buffers[j].sample(sim_buffer_rng,
+                                                                    batch_size=int(train_steps * batch_size)
+                                                                    )
                 sim_transitions = sim_transitions.reshape(train_steps, batch_size)
                 transitions_list.append(sim_transitions)
             sim_transitions = tree_stack(transitions_list)

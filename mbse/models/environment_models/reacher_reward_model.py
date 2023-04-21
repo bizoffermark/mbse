@@ -9,7 +9,7 @@ _RUN_SPEED = 10
 class ReacherRewardModel(RewardModel):
     """Get Pendulum Reward."""
 
-    def __init__(self, ctrl_cost: float = 0.0, scarce_reward: bool = False, tol: float = 1e-2):
+    def __init__(self, ctrl_cost: float = 0.0, scarce_reward: bool = False, tol: float = 5e-2):
         super().__init__()
         self.scarce_reward = scarce_reward
         if scarce_reward:

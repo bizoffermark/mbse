@@ -30,8 +30,8 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     """ Run experiment for a given method and environment. """
 
     """ Environment """
-    from jax.config import config
-    config.update("jax_log_compiles", 1)
+    # from jax.config import config
+    # config.update("jax_log_compiles", 1)
     action_repeat = 1
     import math
     time_lim = math.ceil(time_limit / action_repeat)
@@ -163,7 +163,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         policy_optimizer_name=optimizer_type,
         horizon=horizon,
         optimizer_kwargs=optimizer_kwargs,
-        start_optimizer_update=5,
+        reset_optimizer_params_for=10,
     )
 
     USE_WANDB = use_wandb

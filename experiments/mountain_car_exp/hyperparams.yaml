@@ -1,6 +1,6 @@
 use_wandb: True
-time_limit: 500
-time_limit_eval: 500
+time_limit: 200
+time_limit_eval: 200
 n_envs: 1
 optimizer_type: SacOpt
 num_samples: 500

@@ -77,7 +77,7 @@ def main(args):
             import experiments.mountain_car_exp.active_exploration_exp_mountain_car as active_exploration_exp
             default_configs = yaml.safe_load(open(file_path + '/mountain_car_exp/hyperparams.yaml', 'r'))
     else:
-        EXPLORATION_STRATEGY = ['Uniform', 'Optimistic', 'Mean', 'PETS', 'HUCRL']
+        EXPLORATION_STRATEGY = ['Uniform', 'Optimistic', 'Mean', 'PETS']
         import experiments.half_cheetah_exp.active_exploration_cheetah as active_exploration_exp
         default_configs = yaml.safe_load(open(file_path + '/half_cheetah_exp/hyperparams.yaml', 'r'))
 

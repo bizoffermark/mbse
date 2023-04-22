@@ -163,7 +163,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         policy_optimizer_name=optimizer_type,
         horizon=horizon,
         optimizer_kwargs=optimizer_kwargs,
-        start_optimizer_update=5,
+        reset_optimizer_params_for=10,
     )
 
     USE_WANDB = use_wandb

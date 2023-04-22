@@ -1,6 +1,6 @@
 from mbse.models.environment_models.swimmer_reward import SwimmerRewardModel
 from mbse.envs.dm_control_env import DeepMindBridge
-from dm_control.suite.swimmer import Swimmer, _DEFAULT_TIME_LIMIT, get_model_and_assets, Physics
+from dm_control.suite.swimmer import Swimmer, _DEFAULT_TIME_LIMIT, get_model_and_assets, Physics, _CONTROL_TIMESTEP
 from dm_control.rl.control import Environment
 import collections
 from dm_control.utils import containers
@@ -9,13 +9,16 @@ SUITE = containers.TaggedTasks()
 
 
 @SUITE.add('benchmarking')
-def run(time_limit=_DEFAULT_TIME_LIMIT, n_joints=6, random=None, environment_kwargs=None):
-    """Returns the run task."""
-    physics = Physics.from_xml_string(*get_model_and_assets(n_joints=n_joints))
-    task = CustomSwimmer(random=random)
-    environment_kwargs = environment_kwargs or {}
-    return Environment(physics, task, time_limit=time_limit,
-                       **environment_kwargs)
+def _make_swimmer(n_joints=6, time_limit=_DEFAULT_TIME_LIMIT, random=None,
+                  environment_kwargs=None):
+  """Returns a swimmer control environment."""
+  model_string, assets = get_model_and_assets(n_joints)
+  physics = Physics.from_xml_string(model_string, assets=assets)
+  task = CustomSwimmer(random=random)
+  environment_kwargs = environment_kwargs or {}
+  return Environment(
+      physics, task, time_limit=time_limit, control_timestep=_CONTROL_TIMESTEP,
+      **environment_kwargs)
 
 
 class CustomSwimmer(Swimmer):
@@ -34,7 +37,7 @@ class CustomSwimmer(Swimmer):
 class SwimmerEnvDM(DeepMindBridge):
     def __init__(self, reward_model: SwimmerRewardModel = SwimmerRewardModel(), *args, **kwargs):
         self.reward_model = reward_model
-        env = run(time_limit=float('inf'), environment_kwargs={'flat_observation': True})
+        env = _make_swimmer(time_limit=float('inf'), environment_kwargs={'flat_observation': True})
         super().__init__(env=env, *args, **kwargs)
         self.env = env
 
@@ -47,7 +50,7 @@ class SwimmerEnvDM(DeepMindBridge):
 
 if __name__ == "__main__":
     from gym.wrappers.time_limit import TimeLimit
-    env = SwimmerEnvDM(reward_model=SwimmerRewardModel())
+    env = SwimmerEnvDM(reward_model=SwimmerRewardModel(), render_mode='human')
     env = TimeLimit(env, max_episode_steps=1000)
     obs, _ = env.reset(seed=10)
     for i in range(1999):

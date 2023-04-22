@@ -57,6 +57,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         'sac_kwargs': sac_kwargs,
         'sim_transitions_ratio': 0.0,
         'reset_actor_params': False,
+        'normalize': True,
     }
 
 

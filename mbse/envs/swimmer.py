@@ -9,7 +9,7 @@ SUITE = containers.TaggedTasks()
 
 
 @SUITE.add('benchmarking')
-def run(time_limit=_DEFAULT_TIME_LIMIT, n_joints=3, random=None, environment_kwargs=None):
+def run(time_limit=_DEFAULT_TIME_LIMIT, n_joints=6, random=None, environment_kwargs=None):
     """Returns the run task."""
     physics = Physics.from_xml_string(*get_model_and_assets(n_joints=n_joints))
     task = CustomSwimmer(random=random)

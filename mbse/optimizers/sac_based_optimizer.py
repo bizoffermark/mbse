@@ -2,7 +2,7 @@ import copy
 
 import jax.random
 
-from mbse.agents.actor_critic.sac import SACAgent, SACTrainingState
+from mbse.agents.actor_critic.sac import SACAgent, SACTrainingState, soft_update
 from gym.spaces import Box
 from mbse.utils.replay_buffer import Transition, ReplayBuffer, JaxReplayBuffer
 from typing import Callable, Union, Optional
@@ -84,6 +84,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                  reset_actor_params: bool = False,
                  reset_optimizer: bool = True,
                  reset_buffer: bool = True,
+                 target_soft_update_tau: float = 0.05,
                  *args,
                  **kwargs,
                  ):
@@ -117,6 +118,8 @@ class SACOptimizer(DummyPolicyOptimizer):
         ) for agent in self.agent_list]
         self.init_optimizer_state = tree_stack(init_optimizer_state)
         self.optimizer_state = copy.deepcopy(self.init_optimizer_state)
+        self.target_optimizer_state = copy.deepcopy(self.optimizer_state)
+        self.target_soft_update_tau = target_soft_update_tau
         self.horizon = horizon
         self.n_particles = n_particles
         self.transitions_per_update = transitions_per_update
@@ -241,28 +244,28 @@ class SACOptimizer(DummyPolicyOptimizer):
                 full_optimizer_state = SacOptimizerState(
                     agent_train_state=SACTrainingState(
                         actor_opt_state=self.init_optimizer_state.agent_train_state.actor_opt_state,
-                        actor_params=self.optimizer_state.agent_train_state.actor_params,
+                        actor_params=self.target_optimizer_state.agent_train_state.actor_params,
                         critic_opt_state=self.init_optimizer_state.agent_train_state.critic_opt_state,
-                        critic_params=self.optimizer_state.agent_train_state.critic_params,
-                        target_critic_params=self.optimizer_state.agent_train_state.target_critic_params,
+                        critic_params=self.target_optimizer_state.agent_train_state.critic_params,
+                        target_critic_params=self.target_optimizer_state.agent_train_state.target_critic_params,
                         alpha_opt_state=self.init_optimizer_state.agent_train_state.alpha_opt_state,
-                        alpha_params=self.optimizer_state.agent_train_state.alpha_params,
+                        alpha_params=self.target_optimizer_state.agent_train_state.alpha_params,
                     ),
-                    policy_props=self.optimizer_state.policy_props,
+                    policy_props=self.target_optimizer_state.policy_props,
                 )
             # use params from optimizer
             else:
                 full_optimizer_state = SacOptimizerState(
                     agent_train_state=SACTrainingState(
-                        actor_opt_state=self.optimizer_state.agent_train_state.actor_opt_state,
-                        actor_params=self.optimizer_state.agent_train_state.actor_params,
-                        critic_opt_state=self.optimizer_state.agent_train_state.critic_opt_state,
-                        critic_params=self.optimizer_state.agent_train_state.critic_params,
-                        target_critic_params=self.optimizer_state.agent_train_state.target_critic_params,
-                        alpha_opt_state=self.optimizer_state.agent_train_state.alpha_opt_state,
-                        alpha_params=self.optimizer_state.agent_train_state.alpha_params,
+                        actor_opt_state=self.target_optimizer_state.agent_train_state.actor_opt_state,
+                        actor_params=self.target_optimizer_state.agent_train_state.actor_params,
+                        critic_opt_state=self.target_optimizer_state.agent_train_state.critic_opt_state,
+                        critic_params=self.target_optimizer_state.agent_train_state.critic_params,
+                        target_critic_params=self.target_optimizer_state.agent_train_state.target_critic_params,
+                        alpha_opt_state=self.target_optimizer_state.agent_train_state.alpha_opt_state,
+                        alpha_params=self.target_optimizer_state.agent_train_state.alpha_params,
                     ),
-                    policy_props=self.optimizer_state.policy_props,
+                    policy_props=self.target_optimizer_state.policy_props,
                 )
             # if this is an active exploration agent. Reset the last agent by default
             if self.active_exploration_agent:
@@ -352,6 +355,34 @@ class SACOptimizer(DummyPolicyOptimizer):
             )
             agent_summary.append([get_idx(summary, i) for i in range(len(self.agent_list))])
         self.optimizer_state = full_optimizer_state
+        soft_actor_params = soft_update(target_params=self.target_optimizer_state.agent_train_state.actor_params,
+                                                  online_params=self.optimizer_state.agent_train_state.actor_params,
+                                                  tau=self.target_soft_update_tau)
+
+        soft_critic_params = soft_update(target_params=self.target_optimizer_state.agent_train_state.critic_params,
+                                                  online_params=self.optimizer_state.agent_train_state.critic_params,
+                                                  tau=self.target_soft_update_tau)
+
+        soft_target_critic_params = soft_update(target_params=self.target_optimizer_state.agent_train_state.target_critic_params,
+                                                  online_params=self.optimizer_state.agent_train_state.target_critic_params,
+                                                  tau=self.target_soft_update_tau)
+
+
+        soft_alpha_params = soft_update(target_params=self.target_optimizer_state.agent_train_state.alpha_params,
+                                                  online_params=self.optimizer_state.agent_train_state.alpha_params,
+                                                  tau=self.target_soft_update_tau)
+
+        self.target_optimizer_state = SacOptimizerState(
+            agent_train_state=SACTrainingState(
+                    actor_opt_state=self.optimizer_state.agent_train_state.actor_opt_state,
+                    actor_params=soft_actor_params,
+                    critic_opt_state=self.optimizer_state.agent_train_state.critic_opt_state,
+                    critic_params=soft_critic_params,
+                    target_critic_params=soft_target_critic_params,
+                    alpha_opt_state=self.optimizer_state.agent_train_state.alpha_opt_state,
+                    alpha_params=soft_alpha_params,
+            )
+            policy_props=self.optimizer_state.policy_props)
         return agent_summary
 
     @property

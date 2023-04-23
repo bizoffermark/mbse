@@ -354,7 +354,9 @@ class SACOptimizer(DummyPolicyOptimizer):
                 policy_props=policy_props,
             )
             agent_summary.append([get_idx(summary, i) for i in range(len(self.agent_list))])
+
         self.optimizer_state = full_optimizer_state
+
         soft_actor_params = soft_update(target_params=self.target_optimizer_state.agent_train_state.actor_params,
                                                   online_params=self.optimizer_state.agent_train_state.actor_params,
                                                   tau=self.target_soft_update_tau)
@@ -381,7 +383,7 @@ class SACOptimizer(DummyPolicyOptimizer):
                     target_critic_params=soft_target_critic_params,
                     alpha_opt_state=self.optimizer_state.agent_train_state.alpha_opt_state,
                     alpha_params=soft_alpha_params,
-            )
+            ),
             policy_props=self.optimizer_state.policy_props)
         return agent_summary
 

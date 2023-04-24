@@ -12,8 +12,6 @@ class ReacherRewardModel(RewardModel):
     def __init__(self, ctrl_cost: float = 0.0, scarce_reward: bool = False, tol: float = 5e-2):
         super().__init__()
         self.scarce_reward = scarce_reward
-        if scarce_reward:
-            ctrl_cost = 0.01
         self.ctrl_cost = ctrl_cost
         self.tol = tol
 

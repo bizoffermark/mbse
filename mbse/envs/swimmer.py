@@ -4,6 +4,7 @@ from dm_control.suite.swimmer import Swimmer, _DEFAULT_TIME_LIMIT, get_model_and
 from dm_control.rl.control import Environment
 import collections
 from dm_control.utils import containers
+from dm_control.suite.utils import randomizers
 
 SUITE = containers.TaggedTasks()
 
@@ -11,14 +12,14 @@ SUITE = containers.TaggedTasks()
 @SUITE.add('benchmarking')
 def _make_swimmer(n_joints=6, time_limit=_DEFAULT_TIME_LIMIT, random=None,
                   environment_kwargs=None):
-  """Returns a swimmer control environment."""
-  model_string, assets = get_model_and_assets(n_joints)
-  physics = Physics.from_xml_string(model_string, assets=assets)
-  task = CustomSwimmer(random=random)
-  environment_kwargs = environment_kwargs or {}
-  return Environment(
-      physics, task, time_limit=time_limit, control_timestep=_CONTROL_TIMESTEP,
-      **environment_kwargs)
+    """Returns a swimmer control environment."""
+    model_string, assets = get_model_and_assets(n_joints)
+    physics = Physics.from_xml_string(model_string, assets=assets)
+    task = CustomSwimmer(random=random)
+    environment_kwargs = environment_kwargs or {}
+    return Environment(
+        physics, task, time_limit=time_limit, control_timestep=_CONTROL_TIMESTEP,
+        **environment_kwargs)
 
 
 class CustomSwimmer(Swimmer):
@@ -32,6 +33,26 @@ class CustomSwimmer(Swimmer):
         obs['body_velocities'] = physics.body_velocities()
         obs['to_target'] = physics.nose_to_target()
         return obs
+
+    def initialize_episode(self, physics):
+        """Sets the state of the environment at the start of each episode.
+
+        Initializes the swimmer orientation to [-pi, pi) and the relative joint
+        angle of each joint uniformly within its range.
+
+        Args:
+          physics: An instance of `Physics`.
+        """
+        # Random joint angles:
+        randomizers.randomize_limited_and_rotational_joints(physics, self.random)
+        # Random target position.
+        close_target = self.random.rand() < .2  # Probability of a close target.
+        target_box = .3 if close_target else 1.25
+        xpos, ypos = self.random.uniform(-target_box, target_box, size=2)
+        physics.named.model.geom_pos['target', 'x'] = xpos
+        physics.named.model.geom_pos['target', 'y'] = ypos
+        physics.named.model.light_pos['target_light', 'x'] = xpos
+        physics.named.model.light_pos['target_light', 'y'] = ypos
 
 
 class SwimmerEnvDM(DeepMindBridge):
@@ -50,6 +71,7 @@ class SwimmerEnvDM(DeepMindBridge):
 
 if __name__ == "__main__":
     from gym.wrappers.time_limit import TimeLimit
+
     env = SwimmerEnvDM(reward_model=SwimmerRewardModel(), render_mode='human')
     env = TimeLimit(env, max_episode_steps=1000)
     obs, _ = env.reset(seed=10)

@@ -21,13 +21,14 @@ dynamics_model_list = [true_dynamics]
 
 horizon = 50
 
-cem_params = ICEMHyperparams(exponent=0.0)
 policy_optimizer = ICemTO(
     dynamics_model_list=dynamics_model_list,
     horizon=horizon,
     action_dim=(1,),
-    opt_params=cem_params,
-
+    exponent=0.25,
+    num_samples=50,
+    num_elites=5,
+    num_steps=1,
 )
 obs, _ = env.reset()
 time_stamps = []

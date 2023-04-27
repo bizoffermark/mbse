@@ -291,12 +291,8 @@ class ICEMHyperparams(NamedTuple):
     alpha_0: initial line search value.
     alpha_min: minimum line search value.
     """
-    n_particles: int = 10
     num_samples: int = 500
     num_elites: int = 50
-    psd_delta: float = 0.0
-    alpha_0: float = 1.0
-    alpha_min: float = 0.00005
     init_std: float = 0.5
     alpha: float = 0.0
     num_steps: int = 1
@@ -310,12 +306,28 @@ class ICemTO(DummyPolicyOptimizer):
                  action_dim: tuple,
                  dynamics_model_list: list,
                  seed: int = 0,
-                 opt_params: ICEMHyperparams = ICEMHyperparams(),
+                 n_particles: int = 10,
+                 num_samples: int = 500,
+                 num_elites: int = 50,
+                 init_std: float = 0.5,
+                 alpha: float = 0.0,
+                 num_steps: int = 5,
+                 exponent: float = 0.0,
+                 elite_set_fraction: float = 0.3,
                  *args,
                  **kwargs):
         super().__init__(*args, **kwargs)
         self.horizon = horizon
-        self.opt_params = opt_params
+        self.n_particles = n_particles
+        self.opt_params = ICEMHyperparams(
+            num_samples=num_samples,
+            num_elites=num_elites,
+            init_std=init_std,
+            alpha=alpha,
+            num_steps=num_steps,
+            exponent=exponent,
+            elite_set_fraction=elite_set_fraction,
+        )
         self.action_dim = action_dim
         self.opt_dim = (horizon,) + action_dim
         self.seed = seed
@@ -347,7 +359,7 @@ class ICemTO(DummyPolicyOptimizer):
             optimizer_key: Optional = None,
             sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
     ):
-        initial_state = jnp.repeat(jnp.expand_dims(initial_state, 0), self.opt_params.n_particles, 0)
+        initial_state = jnp.repeat(jnp.expand_dims(initial_state, 0), self.n_particles, 0)
         eval_func = lambda seq, x, k: sample_trajectories(
             evaluate_fn=evaluate_fn,
             parameters=dynamics_params,
@@ -365,7 +377,7 @@ class ICemTO(DummyPolicyOptimizer):
                 return transition.reward.mean()
 
             if key is not None:
-                optimizer_key = jax.random.split(key=key, num=self.opt_params.n_particles)
+                optimizer_key = jax.random.split(key=key, num=self.n_particles)
                 returns = jax.vmap(get_average_reward)(initial_state, optimizer_key)
             else:
                 returns = jax.vmap(get_average_reward, in_axes=(0, None))(initial_state, key)
@@ -391,10 +403,11 @@ class ICemTO(DummyPolicyOptimizer):
             sampling_rng = sampling_rng[1:]
             opt_size = self.opt_dim[0] * self.opt_dim[1]
             colored_samples = jax.vmap(
-                lambda rng: powerlaw_psd_gaussian(exponent=self.opt_params.exponent, size=opt_size, rng=rng))(sampling_rng)
+                lambda rng: powerlaw_psd_gaussian(exponent=self.opt_params.exponent, size=opt_size, rng=rng))(
+                sampling_rng)
             action_samples = mu + colored_samples * sig
             action_samples = jnp.clip(action_samples, a_max=1, a_min=-1)
-            action_samples = action_samples.reshape((-1, ) + self.opt_dim)
+            action_samples = action_samples.reshape((-1,) + self.opt_dim)
             action_samples = jnp.concatenate([action_samples, prev_elites], axis=0)
             values = jax.vmap(sum_rewards)(action_samples)
             best_elite_idx = np.argsort(values, axis=0).squeeze()[-self.opt_params.num_elites:]
@@ -403,7 +416,8 @@ class ICemTO(DummyPolicyOptimizer):
             elite_mean = jnp.mean(elites, axis=0)
             elite_var = jnp.var(elites, axis=0)
             mean = mu.reshape(self.opt_dim) * self.opt_params.alpha + (1 - self.opt_params.alpha) * elite_mean
-            var = jnp.square(sig.reshape(self.opt_dim)) * self.opt_params.alpha + (1 - self.opt_params.alpha) * elite_var
+            var = jnp.square(sig.reshape(self.opt_dim)) * self.opt_params.alpha + (
+                        1 - self.opt_params.alpha) * elite_var
             std = jnp.sqrt(var)
             best_elite = elite_values[-1].squeeze()
             bests = jax.lax.cond(best_val <= best_elite,
@@ -416,7 +430,7 @@ class ICemTO(DummyPolicyOptimizer):
             best_val = bests[0]
             best_seq = bests[-1]
             outs = [best_val, best_seq]
-            elite_set = jnp.atleast_2d(elites[-num_prev_elites_per_iter:]).reshape((-1, ) + self.opt_dim)
+            elite_set = jnp.atleast_2d(elites[-num_prev_elites_per_iter:]).reshape((-1,) + self.opt_dim)
             carry = [key, mean, std, best_val, best_seq, elite_set]
             return carry, outs
 

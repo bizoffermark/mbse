@@ -5,6 +5,7 @@ from mbse.models.dynamics_model import DynamicsModel
 from mbse.optimizers.cem_trajectory_optimizer import CemTO
 from mbse.optimizers.trajax_trajectory_optimizer import TraJaxTO
 from mbse.optimizers.sac_based_optimizer import SACOptimizer
+from mbse.optimizers.icem_trajectory_optimizer import ICemTO
 import gym
 from mbse.utils.replay_buffer import ReplayBuffer, Transition
 from mbse.utils.utils import get_idx
@@ -47,7 +48,9 @@ class ModelBasedAgent(DummyAgent):
         else:
             self.dynamics_model_list = dynamics_model
             self.num_dynamics_models = len(dynamics_model)
-        assert policy_optimizer_name in ["CemTO", "TraJaxTO", "SacOpt"], "Optimizer must be CEM or TraJax"
+        assert policy_optimizer_name in ["CemTO", "TraJaxTO", "SacOpt", "iCemTO"], "Optimizer must be CEM, TraJax, " \
+                                                                                   "SAC " \
+                                                                                   "or iCem"
 
         optimizer_kwargs = {} if optimizer_kwargs is None else optimizer_kwargs
         action_dim = self.action_space.shape
@@ -73,6 +76,14 @@ class ModelBasedAgent(DummyAgent):
             self.policy_optimizer = SACOptimizer(
                 dynamics_model_list=self.dynamics_model_list,
                 horizon=horizon,
+                action_dim=action_dim,
+                **optimizer_kwargs,
+            )
+        elif policy_optimizer_name == 'iCemTO':
+            self.policy_optimizer = ICemTO(
+                dynamics_model_list=self.dynamics_model_list,
+                horizon=horizon,
+                n_particles=n_particles,
                 action_dim=action_dim,
                 **optimizer_kwargs,
             )

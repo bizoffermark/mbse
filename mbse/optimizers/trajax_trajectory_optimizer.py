@@ -16,10 +16,11 @@ def _optimize_with_params(reward_fn: Callable,
                           optimizer_params: ILQRHyperparams,
                           dynamics_params,
                           model_props: ModelProperties = ModelProperties(),
-                          init_var: Union[float, jax.Array] = 0.5,
+                          init_var: Union[float, jax.Array] = 5,
                           cost_params: Optional = None,
                           key: Optional = None,
                           optimizer_key: Optional = None,
+                          use_mean: Optional[jax.Array] = jnp.ones(1),
                           sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
                           ):
     def dynamics(x, u, t, dynamic_params):
@@ -37,13 +38,19 @@ def _optimize_with_params(reward_fn: Callable,
         action = jnp.tanh(u)
         return - reward_fn(x, action).sum()/horizon
 
-    if optimizer_key is not None:
+    def sample_action(opt_key):
         sampled_action = jax.random.multivariate_normal(
-            key=optimizer_key,
+            key=opt_key,
             mean=jnp.zeros_like(initial_actions.reshape(-1, 1).squeeze()),
             cov=jnp.diag(jnp.ones_like(initial_actions.reshape(-1, 1).squeeze()))
         ) * init_var
         sampled_action = sampled_action.reshape(initial_actions.shape)
+        return sampled_action
+
+    def get_zero(opt_key):
+        return jnp.zeros_like(initial_actions)
+    if optimizer_key is not None:
+        sampled_action = jax.lax.cond(use_mean, sample_action, get_zero, optimizer_key)
         init_act = initial_actions + sampled_action
     else:
         init_act = initial_actions
@@ -182,9 +189,9 @@ class TraJaxTO(DummyPolicyOptimizer):
         if initial_actions is None:
             initial_actions = jnp.zeros((self.horizon,) + self.action_dim)
 
-        x0 = jnp.repeat(jnp.expand_dims(x0, 0), self.n_particles, 0)
+        x0 = jnp.repeat(jnp.expand_dims(x0, 0), self.n_particles + 1, 0)
 
-        def get_sequence_and_returns_for_init_state(init_state, optimizer_key):
+        def get_sequence_and_returns_for_init_state(init_state, optimizer_key, use_mean):
             return _optimize_with_params(
                 reward_fn=reward_fn,
                 dynamics_fn=predict_fn,
@@ -196,15 +203,19 @@ class TraJaxTO(DummyPolicyOptimizer):
                 model_props=model_props,
                 key=key,
                 optimizer_key=optimizer_key,
+                use_mean=use_mean,
                 sampling_idx=sampling_idx,
             )
 
         if opt_key is not None:
-            optimizer_key = jax.random.split(key=opt_key, num=self.n_particles)
-            sequence, returns = jax.vmap(get_sequence_and_returns_for_init_state)(x0, optimizer_key)
+            optimizer_key = jax.random.split(key=opt_key, num=self.n_particles + 1)
+            use_mean = jnp.zeros(self.n_particles + 1)
+            use_mean = use_mean.at[-1].set(1)
+            sequence, returns = jax.vmap(get_sequence_and_returns_for_init_state)(x0, optimizer_key, use_mean)
         else:
-            sequence, returns = jax.vmap(get_sequence_and_returns_for_init_state, in_axes=(0, None)) \
-                (x0, opt_key)
+            use_mean = jnp.ones(1)
+            sequence, returns = jax.vmap(get_sequence_and_returns_for_init_state, in_axes=(0, None, None)) \
+                (x0, opt_key, use_mean)
         best_elite_idx = jnp.argsort(returns, axis=0).squeeze()[-1]
         elite_action = sequence[best_elite_idx]
         return elite_action, returns[best_elite_idx]

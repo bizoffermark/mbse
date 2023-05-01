@@ -33,9 +33,9 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
     sac_kwargs = {
         'discount': 0.99,
         'init_ent_coef': 1.0,
-        'lr_actor': 0.001,
+        'lr_actor': 0.0005,
         'weight_decay_actor': 1e-5,
-        'lr_critic': 0.001,
+        'lr_critic': 0.0005,
         'weight_decay_critic': 1e-5,
         'lr_alpha': 0.0005,
         'weight_decay_alpha': 0.0,
@@ -59,6 +59,8 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         'reset_actor_params': False,
         'normalize': True,
     }
+
+    lr=5e-4
 
 
     # config.update("jax_log_compiles", 1)
@@ -98,6 +100,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             use_log_uncertainties=use_log,
             use_al_uncertainties=use_al,
             deterministic=deterministic,
+            lr=lr,
         )
         video_prefix += 'PETS'
     elif exploration_strategy == 'true_model':
@@ -118,6 +121,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             use_log_uncertainties=use_log,
             use_al_uncertainties=use_al,
             deterministic=deterministic,
+            lr=lr,
         )
 
         video_prefix += 'Optimistic'

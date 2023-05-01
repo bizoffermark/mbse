@@ -66,15 +66,15 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     test_env = [test_env]
     features = [num_neurons] * hidden_layers
     video_prefix = ""
-
+    lr = 1e-3
     sac_kwargs = {
         'discount': 0.99,
         'init_ent_coef': 1.0,
-        'lr_actor': 0.001,
+        'lr_actor': 0.0005,
         'weight_decay_actor': 1e-5,
-        'lr_critic': 0.001,
+        'lr_critic': 0.0005,
         'weight_decay_critic': 1e-5,
-        'lr_alpha': 0.001,
+        'lr_alpha': 0.0005,
         'weight_decay_alpha': 0.0,
         'actor_features': [250, 250],
         'critic_features': [250, 250],
@@ -114,6 +114,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             use_log_uncertainties=use_log,
             use_al_uncertainties=use_al,
             deterministic=deterministic,
+            lr=lr,
         )
 
         dynamics_model = [dynamics_model]
@@ -130,6 +131,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                 beta=beta,
                 seed=seed,
                 deterministic=deterministic,
+                lr=lr,
             )
 
             video_prefix += 'HUCRL'
@@ -146,6 +148,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                 use_log_uncertainties=use_log,
                 use_al_uncertainties=use_al,
                 deterministic=deterministic,
+                lr=lr,
             )
 
         dynamics_model = [dynamics_model]

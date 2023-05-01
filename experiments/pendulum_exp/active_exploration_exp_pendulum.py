@@ -52,14 +52,17 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         'num_samples': num_samples,
         'num_elites': num_elites,
         'num_steps': num_steps,
+        'exponent': 0.25, 
         'train_steps_per_model_update': 25,
         'transitions_per_update': 500,
         'sac_kwargs': sac_kwargs,
         'sim_transitions_ratio': 0.0,
         'reset_actor_params': True,
     }
-
-
+    lr = 5e-4
+    env_kwargs=None
+    # ctrl_cost = 0.1
+    # env_kwargs = {'ctrl_cost': ctrl_cost}
     # config.update("jax_log_compiles", 1)
     wrapper_cls = lambda x: RescaleAction(
         TimeLimit(x, max_episode_steps=time_limit),
@@ -73,9 +76,9 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             min_action=-1,
             max_action=1,
         )
-    env = make_vec_env(env_id=CustomPendulumEnv, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed)
+    env = make_vec_env(env_id=CustomPendulumEnv, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed, env_kwargs=env_kwargs)
                        # vec_env_cls=SubprocVecEnv)
-    test_env = make_vec_env(env_id=CustomPendulumEnv, wrapper_class=wrapper_cls_test, n_envs=1, seed=seed)
+    test_env = make_vec_env(env_id=CustomPendulumEnv, wrapper_class=wrapper_cls_test, n_envs=1, seed=seed, env_kwargs=env_kwargs)
     test_env = test_env.envs[0]
     features = [num_neurons] * hidden_layers
     reward_model = PendulumReward(action_space=env.action_space)
@@ -98,6 +101,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             use_log_uncertainties=use_log,
             use_al_uncertainties=use_al,
             deterministic=deterministic,
+            lr=lr,
         )
         video_prefix += 'PETS'
     elif exploration_strategy == 'true_model':
@@ -118,6 +122,7 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             use_log_uncertainties=use_log,
             use_al_uncertainties=use_al,
             deterministic=deterministic,
+            lr=lr,
         )
 
         video_prefix += 'Optimistic'

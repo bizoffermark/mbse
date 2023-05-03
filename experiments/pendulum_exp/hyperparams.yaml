@@ -2,7 +2,7 @@ use_wandb: True
 time_limit: 200
 time_limit_eval: 200
 n_envs: 1
-optimizer_type: CemTO
+optimizer_type: iCemTO
 num_samples: 500
 num_elites: 50
 num_steps: 10
@@ -10,10 +10,10 @@ horizon: 20
 alpha: 0.0
 discount: 1.0
 n_particles: 10
-reset_model: True
-num_ensembles: 5
+reset_model: False
+num_ensembles: 7
 hidden_layers: 2
-num_neurons: 128
+num_neurons: 256
 pred_diff: True
 batch_size: 64
 max_train_steps: 5000
@@ -24,7 +24,7 @@ exploration_steps: 0
 eval_episodes: 1
 train_freq: 1
 train_steps: 5000
-num_epochs: 100
+num_epochs: 50
 rollout_steps: 200
 validate: True
 normalize: True

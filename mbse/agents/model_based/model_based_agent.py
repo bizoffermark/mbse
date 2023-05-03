@@ -5,6 +5,7 @@ from mbse.models.dynamics_model import DynamicsModel
 from mbse.optimizers.cem_trajectory_optimizer import CemTO
 from mbse.optimizers.trajax_trajectory_optimizer import TraJaxTO
 from mbse.optimizers.sac_based_optimizer import SACOptimizer
+from mbse.optimizers.icem_trajectory_optimizer import ICemTO
 import gym
 from mbse.utils.replay_buffer import ReplayBuffer, Transition
 from mbse.utils.utils import get_idx
@@ -28,10 +29,11 @@ class ModelBasedAgent(DummyAgent):
             horizon: int = 100,
             n_particles: int = 10,
             reset_model: bool = False,
+            reset_model_opt_state: bool = True,
             calibrate_model: bool = True,
             init_function: bool = True,
             optimizer_kwargs: Optional[Dict[str, Any]] = None,
-            start_optimizer_update: int = 0,
+            reset_optimizer_params_for: int = 5,
             log_full_training: bool = False,
             log_agent_training: bool = False,
             *args,
@@ -46,7 +48,9 @@ class ModelBasedAgent(DummyAgent):
         else:
             self.dynamics_model_list = dynamics_model
             self.num_dynamics_models = len(dynamics_model)
-        assert policy_optimizer_name in ["CemTO", "TraJaxTO", "SacOpt"], "Optimizer must be CEM or TraJax"
+        assert policy_optimizer_name in ["CemTO", "TraJaxTO", "SacOpt", "iCemTO"], "Optimizer must be CEM, TraJax, " \
+                                                                                   "SAC " \
+                                                                                   "or iCem"
 
         optimizer_kwargs = {} if optimizer_kwargs is None else optimizer_kwargs
         action_dim = self.action_space.shape
@@ -75,10 +79,19 @@ class ModelBasedAgent(DummyAgent):
                 action_dim=action_dim,
                 **optimizer_kwargs,
             )
+        elif policy_optimizer_name == 'iCemTO':
+            self.policy_optimizer = ICemTO(
+                dynamics_model_list=self.dynamics_model_list,
+                horizon=horizon,
+                n_particles=n_particles,
+                action_dim=action_dim,
+                **optimizer_kwargs,
+            )
         self.n_particles = n_particles
         self.reset_model = reset_model
+        self.reset_model_opt_state = reset_model_opt_state
         self.calibrate_model = calibrate_model
-        self.start_optimizer_update = start_optimizer_update
+        self.reset_optimizer_params_for = reset_optimizer_params_for
         self.update_steps = 0
         self.log_agent_training = log_agent_training
         self.log_full_training = log_full_training
@@ -180,7 +193,10 @@ class ModelBasedAgent(DummyAgent):
             model_opt_state = self.dynamics_model.init_model_opt_state
         else:
             model_params = self.dynamics_model.model_params
-            model_opt_state = self.dynamics_model.model_opt_state
+            if self.reset_model_opt_state:
+                model_opt_state = self.dynamics_model.init_model_opt_state
+            else:
+                model_opt_state = self.dynamics_model.model_opt_state
         alpha = jnp.ones(self.observation_space.shape)
         for i in range(train_loops):
             train_rng, rng = jax.random.split(rng, 2)
@@ -214,7 +230,7 @@ class ModelBasedAgent(DummyAgent):
             alpha = carry[1]
         self.update_models(model_params=model_params, model_opt_state=model_opt_state, alpha=alpha)
         if isinstance(self.policy_optimizer, SACOptimizer):
-            if buffer.size > self.policy_optimizer.transitions_per_update and self.update_optimizer:
+            if buffer.size > self.policy_optimizer.transitions_per_update:
                 train_rng = carry[0]
                 policy_train_rng, train_rng = jax.random.split(train_rng, 2)
                 policy_agent_train_summary = self.policy_optimizer.train(
@@ -222,6 +238,7 @@ class ModelBasedAgent(DummyAgent):
                     buffer=buffer,
                     dynamics_params=model_params,
                     model_props=self.dynamics_model.model_props,
+                    reset_agent=self.reset_agent_params,
                 )
                 if log_results and self.log_agent_training:
                     for j in range(self.policy_optimizer.train_steps_per_model_update):
@@ -276,8 +293,8 @@ class ModelBasedAgent(DummyAgent):
         return self.dynamics_model_list[0]
 
     @property
-    def update_optimizer(self):
-        return self.update_steps >= self.start_optimizer_update
+    def reset_agent_params(self):
+        return self.update_steps < self.reset_optimizer_params_for
 
     def prepare_agent_for_rollout(self):
         self.policy_optimizer.reset()

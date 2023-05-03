@@ -2,11 +2,11 @@ use_wandb: True
 time_limit: 1000
 time_limit_eval: 1000
 n_envs: 1
-optimizer_type: SacOpt
+optimizer_type: TraJaxTO
 num_samples: 500
 num_elites: 50
 num_steps: 5
-horizon: 30
+horizon: 25
 alpha: 0.1
 discount: 1.0
 n_particles: 10
@@ -15,9 +15,9 @@ num_ensembles: 5
 hidden_layers: 4
 num_neurons: 256
 pred_diff: True
-batch_size: 64
+batch_size: 32
 max_train_steps: 6000
-eval_freq: 10
+eval_freq: 5
 total_train_steps: 500000
 buffer_size: 1000000
 exploration_steps: 1000
@@ -29,7 +29,7 @@ rollout_steps: 1000
 validate: True
 normalize: True
 action_normalize: True
-record_test_video: False
+record_test_video: True
 validation_buffer_size: 0
 validation_batch_size: 4096
 deterministic: True

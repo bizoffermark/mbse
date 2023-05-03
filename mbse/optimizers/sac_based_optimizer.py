@@ -2,7 +2,7 @@ import copy
 
 import jax.random
 
-from mbse.agents.actor_critic.sac import SACAgent, SACTrainingState
+from mbse.agents.actor_critic.sac import SACAgent, SACTrainingState, soft_update
 from gym.spaces import Box
 from mbse.utils.replay_buffer import Transition, ReplayBuffer, JaxReplayBuffer
 from typing import Callable, Union, Optional
@@ -82,6 +82,9 @@ class SACOptimizer(DummyPolicyOptimizer):
                  action_normalize: bool = False,
                  sac_kwargs: Optional[dict] = None,
                  reset_actor_params: bool = False,
+                 reset_optimizer: bool = True,
+                 reset_buffer: bool = True,
+                 target_soft_update_tau: float = 0.05,
                  *args,
                  **kwargs,
                  ):
@@ -121,7 +124,9 @@ class SACOptimizer(DummyPolicyOptimizer):
         ) for agent in self.agent_list]
         
         self.init_optimizer_state = tree_stack(init_optimizer_state)
-        self.optimizer_state = copy.deepcopy(self.init_optimizer_state) 
+        self.optimizer_state = copy.deepcopy(self.init_optimizer_state)
+        self.target_optimizer_state = copy.deepcopy(self.optimizer_state)
+        self.target_soft_update_tau = target_soft_update_tau
         self.horizon = horizon
         self.n_particles = n_particles
         self.transitions_per_update = transitions_per_update
@@ -133,6 +138,21 @@ class SACOptimizer(DummyPolicyOptimizer):
         self.train_steps_per_model_update = train_steps_per_model_update
         self.sim_transitions_ratio = sim_transitions_ratio
         self.reset_actor_params = reset_actor_params
+        self.sim_buffer_kwargs = {
+            'obs_shape': self.obs_dim,
+            'action_shape': self.action_dim,
+            'max_size': self.simulated_buffer_size,
+            'normalize': self.normalize,
+            'action_normalize': self.action_normalize,
+        }
+
+        self.simulation_buffers = [JaxReplayBuffer(
+            learn_deltas=False,
+            **self.sim_buffer_kwargs,
+        ) for _ in self.agent_list]
+
+        self.reset_optimizer = reset_optimizer
+        self.reset_buffer = reset_buffer
         self._init_fn()
 
     def get_action_for_eval(self, obs: jax.Array, rng, agent_idx: int):
@@ -215,7 +235,7 @@ class SACOptimizer(DummyPolicyOptimizer):
         ins = [sim_transitions]
         carry, outs = jax.lax.scan(agent_train_fn, carry, ins, length=agent_train_steps)
         next_train_state = carry[1]
-        summary = outs[-1]
+        summary = get_idx(outs[-1], -1)
         return next_train_state, summary
 
     def train(self,
@@ -224,41 +244,66 @@ class SACOptimizer(DummyPolicyOptimizer):
               dynamics_params: Optional = None,
               model_props: ModelProperties = ModelProperties(),
               sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
+              reset_agent: bool = True
               ):
-        sim_buffer_kwargs = {
-            'obs_shape': self.obs_dim,
-            'action_shape': self.action_dim,
-            'max_size': self.simulated_buffer_size,
-            'normalize': self.normalize,
-            'action_normalize': self.action_normalize,
-        }
-
-        simulation_buffers = [JaxReplayBuffer(
-            learn_deltas=False,
-            **sim_buffer_kwargs,
-        ) for _ in self.agent_list]
+        # simulation_buffers = [JaxReplayBuffer(
+        #    learn_deltas=False,
+        #    **sim_buffer_kwargs,
+        # ) for _ in self.agent_list]
         true_obs = jnp.asarray(buffer.obs[:buffer.size])
         train_steps = self.agent_list[0].train_steps
         batch_size = self.agent_list[0].batch_size
         full_optimizer_state = self.init_optimizer_state
-        if not self.reset_actor_params:
-            full_optimizer_state = SacOptimizerState(
-                agent_train_state=SACTrainingState(
-                    actor_opt_state=self.optimizer_state.agent_train_state.actor_opt_state,
-                    actor_params=self.optimizer_state.agent_train_state.actor_params,
-                    critic_opt_state=self.optimizer_state.agent_train_state.critic_opt_state,
-                    critic_params=self.optimizer_state.agent_train_state.critic_params,
-                    target_critic_params=self.optimizer_state.agent_train_state.target_critic_params,
-                    alpha_opt_state=self.init_optimizer_state.agent_train_state.alpha_opt_state,
-                    alpha_params=self.init_optimizer_state.agent_train_state.alpha_params,
-                ),
-                policy_props=self.optimizer_state.policy_props,
-            )
+
+        # If previous agent parameters should be used
+        if not self.reset_actor_params and not reset_agent:
+            # if optimizer should be reset use init optimizer params.
+            if self.reset_optimizer:
+                full_optimizer_state = SacOptimizerState(
+                    agent_train_state=SACTrainingState(
+                        actor_opt_state=self.init_optimizer_state.agent_train_state.actor_opt_state,
+                        actor_params=self.target_optimizer_state.agent_train_state.actor_params,
+                        critic_opt_state=self.init_optimizer_state.agent_train_state.critic_opt_state,
+                        critic_params=self.target_optimizer_state.agent_train_state.critic_params,
+                        target_critic_params=self.target_optimizer_state.agent_train_state.target_critic_params,
+                        alpha_opt_state=self.init_optimizer_state.agent_train_state.alpha_opt_state,
+                        alpha_params=self.target_optimizer_state.agent_train_state.alpha_params,
+                    ),
+                    policy_props=self.target_optimizer_state.policy_props,
+                )
+            # use params from optimizer
+            else:
+                full_optimizer_state = SacOptimizerState(
+                    agent_train_state=SACTrainingState(
+                        actor_opt_state=self.target_optimizer_state.agent_train_state.actor_opt_state,
+                        actor_params=self.target_optimizer_state.agent_train_state.actor_params,
+                        critic_opt_state=self.target_optimizer_state.agent_train_state.critic_opt_state,
+                        critic_params=self.target_optimizer_state.agent_train_state.critic_params,
+                        target_critic_params=self.target_optimizer_state.agent_train_state.target_critic_params,
+                        alpha_opt_state=self.target_optimizer_state.agent_train_state.alpha_opt_state,
+                        alpha_params=self.target_optimizer_state.agent_train_state.alpha_params,
+                    ),
+                    policy_props=self.target_optimizer_state.policy_props,
+                )
+            # if this is an active exploration agent. Reset the last agent by default
             if self.active_exploration_agent:
                 active_exploration_state = get_idx(self.init_optimizer_state, -1)
                 full_optimizer_state = \
                     jax.tree_util.tree_map(lambda x, y: x.at[-1].set(y),
                                            full_optimizer_state, active_exploration_state)
+                self.simulation_buffers[-1].reset()
+
+            # if replay buffer should be reset.
+            if self.reset_buffer:
+                self.simulation_buffers = [JaxReplayBuffer(
+                    learn_deltas=False,
+                    **self.sim_buffer_kwargs,
+                ) for _ in self.agent_list]
+        else:
+            self.simulation_buffers = [JaxReplayBuffer(
+                learn_deltas=False,
+                **self.sim_buffer_kwargs,
+            ) for _ in self.agent_list]
 
         agent_summary = []
         policy = self.agent_list[0].get_action
@@ -266,7 +311,7 @@ class SACOptimizer(DummyPolicyOptimizer):
             agents_policy_props = []
             transitions_list = []
             for j in range(len(self.agent_list)):
-                sim_buffer = simulation_buffers[j]
+                sim_buffer = self.simulation_buffers[j]
                 evaluate_fn = self.dynamics_model_list[j].evaluate
                 optimizer_state = get_idx(full_optimizer_state, idx=j)
                 if self.is_active_exploration_agent(idx=j):
@@ -300,15 +345,15 @@ class SACOptimizer(DummyPolicyOptimizer):
                     horizon=self.horizon,
                     policy_props=optimizer_state.policy_props,
                 )
-                simulation_buffers[j].add(transition=simulated_transitions)
+                self.simulation_buffers[j].add(transition=simulated_transitions)
                 agents_policy_props.append(PolicyProperties(
-                    policy_bias_obs=convert_to_jax(simulation_buffers[j].state_normalizer.mean),
-                    policy_scale_obs=convert_to_jax(simulation_buffers[j].state_normalizer.std),
+                    policy_bias_obs=convert_to_jax(self.simulation_buffers[j].state_normalizer.mean),
+                    policy_scale_obs=convert_to_jax(self.simulation_buffers[j].state_normalizer.std),
                 ))
                 sim_buffer_rng, rng = jax.random.split(rng, 2)
-                sim_transitions = simulation_buffers[j].sample(sim_buffer_rng,
-                                                               batch_size=int(train_steps * batch_size)
-                                                               )
+                sim_transitions = self.simulation_buffers[j].sample(sim_buffer_rng,
+                                                                    batch_size=int(train_steps * batch_size)
+                                                                    )
                 sim_transitions = sim_transitions.reshape(train_steps, batch_size)
                 transitions_list.append(sim_transitions)
             sim_transitions = tree_stack(transitions_list)
@@ -327,7 +372,37 @@ class SACOptimizer(DummyPolicyOptimizer):
                 policy_props=policy_props,
             )
             agent_summary.append([get_idx(summary, i) for i in range(len(self.agent_list))])
+
         self.optimizer_state = full_optimizer_state
+
+        soft_actor_params = soft_update(target_params=self.target_optimizer_state.agent_train_state.actor_params,
+                                                  online_params=self.optimizer_state.agent_train_state.actor_params,
+                                                  tau=self.target_soft_update_tau)
+
+        soft_critic_params = soft_update(target_params=self.target_optimizer_state.agent_train_state.critic_params,
+                                                  online_params=self.optimizer_state.agent_train_state.critic_params,
+                                                  tau=self.target_soft_update_tau)
+
+        soft_target_critic_params = soft_update(target_params=self.target_optimizer_state.agent_train_state.target_critic_params,
+                                                  online_params=self.optimizer_state.agent_train_state.target_critic_params,
+                                                  tau=self.target_soft_update_tau)
+
+
+        soft_alpha_params = soft_update(target_params=self.target_optimizer_state.agent_train_state.alpha_params,
+                                                  online_params=self.optimizer_state.agent_train_state.alpha_params,
+                                                  tau=self.target_soft_update_tau)
+
+        self.target_optimizer_state = SacOptimizerState(
+            agent_train_state=SACTrainingState(
+                    actor_opt_state=self.optimizer_state.agent_train_state.actor_opt_state,
+                    actor_params=soft_actor_params,
+                    critic_opt_state=self.optimizer_state.agent_train_state.critic_opt_state,
+                    critic_params=soft_critic_params,
+                    target_critic_params=soft_target_critic_params,
+                    alpha_opt_state=self.optimizer_state.agent_train_state.alpha_opt_state,
+                    alpha_params=soft_alpha_params,
+            ),
+            policy_props=self.optimizer_state.policy_props)
         return agent_summary
 
     @property

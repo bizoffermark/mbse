@@ -1,7 +1,5 @@
 from gym.wrappers import RescaleAction, TimeLimit
 from mbse.utils.vec_env.env_util import make_vec_env
-from mbse.models.environment_models.mountain_car import MountainCarRewardModel, MountainCarDynamics
-from mbse.envs.custom_mountain_car_env import CustomMountainCar
 from mbse.models.active_learning_model import ActiveLearningHUCRLModel, ActiveLearningPETSModel
 from mbse.agents.model_based.model_based_agent import ModelBasedAgent
 from mbse.trainer.model_based.model_based_trainer import ModelBasedTrainer as Trainer
@@ -14,15 +12,18 @@ import argparse
 from experiments.util import Logger, hash_dict, NumpyArrayEncoder
 import wandb
 from typing import Optional
+from mbse.models.hucrl_model import HUCRLModel
+from mbse.models.environment_models.swimmer_reward import SwimmerRewardModel
+from mbse.envs.wrappers.action_repeat import ActionRepeat
 
 
-def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n_envs: int,
-               optimizer_type: str,
-               num_samples: int, num_elites: int, num_steps: int, horizon: int, n_particles: int, reset_model: bool,
-               num_ensembles: int, hidden_layers: int, num_neurons: int, beta: float, deterministic: bool,
-               max_train_steps: int, pred_diff: bool, batch_size: int, eval_freq: int, total_train_steps: int,
-               buffer_size: int, exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int,
-               num_epochs: int, rollout_steps: int, normalize: bool, action_normalize: bool, validate: bool,
+def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp_name: str,
+               optimizer_type: str, num_samples: int, num_elites: int, num_steps: int, horizon: int, alpha: float,
+               n_particles: int, reset_model: bool, deterministic: bool,
+               num_ensembles: int, hidden_layers: int, num_neurons: int, beta: float,
+               pred_diff: bool, batch_size: int, eval_freq: int, total_train_steps: int, buffer_size: int,
+               exploration_steps: int, eval_episodes: int, train_freq: int, train_steps: int, num_epochs: int,
+               max_train_steps: int, rollout_steps: int, normalize: bool, action_normalize: bool, validate: bool,
                record_test_video: bool, validation_buffer_size: int, validation_batch_size: int,
                seed: int, exploration_strategy: str, use_log: bool, use_al: bool,
                time_limit_eval: Optional[int] = None):
@@ -30,63 +31,74 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
 
     """ Environment """
     # from jax.config import config
+    # config.update("jax_log_compiles", 1)
+    action_repeat = 1
+    import math
+    time_lim = math.ceil(time_limit / action_repeat)
+    wrapper_cls = lambda x: RescaleAction(
+        TimeLimit(
+            ActionRepeat(x, repeat=action_repeat),
+            max_episode_steps=time_lim),
+        min_action=-1,
+        max_action=1,
+    )
+    wrapper_cls_test = wrapper_cls
+    if time_limit_eval is not None:
+        time_lim_eval = math.ceil(time_limit_eval / action_repeat)
+        wrapper_cls_test = lambda x: RescaleAction(
+            TimeLimit(
+                ActionRepeat(x, repeat=action_repeat),
+                max_episode_steps=time_lim_eval),
+            min_action=-1,
+            max_action=1,
+        )
+    reward_model = SwimmerRewardModel()
+    env_kwargs = {
+        'reward_model': reward_model,
+        'render_mode': 'rgb_array'
+    }
+
+    from mbse.envs.swimmer import SwimmerEnvDM
+    env = make_vec_env(env_id=SwimmerEnvDM, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed,
+                       env_kwargs=env_kwargs)
+    test_env = make_vec_env(SwimmerEnvDM, wrapper_class=wrapper_cls_test, seed=seed,
+                            env_kwargs=env_kwargs, n_envs=1)
+    test_env = [test_env]
+    features = [num_neurons] * hidden_layers
+    video_prefix = ""
+
     sac_kwargs = {
         'discount': 0.99,
-        'init_ent_coef': 1.0,
-        'lr_actor': 0.0005,
-        'weight_decay_actor': 1e-5,
-        'lr_critic': 0.0005,
-        'weight_decay_critic': 1e-5,
-        'lr_alpha': 0.0005,
-        'weight_decay_alpha': 0.0,
-        'actor_features': [64, 64],
-        'critic_features': [256, 256],
-        'scale_reward': 1,
+        'init_ent_coef': 0.1,
+        'lr_actor': 0.001,
+        'weight_decay_actor': 0.0,
+        'lr_critic': 0.001,
+        'weight_decay_critic': 0.0,
+        'lr_alpha': 0.001,
+        'weight_decay_alpha': 1e-5,
+        'actor_features': [250, 250],
+        'critic_features': [250, 250],
+        'scale_reward': 1.0,
         'tune_entropy_coef': True,
         'tau': 0.005,
-        'batch_size': 32,
-        'train_steps': 350,
+        'batch_size': 128,
+        'train_steps': 1024,
     }
 
     optimizer_kwargs = {
         'num_samples': num_samples,
         'num_elites': num_elites,
         'num_steps': num_steps,
-        'train_steps_per_model_update': 35,
-        'transitions_per_update': 500,
+        'train_steps_per_model_update': 250,
+        'transitions_per_update': 1000,
         'sac_kwargs': sac_kwargs,
         'sim_transitions_ratio': 0.0,
         'reset_actor_params': False,
-        'normalize': True,
     }
 
-    lr=5e-4
-
-
-    # config.update("jax_log_compiles", 1)
-    wrapper_cls = lambda x: RescaleAction(
-        TimeLimit(x, max_episode_steps=time_limit),
-        min_action=-1,
-        max_action=1,
-    )
-    wrapper_cls_test = wrapper_cls
-    if time_limit_eval is not None:
-        wrapper_cls_test = lambda x: RescaleAction(
-            TimeLimit(x, max_episode_steps=time_limit_eval),
-            min_action=-1,
-            max_action=1,
-        )
-    env = make_vec_env(env_id=CustomMountainCar, wrapper_class=wrapper_cls, n_envs=n_envs, seed=seed)
-                       # vec_env_cls=SubprocVecEnv)
-    test_env = make_vec_env(env_id=CustomMountainCar, wrapper_class=wrapper_cls_test, n_envs=1, seed=seed)
-    test_env = test_env.envs[0]
-    features = [num_neurons] * hidden_layers
-    reward_model = MountainCarRewardModel(action_space=env.action_space)
-    video_prefix = ""
     if exploration_strategy == 'Mean':
         beta = 0.0
         video_prefix += 'Mean'
-
     if exploration_strategy == 'PETS':
         dynamics_model = ActiveLearningPETSModel(
             action_space=env.action_space,
@@ -100,29 +112,41 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
             use_log_uncertainties=use_log,
             use_al_uncertainties=use_al,
             deterministic=deterministic,
-            lr=lr,
         )
+
+        dynamics_model = [dynamics_model]
         video_prefix += 'PETS'
-    elif exploration_strategy == 'true_model':
-        dynamics_model = MountainCarDynamics()
-        video_prefix += 'true_model'
-        validation_buffer_size = 0
-        total_train_steps = 1
     else:
-        dynamics_model = ActiveLearningHUCRLModel(
-            action_space=env.action_space,
-            observation_space=env.observation_space,
-            num_ensemble=num_ensembles,
-            reward_model=reward_model,
-            features=features,
-            pred_diff=pred_diff,
-            beta=beta,
-            seed=seed,
-            use_log_uncertainties=use_log,
-            use_al_uncertainties=use_al,
-            deterministic=deterministic,
-            lr=lr,
-        )
+        if exploration_strategy == 'HUCRL':
+            dynamics_model = HUCRLModel(
+                action_space=env.action_space,
+                observation_space=env.observation_space,
+                num_ensemble=num_ensembles,
+                reward_model=reward_model,
+                features=features,
+                pred_diff=pred_diff,
+                beta=beta,
+                seed=seed,
+                deterministic=deterministic,
+            )
+
+            video_prefix += 'HUCRL'
+        else:
+            dynamics_model = ActiveLearningHUCRLModel(
+                action_space=env.action_space,
+                observation_space=env.observation_space,
+                num_ensemble=num_ensembles,
+                reward_model=reward_model,
+                features=features,
+                pred_diff=pred_diff,
+                beta=beta,
+                seed=seed,
+                use_log_uncertainties=use_log,
+                use_al_uncertainties=use_al,
+                deterministic=deterministic,
+            )
+
+        dynamics_model = [dynamics_model]
 
         video_prefix += 'Optimistic'
 
@@ -137,9 +161,8 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         n_particles=n_particles,
         reset_model=reset_model,
         policy_optimizer_name=optimizer_type,
-        optimizer_kwargs=optimizer_kwargs,
         horizon=horizon,
-        log_agent_training=True,
+        optimizer_kwargs=optimizer_kwargs,
         reset_optimizer_params_for=10,
     )
 
@@ -161,15 +184,15 @@ def experiment(logs_dir: str, use_wandb: bool, exp_name: str, time_limit: int, n
         rollout_steps=rollout_steps,
         normalize=normalize,
         action_normalize=action_normalize,
-        learn_deltas=dynamics_model.pred_diff,
+        learn_deltas=pred_diff,
         validate=validate,
         record_test_video=record_test_video,
         validation_buffer_size=validation_buffer_size,
         validation_batch_size=validation_batch_size,
         seed=seed,
         uniform_exploration=uniform_exploration,
-        video_prefix=video_prefix,
         video_folder=logs_dir,
+        video_prefix=video_prefix,
     )
     group_name = exploration_strategy
     if use_log:
@@ -220,6 +243,7 @@ def main(args):
         num_elites=args.num_elites,
         num_steps=args.num_steps,
         horizon=args.horizon,
+        alpha=args.alpha,
         n_particles=args.n_particles,
         reset_model=args.reset_model,
         beta=args.beta,
@@ -277,44 +301,44 @@ if __name__ == '__main__':
     # general experiment args
     parser.add_argument('--exp_name', type=str, default='active_exploration')
     parser.add_argument('--logs_dir', type=str, default='./')
-    parser.add_argument('--use_wandb', default=True, action="store_true")
+    parser.add_argument('--use_wandb', default=False, action="store_true")
     # env experiment args
-    parser.add_argument('--time_limit', type=int, default=200)
-    parser.add_argument('--n_envs', type=int, default=5)
+    parser.add_argument('--time_limit', type=int, default=1000)
+    parser.add_argument('--n_envs', type=int, default=1)
 
     # optimizer experiment args
-    parser.add_argument('--optimizer_type', type=str, default='SacOpt')
+    parser.add_argument('--optimizer_type', type=str, default='TraJaxTO')
     parser.add_argument('--num_samples', type=int, default=500)
     parser.add_argument('--num_elites', type=int, default=50)
-    parser.add_argument('--num_steps', type=int, default=10)
-    parser.add_argument('--horizon', type=int, default=20)
-    parser.add_argument('--alpha', type=float, default=0.0)
+    parser.add_argument('--num_steps', type=int, default=5)
+    parser.add_argument('--horizon', type=int, default=30)
+    parser.add_argument('--alpha', type=float, default=0.1)
 
     # agent experiment args
     parser.add_argument('--discount', type=float, default=1.0)
-    parser.add_argument('--n_particles', type=int, default=10)
-    parser.add_argument('--reset_model', default=True, action="store_true")
+    parser.add_argument('--n_particles', type=int, default=5)
+    parser.add_argument('--reset_model', default=False, action="store_true")
 
     # dynamics_model experiment args
     parser.add_argument('--num_ensembles', type=int, default=5)
-    parser.add_argument('--hidden_layers', type=int, default=2)
-    parser.add_argument('--num_neurons', type=int, default=128)
+    parser.add_argument('--hidden_layers', type=int, default=4)
+    parser.add_argument('--num_neurons', type=int, default=256)
     parser.add_argument('--pred_diff', default=True, action="store_true")
     parser.add_argument('--beta', type=float, default=1.0)
     parser.add_argument('--deterministic', default=True, action="store_true")
 
     # trainer experiment args
-    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--max_train_steps', type=int, default=5000)
-    parser.add_argument('--eval_freq', type=int, default=1)
-    parser.add_argument('--total_train_steps', type=int, default=2500)
+    parser.add_argument('--eval_freq', type=int, default=50)
+    parser.add_argument('--total_train_steps', type=int, default=10000)
     parser.add_argument('--buffer_size', type=int, default=1000000)
-    parser.add_argument('--exploration_steps', type=int, default=0)
+    parser.add_argument('--exploration_steps', type=int, default=1000)
     parser.add_argument('--eval_episodes', type=int, default=1)
     parser.add_argument('--train_freq', type=int, default=1)
     parser.add_argument('--train_steps', type=int, default=5000)
     parser.add_argument('--num_epochs', type=int, default=-1)
-    parser.add_argument('--rollout_steps', type=int, default=200)
+    parser.add_argument('--rollout_steps', type=int, default=250)
     parser.add_argument('--normalize', default=True, action="store_true")
     parser.add_argument('--action_normalize', default=True, action="store_true")
     parser.add_argument('--validate', default=True, action="store_true")
@@ -324,7 +348,7 @@ if __name__ == '__main__':
     parser.add_argument('--exploration_strategy', type=str, default='Optimistic')
     parser.add_argument('--use_log', default=False, action="store_true")
     parser.add_argument('--use_al', default=False, action="store_true")
-    parser.add_argument('--time_limit_eval', type=int, default=200)
+    parser.add_argument('--time_limit_eval', type=int, default=1000)
 
     # general args
     parser.add_argument('--exp_result_folder', type=str, default=None)

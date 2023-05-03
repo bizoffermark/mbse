@@ -199,6 +199,7 @@ class ModelBasedTrainer(DummyTrainer):
                 train_log.update(train_step_log)
                 train_log.update(reward_log)
                 train_log.update(model_log)
+                scalar_dict = {'scale_out': np.mean(self.buffer.next_state_normalizer.std).astype(float).item()}
                 # scaler_dict = {
                 #     'bias_obs': np.mean(self.buffer.state_normalizer.mean).astype(float).item(),
                 #     'bias_act': np.mean(self.buffer.action_normalizer.mean).astype(float).item(),
@@ -207,7 +208,7 @@ class ModelBasedTrainer(DummyTrainer):
                 #     'scale_act': np.mean(self.buffer.action_normalizer.std).astype(float).item(),
                 #     'scale_out': np.mean(self.buffer.next_state_normalizer.std).astype(float).item(),
                 # }
-                # train_log.update(scaler_dict)
+                train_log.update(scalar_dict)
                 wandb.log(train_log)
             # step += 1
         self.save_agent(step, agent_name="final_agent")

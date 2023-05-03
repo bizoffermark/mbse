@@ -6,6 +6,8 @@ from mbse.models.hucrl_model import HUCRLModel
 from mbse.models.bayesian_dynamics_model import BayesianDynamicsModel, sample, SamplingType
 from mbse.utils.type_aliases import ModelProperties
 
+EPS = 1e-6
+
 
 def evaluate_for_exploration(
         pred_fn,
@@ -31,13 +33,13 @@ def evaluate_for_exploration(
     )
     if use_log_uncertainties:
         if use_al_uncertainties:
-            frac = eps_uncertainty / (al_uncertainty + 1e-6)
+            frac = eps_uncertainty / (al_uncertainty + EPS)
             reward = jnp.sum(jnp.log(1 + jnp.square(frac)), axis=-1)
         else:
-            reward = jnp.sum(jnp.log(1 + jnp.square(eps_uncertainty)), axis=-1)
+            reward = jnp.sum(jnp.log(EPS + jnp.square(eps_uncertainty)), axis=-1)
     else:
         if use_al_uncertainties:
-            frac = eps_uncertainty / (al_uncertainty + 1e-6)
+            frac = eps_uncertainty / (al_uncertainty + EPS)
             reward = jnp.sum(jnp.square(frac), axis=-1)
         else:
             reward = jnp.sum(jnp.square(eps_uncertainty), axis=-1)

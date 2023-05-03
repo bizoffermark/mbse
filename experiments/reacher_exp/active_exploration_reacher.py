@@ -30,8 +30,8 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     """ Run experiment for a given method and environment. """
 
     """ Environment """
-    from jax.config import config
-    config.update("jax_log_compiles", 1)
+    # from jax.config import config
+    # config.update("jax_log_compiles", 1)
     action_repeat = 1
     import math
     time_lim = math.ceil(time_limit / action_repeat)
@@ -52,7 +52,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             min_action=-1,
             max_action=1,
         )
-    reward_model = ReacherRewardModel()
+    reward_model = ReacherRewardModel(scarce_reward=True, tol=5e-2)
     env_kwargs = {
         'reward_model': reward_model,
         'render_mode': 'rgb_array'
@@ -66,34 +66,36 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
     test_env = [test_env]
     features = [num_neurons] * hidden_layers
     video_prefix = ""
-
+    lr = 1e-3
     sac_kwargs = {
         'discount': 0.99,
-        'init_ent_coef': 0.1,
-        'lr_actor': 0.001,
-        'weight_decay_actor': 0.0,
-        'lr_critic': 0.001,
-        'weight_decay_critic': 0.0,
-        'lr_alpha': 0.001,
-        'weight_decay_alpha': 1e-5,
+        'init_ent_coef': 1.0,
+        'lr_actor': 0.0005,
+        'weight_decay_actor': 1e-5,
+        'lr_critic': 0.0005,
+        'weight_decay_critic': 1e-5,
+        'lr_alpha': 0.0005,
+        'weight_decay_alpha': 0.0,
         'actor_features': [250, 250],
         'critic_features': [250, 250],
         'scale_reward': 1.0,
         'tune_entropy_coef': True,
         'tau': 0.005,
-        'batch_size': 128,
-        'train_steps': 1024,
+        'batch_size': 64,
+        'train_steps': 500,
     }
 
     optimizer_kwargs = {
         'num_samples': num_samples,
         'num_elites': num_elites,
         'num_steps': num_steps,
-        'train_steps_per_model_update': 250,
-        'transitions_per_update': 1000,
+        'train_steps_per_model_update': 350,
+        'transitions_per_update': 2000,
         'sac_kwargs': sac_kwargs,
         'sim_transitions_ratio': 0.0,
-        'reset_actor_params': False,
+        'reset_actor_params': True,
+        'normalize': True,
+        'target_soft_update_tau': 0.05,
     }
 
     if exploration_strategy == 'Mean':
@@ -112,6 +114,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
             use_log_uncertainties=use_log,
             use_al_uncertainties=use_al,
             deterministic=deterministic,
+            lr=lr,
         )
 
         dynamics_model = [dynamics_model]
@@ -128,6 +131,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                 beta=beta,
                 seed=seed,
                 deterministic=deterministic,
+                lr=lr,
             )
 
             video_prefix += 'HUCRL'
@@ -144,6 +148,7 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
                 use_log_uncertainties=use_log,
                 use_al_uncertainties=use_al,
                 deterministic=deterministic,
+                lr=lr,
             )
 
         dynamics_model = [dynamics_model]
@@ -163,7 +168,8 @@ def experiment(logs_dir: str, use_wandb: bool, time_limit: int, n_envs: int, exp
         policy_optimizer_name=optimizer_type,
         horizon=horizon,
         optimizer_kwargs=optimizer_kwargs,
-        start_optimizer_update=5,
+        reset_optimizer_params_for=5,
+        log_agent_training=True,
     )
 
     USE_WANDB = use_wandb

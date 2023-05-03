@@ -59,9 +59,10 @@ search_ranges = {
 def main(args):
     env_name = args.env_name
     file_path = os.path.dirname(os.path.abspath(__file__))
-    assert env_name in ['Pendulum', 'Cheetah', 'MountainCar', 'Reacher'], "Only cheetah, mountain car, " \
-                                                                          "pendulum, and reacher environment work"
-    if env_name in ['Pendulum', 'MountainCar']:
+    assert env_name in ['Pendulum', 'Cheetah', 'MountainCar', 'Reacher', 'Swimmer'], "Only cheetah, mountain car, " \
+                                                                          "pendulum, reacher, and Swimmer environment " \
+                                                                                     "work"
+    if env_name in ['Pendulum', 'MountainCar', 'Reacher', 'Swimmer']:
         EXPLORATION_STRATEGY = ['Uniform', 'Optimistic', 'Mean', 'PETS']
         if env_name == 'Pendulum':
             import experiments.pendulum_exp.active_exploration_exp_pendulum as active_exploration_exp
@@ -69,11 +70,14 @@ def main(args):
         elif env_name == 'Reacher':
             import experiments.reacher_exp.active_exploration_reacher as active_exploration_exp
             default_configs = yaml.safe_load(open(file_path + '/reacher_exp/hyperparams.yaml', 'r'))
+        elif env_name == 'Swimmer':
+            import experiments.swimmer_exp.active_exploration_swimmer as active_exploration_exp
+            default_configs = yaml.safe_load(open(file_path + '/swimmer_exp/hyperparams.yaml', 'r'))
         else:
             import experiments.mountain_car_exp.active_exploration_exp_mountain_car as active_exploration_exp
             default_configs = yaml.safe_load(open(file_path + '/mountain_car_exp/hyperparams.yaml', 'r'))
     else:
-        EXPLORATION_STRATEGY = ['Uniform', 'Optimistic', 'Mean', 'PETS', 'HUCRL']
+        EXPLORATION_STRATEGY = ['Uniform', 'Optimistic', 'Mean', 'PETS']
         import experiments.half_cheetah_exp.active_exploration_cheetah as active_exploration_exp
         default_configs = yaml.safe_load(open(file_path + '/half_cheetah_exp/hyperparams.yaml', 'r'))
 
@@ -93,7 +97,7 @@ def main(args):
         flags = copy.deepcopy(args.__dict__)
         if flags['launch_mode'] == 'euler':
             logs_dir = '/cluster/scratch/'
-            logs_dir += flags['user_name'] + '/'
+            logs_dir += flags['user_name'] + '/' + args.exp_name + '/'
         else:
             logs_dir = './'
         [flags.pop(key) for key in ['seed', 'num_hparam_samples', 'num_seeds_per_hparam', 'num_cpus',

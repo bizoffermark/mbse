@@ -8,7 +8,7 @@ import jax
 from functools import partial
 from typing import Union, Optional, Any
 from mbse.utils.type_aliases import ModelProperties
-from ens_model import EnsembleModel
+from pyur5.models import EnsembleModel
 import math
 
 # class Ur5PendulumEnv(PendulumEnv):
@@ -46,10 +46,12 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
         #     ctrl_cost_weight=ctrl_cost_weight,
         #     sparse=sparse
         # )
-        self.max_action = 0.7
-        self.min_action = -0.7
+        # self.max_action = 0.7
+        # self.min_action = -0.7
         self.model = EnsembleModel()
-        
+        self.min_action = self.model.action_min
+        self.max_action = self.model.action_max
+                
         # TODO: Maybe think of punishing v_ee to be zero as well
         self.target_state = jnp.array([math.pi, 0]) # target state to be theta = pi/2, theta_dot = 0 
         self.cost_weights = jnp.array([1, 0.1]) # weight for theta and theta_dot

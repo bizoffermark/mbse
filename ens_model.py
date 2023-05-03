@@ -1,11 +1,16 @@
-import time
-from mbse.utils.utils import denormalize, normalize, get_data_jax, create_data
+import sys
+sys.path.append('../mbse')
+from mbse.utils.utils import denormalize, normalize, get_data_jax
 import jax.numpy as jnp 
-import matplotlib.pyplot as plt
 from jax.lax import cond
 from trajax.optimizers import CEMHyperparams, ILQRHyperparams, ilqr_with_cem_warmstart, cem, ilqr
 import pickle
 import math
+import jax
+from models import MLP
+from gym.spaces import Box
+import numpy as np
+from gym.envs.classic_control.pendulum import angle_normalize
 
 class EnsembleModel():
     def __init__(self):#, path_model, paths_params):
@@ -18,23 +23,105 @@ class EnsembleModel():
 
         with open(model_path, "rb") as f:
             self.model = pickle.load(f)
+
         self.params = []
         for path in params_path:
             with open(path, "rb") as f:
                 self.params.append(pickle.load(f))
-        self.control_low = jnp.array([-0.7]).reshape(1, )
-        self.control_high = jnp.array([0.7]).reshape(1, )
         self.cem_params = CEMHyperparams(max_iter=10, sampling_smoothing=0.0, num_samples=200, evolution_smoothing=0.0,
                         elite_portion=0.1)  
-        self.ilqr_params = ILQRHyperparams(maxiter=100)
+        # TODO: test with different values of psd_delta 
+        self.ilqr_params = ILQRHyperparams(maxiter=100, make_psd=True, psd_delta=1e-2)
 
-        self.data = get_data_jax()
+        with open("metadata.pkl", "rb") as f:
+            self.metadata = pickle.load(f)
+        
+        self.x_dim = 4
+        self.u_dim = 1
+        self.n_horizon = 50
+        
+        self.obs_min = np.array(self.metadata['min_x'][:-1])
+        self.obs_max = np.array(self.metadata['max_x'][:-1])
+        
+        self.action_min = np.array([self.metadata['min_x'][-1]])
+        self.action_max = np.array([self.metadata['max_x'][-1]])
+        
+        print("obs_min", self.obs_min)
+        print("obs_max", self.obs_max)
+        
+        print("action_min", self.action_min)
+        print("action_max", self.action_max)
+        
+        self.obs_space = Box(low=self.obs_min, high=self.obs_max, dtype=np.float32)
+        self.action_space = Box(low=self.action_min, high=self.action_max, dtype=np.float32)
 
-    def predict(self, x):
-        return jnp.array([self.model.apply(params, x) for params in self.params]).mean(0)
+    @staticmethod
+    @jax.jit
+    def normalize(x, u, metadata):
+        inputs = jnp.concatenate([x, u]).transpose()
+        inputs = normalize(inputs, metadata['mu_x'], metadata['std_x'])
+        return inputs
+    
+    @staticmethod
+    @jax.jit
+    def denormalize(out, metadata):    
+        out = denormalize(out, metadata['mu_y'], metadata['std_y'])
+        return out
+    
+    def normalize_and_predict(self, x, u):
+        '''
+            predict the dx given x and u after normalizing x and u
+        '''
+        print("x before normalize: ", x)
+        print("u before normalize: ", u)
+        xu = self.normalize(x, u, self.metadata)
+        print("xu after normalize: ", xu)
+        return self.predict(xu)
+        
+    def predict(self, x, u=None):
+        '''
+            predict the dx given x and u
+        '''
+        if u is None:
+            xu = x
+        else:
+            try:
+                assert x.shape[1] == self.x_dim
+                axis = 1
+            except:
+                axis = 0
+        
+            xu = jnp.concatenate([x, u], axis=axis)
+        ds = jnp.array([self.model.apply(params, xu) for params in self.params]).mean(0)
+        print("ds before denormalize: ", ds)
+        ds = self.denormalize(ds, self.metadata)
+        
+        return ds
+    
+    def step(self, x, u):
+        '''
+            predict the next state given x and u
+            
+            input:
+                x: (x_dim, )
+                u: (u_dim, )
+            
+            output:
+                x_next: (x_dim, )
+                terminate: bool
+                truncate: bool
+                output_dict: dict
+        '''
+        print("x before step: ", x)
+        print("u before step: ", u)
+        dx = self.normalize_and_predict(x, u)
+        x_next = x + dx
+        x_next = x_next.at[0].set(angle_normalize(x_next[0]))
+
+        return x_next, False, False, {}
     
     def _cost_fn(self, state, action, t, qs = [100, 1, 1], target_state= [math.pi, 0]): 
-        assert state.shape == (x_dim,) and action.shape == (u_dim,)
+        assert state.shape == (self.x_dim,) and action.shape == (self.u_dim,)
 
         theta = state[0]
         theta_dot = state[1]
@@ -55,32 +142,34 @@ class EnsembleModel():
             return q_theta * jnp.sum((theta - theta_star) ** 2) + \
                 + q_theta_dot * jnp.sum((theta_dot - theta_dot_star)**2)
 
-        return cond(t == num_steps, terminal_cost, running_cost, theta, theta_dot, action)
+        return cond(t == self.n_horizon, terminal_cost, running_cost, theta, theta_dot, action)
 
     def _dynamics_fn(self, x, u, t):
         print(x.shape)
         print(u.shape)
-        assert x.shape == (x_dim,) and u.shape == (u_dim,)
-        inputs = jnp.concatenate([x, u]).transpose()
-        print(inputs.shape)
-        inputs = normalize(inputs, self.data['train']['mu_x'], self.data['train']['std_x'])
-        out = self.predict(inputs)
-        # out = self.model.apply(self.params, inputs)
-        out = denormalize(out, data['train']['mu_y'], data['train']['std_y'])
-        return out + x
-
+        assert x.shape == (self.x_dim,) and u.shape == (self.u_dim,)
+        
+        return self.step(x, u) 
+            
     def forward_traj(self, x, n_horizon, optimizer='ilqr_warmup'):
         # x_traj = jnp.zeros((n_horizon, x.shape[0]))
-        u = jnp.zeros((n_horizon, u_dim))
+
+        self.n_horizon = n_horizon
+
+        u = jnp.zeros((n_horizon, self.u_dim))
+
+        print(x.shape)
+        print(u.shape)
+
         if optimizer == 'ilqr_warmup':
-            out = ilqr_with_cem_warmstart(self._cost_fn, self._dynamics_fn, x, u, control_low=self.control_low,
-                              control_high=self.control_high, ilqr_hyperparams=self.ilqr_params, cem_hyperparams=self.cem_params)
+            out = ilqr_with_cem_warmstart(self._cost_fn, self._dynamics_fn, x, u, control_low=self.action_min,
+                              control_high=self.action_max, ilqr_hyperparams=self.ilqr_params, cem_hyperparams=self.cem_params)
         elif optimizer == 'cem':
-            out = cem(self._cost_fn, self._dynamics_fn, x, u, control_low=self.control_low,
-                              control_high=self.control_high, cem_hyperparams=self.cem_params)
+            out = cem(self._cost_fn, self._dynamics_fn, x, u, control_low=self.action_min,
+                              control_high=self.action_max, cem_hyperparams=self.cem_params)
         elif optimizer == 'ilqr':
-            out = ilqr(self._cost_fn, self._dynamics_fn, x, u, control_low=self.control_low,
-                              control_high=self.control_high)
+            out = ilqr(self._cost_fn, self._dynamics_fn, x, u, control_low=self.action_min,
+                              control_high=self.action_max)
 
         xs = out[0]
         us = out[1]

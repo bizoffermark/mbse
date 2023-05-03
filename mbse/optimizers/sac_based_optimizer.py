@@ -140,7 +140,6 @@ class SACOptimizer(DummyPolicyOptimizer):
             Get action for evaluation
         '''
         
-        # @HONG: why only use the first agent?
         policy = self.agent_list[0].get_eval_action 
         agent_state = get_idx(self.optimizer_state, agent_idx)
         # basically just s_t = (s_t - mu) / sigma

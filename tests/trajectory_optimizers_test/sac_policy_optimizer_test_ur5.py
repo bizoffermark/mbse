@@ -1,37 +1,49 @@
-import jax.random
 import numpy as np
 
-from mbse.models.environment_models.pendulum_swing_up import Ur5PendulumEnv, CustomPendulumEnv, PendulumReward, PendulumDynamicsModel
+import sys
+sys.path.append('/home/honam/workspace/ode/pyur5/include/mbse')
+
+from mbse.models.environment_models.pendulum_swing_up import PendulumDynamicsModel, Ur5PendulumDynamicsModel
 from mbse.optimizers.sac_based_optimizer import SACOptimizer
-import time
+import pickle
+import jax 
+import jax.numpy as jnp
+
 from gym.wrappers.time_limit import TimeLimit
 from gym.wrappers.rescale_action import RescaleAction
 from mbse.utils.replay_buffer import ReplayBuffer, Transition
 from mbse.utils.vec_env.env_util import make_vec_env
+import time
+import cloudpickle
 
-def rollout_random_policy(env, num_steps, rng):
+def rollout_random_policy(true_dynamics, num_steps, rng):
+    model = true_dynamics.model
     rng, reset_rng = jax.random.split(rng, 2)
     reset_seed = jax.random.randint(
         reset_rng,
         (1,),
         minval=0,
         maxval=num_steps).item()
-    obs, _ = env.reset(seed=reset_seed)
+    obs = model.obs_space.sample()
     num_points = num_steps
-    obs_shape = (num_points,) + env.observation_space.shape
-    action_space = (num_points,) + env.action_space.shape
+    obs_shape = (num_points,) + model.obs_space.shape
+    action_space = (num_points,) + model.action_space.shape
     obs_vec = np.zeros(obs_shape)
     action_vec = np.zeros(action_space)
     reward_vec = np.zeros((num_points,))
     next_obs_vec = np.zeros(obs_shape)
     done_vec = np.zeros((num_points,))
     next_rng = rng
+    
     for step in range(num_steps):
         next_rng, actor_rng = jax.random.split(next_rng, 2)
-        action = env.action_space.sample()
-        next_obs, reward, terminate, truncate, info = env.step(action)
-        obs = env.envs[0].env.env.sample_obs()
-
+        action = model.action_space.sample()
+        print("action at step {} is {}".format(step, action))
+        next_obs, reward = true_dynamics.evaluate(obs, action)
+        terminate = jnp.array([False])
+        obs = model.obs_space.sample()
+        print("next_obs at step {} is {}".format(step, next_obs))
+        print("reward at step {} is {}".format(step, reward))
         obs_vec[step: (step + 1)] = obs
         action_vec[step: (step + 1)] = action
         reward_vec[step: (step + 1)] = reward.reshape(-1)
@@ -51,22 +63,23 @@ def rollout_random_policy(env, num_steps, rng):
         (1,),
         minval=0,
         maxval=num_steps).item()
-    obs, _ = env.reset(seed=reset_seed)
+
+    # reset 
+    obs = model.obs_space.sample()
     return transitions
 
 
 wrapper_cls = lambda x: RescaleAction(
     TimeLimit(x, max_episode_steps=200),
-    min_action=-0.7,
-    max_action=0.7,
+    min_action=-1,
+    max_action=1,
 )
-env = wrapper_cls(CustomPendulumEnv(render_mode='human'))
-true_dynamics = PendulumDynamicsModel(env)
+
+true_dynamics = Ur5PendulumDynamicsModel()
 dynamics_model_list = [true_dynamics]
 
 horizon = 20
 
-obs, _ = env.reset()
 
 sac_kwargs = {
     'discount': 0.99,
@@ -86,10 +99,12 @@ sac_kwargs = {
     'train_steps': 350,
 }
 
+
+print("action space dimension: ", true_dynamics.model.action_space.shape)
 policy_optimizer = SACOptimizer(
     dynamics_model_list=dynamics_model_list,
     horizon=horizon,
-    action_dim=(1,),
+    action_dim=true_dynamics.model.action_space.shape,
     train_steps_per_model_update=10,
     transitions_per_update=200,
     sac_kwargs=sac_kwargs,
@@ -97,8 +112,8 @@ policy_optimizer = SACOptimizer(
 )
 
 buffer = ReplayBuffer(
-    obs_shape=env.observation_space.shape,
-    action_shape=env.action_space.shape,
+    obs_shape=true_dynamics.model.obs_space.shape,
+    action_shape=true_dynamics.model.action_space.shape,
     max_size=100000,
     normalize=False,
     action_normalize=False,
@@ -107,21 +122,16 @@ buffer = ReplayBuffer(
 
 rng = jax.random.PRNGKey(seed=0)
 rollout_rng, rng = jax.random.split(rng, 2)
-transitions = rollout_random_policy(env=make_vec_env(CustomPendulumEnv, wrapper_class=wrapper_cls),
-                                    num_steps=10000, rng=rollout_rng)
+transitions = rollout_random_policy(true_dynamics, num_steps=10000, rng=rollout_rng)
 
 buffer.add(transitions)
 train_rng, rng = jax.random.split(rng, 2)
-obs, _ = env.reset()
-# for i in range(200):
-#    action = policy_optimizer.get_action(obs=obs, rng=rng)
-#    obs, reward, terminate, truncate, info = env.step(action)
-#    env.render()
 
-# import wandb
-# wandb.init(
-#     project="sac_opt_test"
-# )
+
+# action = policy_optimizer.get_action_for_eval(obs=obs, rng=rng, agent_idx=0)
+
+# with open("sac_policy.pkl", "wb") as f:
+#     pickle.dump(policy_optimizer, f)
 
 for run in range(5):
     t = time.time()
@@ -131,8 +141,8 @@ for run in range(5):
     )
     print("time taken for optimization ", time.time() - t)
     for j in range(len(dynamics_model_list)):
-        obs, _ = env.reset()
         actor_rng, rng = jax.random.split(rng, 2)
+        obs = true_dynamics.model.obs_space.sample()
         time_stamps = []
         for i in range(200):
             start_time = time.time()
@@ -142,8 +152,12 @@ for run in range(5):
                 print("Time taken", time_taken)
             else:
                 time_stamps.append(time_taken)
-
-            obs, reward, terminate, truncate, info = env.step(action)
+            
+            # obs, reward, terminate, truncate, info = true_dynamics.model.predict(obs, action)
 
         time_stamps = np.asarray(time_taken)
         print("avergage time taken", time_stamps.mean())
+
+with open("sac_policy.pkl", "wb") as f:
+    cloudpickle.dump(policy_optimizer, f)
+# action = policy_optimizer.get_action_for_eval(obs=obs, rng=rng, agent_idx=0)

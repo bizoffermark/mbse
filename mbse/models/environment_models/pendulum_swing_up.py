@@ -9,6 +9,9 @@ from functools import partial
 from typing import Union, Optional, Any
 from mbse.utils.type_aliases import ModelProperties
 from ens_model import EnsembleModel
+import math
+from gym.spaces import Box
+
 class PendulumReward(RewardModel):
     """Get Pendulum Reward."""
 
@@ -130,30 +133,30 @@ class CustomPendulumEnv(PendulumEnv):
         return next_obs, reward, terminate, truncate, output_dict
 
 
-class Ur5PendulumEnv(PendulumEnv):
-    def __init__(self, ctrl_cost=0.001, *args, **kwargs):
-        self.state = None
-        super(Ur5PendulumEnv, self).__init__(*args, **kwargs)
-        self.observation_space.sample = self.sample_obs
-        self.standard_ctrl_cost = 0.001
-        self.ctrl_cost = ctrl_cost
-        self.model = EnsembleModel()
-        super().set_bounds(max_action=0.7, min_action=-0.7)
+# class Ur5PendulumEnv(PendulumEnv):
+#     def __init__(self, ctrl_cost=0.001, *args, **kwargs):
+#         self.state = None
+#         super(Ur5PendulumEnv, self).__init__(*args, **kwargs)
+#         self.observation_space.sample = self.sample_obs
+#         self.standard_ctrl_cost = 0.001
+#         self.ctrl_cost = ctrl_cost
+#         self.model = EnsembleModel()
+#         super().set_bounds(max_action=0.7, min_action=-0.7)
                 
-    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        super().reset(seed=seed, options=options)
-        self.state = np.array([0.0, 0.0])
-        return self._get_obs(), {}
+#     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+#         super().reset(seed=seed, options=options)
+#         self.state = np.array([0.0, 0.0])
+#         return self._get_obs(), {}
     
-    def sample_obs(self, mask: Optional[Any] = None):
-        high = np.array([np.pi, 1.0])
-        low = -high
-        theta, thetadot = self.np_random.uniform(low=low, high=high)
-        obs = np.asarray([np.cos(theta), np.sin(theta), thetadot], dtype=np.float32)
-        return obs
+#     def sample_obs(self, mask: Optional[Any] = None):
+#         high = np.array([np.pi, 1.0])
+#         low = -high
+#         theta, thetadot = self.np_random.uniform(low=low, high=high)
+#         obs = np.asarray([np.cos(theta), np.sin(theta), thetadot], dtype=np.float32)
+#         return obs
     
-    def step(self, u):
-        next_obs = self.model.predict(self._get_obs(), u)
+#     def step(self, u):
+#         next_obs = self.model.predict(self._get_obs(), u)
     
 class PendulumSwingUpEnv(PendulumEnv):
     """Pendulum Swing-up Environment."""
@@ -299,18 +302,36 @@ class PendulumDynamicsModel(DynamicsModel):
         return action
 
 class Ur5PendulumDynamicsModel(DynamicsModel):
-    def __init__(self, env: PendulumEnv, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
+    def __init__(self, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.env = env
-        reward_model = PendulumReward(
-            action_space=self.env.action_space,
-            ctrl_cost_weight=ctrl_cost_weight,
-            sparse=sparse
+        # self.env = env
+        # reward_model = PendulumReward(
+        #     action_space=self.env.action_space,
+        #     ctrl_cost_weight=ctrl_cost_weight,
+        #     sparse=sparse
+        # )
+        self.max_action = 0.7
+        self.min_action = -0.7
+        self.model = EnsembleModel()
+        
+        # TODO: Maybe think of punishing v_ee to be zero as well
+        self.target_state = jnp.array([math.pi/2, 0]) # target state to be theta = pi/2, theta_dot = 0 
+        self.cost_weights = jnp.array([1, 0.1]) # weight for theta and theta_dot
+        
+        self.reward_model = Ur5PendulumReward(
+            action_space = self.model.action_space,
+            ctrl_cost_weight = ctrl_cost_weight,
+            sparse = sparse,
+            min_action = self.min_action,
+            max_action = self.max_action,
+            target_state = self.target_state,
+            cost_weights = self.cost_weights
         )
-        self.reward_model = reward_model
+        
         self.pred_diff = False
-        self.obs_dim = 3
+        self.obs_dim = 4 #observation
 
+        
     @partial(jax.jit, static_argnums=0)
     def predict(self,
                 obs,
@@ -320,25 +341,18 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
                 model_props: ModelProperties = ModelProperties(),
                 sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
                 ):
-        u = jnp.clip(self.rescale_action(action), -self.env.max_torque, self.env.max_torque)[0]
-        theta, omega = self._get_reduced_state(obs)
+        
+        # print("u before rescaling: ", np.array(action))
+        u = self.rescale_action(action)
+        
+        # print("u after rescaling: ", np.array(u))
+        # dx = self.model.predict(self.model.normalize(obs, u, self.model.metadata))
+        # dx = self.model.denormalize(dx, self.model.metadata)
+        # next_obs = obs + dx        
 
-        g = self.env.g
-        m = self.env.m
-        l = self.env.l
-        dt = self.env.dt
-        th, omega = self._get_reduced_state(obs)
-
-        omega_dot = (3 * g / (2 * l) * jnp.sin(th) + 3.0 / (m * l ** 2) * u)
-
-        new_omega = omega + omega_dot * dt
-        new_theta = theta + new_omega * dt  # Simplectic integration new_omega.
-
-        new_omega = jnp.clip(new_omega, -self.env.max_speed, self.env.max_speed)
-
-        new_state = jnp.asarray([new_theta, new_omega]).T
-        next_obs = self._get_obs(new_state)
-        next_obs = next_obs.squeeze()
+        # next_obs.at[0] = angle_normalize(next_obs.at[0])
+        next_obs, terminate, truncate, output_dict = self.model.step(obs, u)
+        
         return next_obs
 
     def evaluate(self,
@@ -356,15 +370,9 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
     @staticmethod
     @jax.jit
     def _get_obs(state):
-        theta, thetadot = state[..., 0], state[..., 1]
-        return jnp.asarray([jnp.cos(theta), jnp.sin(theta), thetadot], dtype=jnp.float32)
+        theta, thetadot, p_ee, v_ee = state[..., 0], state[..., 1], state[..., 2], state[..., 3]
+        return jnp.asarray([theta, thetadot, p_ee, v_ee], dtype=jnp.float32)
 
-    @staticmethod
-    @jax.jit
-    def _get_reduced_state(obs):
-        cos_theta, sin_theta = obs[..., 0], obs[..., 1]
-        theta = jnp.arctan2(sin_theta, cos_theta)
-        return theta, obs[..., -1]
 
     @partial(jax.jit, static_argnums=0)
     def rescale_action(self, action):
@@ -376,11 +384,117 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
         Returns:
             The rescaled action
         """
-        action = jnp.clip(action, self.env.min_action, self.env.max_action)
-        low = self.env.action_space.low
-        high = self.env.action_space.high
+        action = jnp.clip(action, self.min_action, self.max_action)
+        low = self.model.action_space.low
+        high = self.model.action_space.high
         action = low + (high - low) * (
-                (action - self.env.min_action) / (self.env.max_action - self.env.min_action)
+                (action - self.min_action) / (self.max_action - self.min_action)
         )
         action = jnp.clip(action, low, high)
+        return action
+
+class Ur5PendulumReward(RewardModel):
+    """Get Pendulum Reward."""
+
+    def __init__(self, action_space, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ctrl_cost_weight = ctrl_cost_weight
+        self.sparse = sparse
+        print(kwargs)
+        self.min_action = kwargs['min_action']
+        self.max_action = kwargs['max_action']
+        self.action_space = action_space 
+        self._init_fn()
+        self.target_state = kwargs['target_state']
+        self.cost_weights = kwargs['cost_weights']
+        
+    def _init_fn(self):
+        # rescale actions from [-1, 1] to [min_action, max_action]
+        self.rescale_action = jax.jit(lambda action: self._rescale_action(action=action,
+                                                                          min_action=self.min_action,
+                                                                          max_action=self.max_action,
+                                                                          low=self.action_space.low,
+                                                                          high=self.action_space.high,
+                                                                          ))
+        self.input_cost = jax.jit(lambda u: self._input_cost(u=u, ctrl_cost_weight=self.ctrl_cost_weight))
+
+        def predict(obs, action, next_obs=None, rng=None):
+            return self._predict(
+                state_reward_fn=self.state_reward,
+                input_cost_fn=self.input_cost,
+                action_transform_fn=self.rescale_action,
+                obs=obs,
+                action=action,
+                target_state=self.target_state,
+                cost_weights=self.cost_weights,
+                next_obs=next_obs,
+                rng=rng
+            )
+
+        self.predict = jax.jit(predict)
+
+    def set_bounds(self, max_action, min_action=None):
+        self.max_action = max_action
+        if min_action is None:
+            min_action = - max_action
+        self.min_action = min_action
+        self._init_fn()
+
+    @staticmethod
+    @jax.jit
+    def state_non_sparse_reward(theta, thetadot, p_ee, v_ee, target_state, cost_weights):
+        """Get sparse reward."""
+        theta = angle_normalize(theta)
+        cost = cost_weights[0] * (theta - target_state[0])**2 + cost_weights[1] * (thetadot - target_state[1])**2 
+        return -cost 
+
+    @staticmethod
+    def _input_cost(u, ctrl_cost_weight):
+        # compute the |u|^2 * w 
+        return ctrl_cost_weight * (jnp.sum(jnp.square(u), axis=-1))
+
+    @staticmethod
+    @jax.jit
+    def state_reward(state, target_state, cost_weights):
+        """Compute reward associated with state dynamics."""
+        theta, thetadot, p_ee, v_ee = state[..., 0], state[..., 1], state[..., 2], state[..., 3]
+        theta = angle_normalize(theta)
+        cost = cost_weights[0] * (theta - target_state[0])**2 + cost_weights[1] * (thetadot - target_state[1])**2 
+
+        # the reward is to make sure that we are
+        return -cost
+
+    @staticmethod
+    def _predict(state_reward_fn, input_cost_fn, action_transform_fn, obs, action, target_state, cost_weights, next_obs=None, rng=None):
+        action = action_transform_fn(action) # transform the action to the normal range
+        return state_reward_fn(state=obs, target_state=target_state, cost_weights=cost_weights) - input_cost_fn(action)
+
+    def evaluate(self,
+                 parameters,
+                 obs,
+                 action,
+                 rng,
+                 sampling_idx=None,
+                 model_props: ModelProperties = ModelProperties()):
+        print("Ur5DynamicsReward evaluate called")
+        next_state = self.predict(obs=obs, action=action, rng=rng)
+        print("next_state is : ", next_state)
+        reward = jnp.zeros(next_state.shape[0])
+        return next_state, reward
+
+    @staticmethod
+    def _rescale_action(action, min_action, max_action, low, high):
+        """
+        Args:
+            action: The action to rescale
+
+        Returns:
+            The rescaled action
+        """
+        if min_action is not None and max_action is not None:
+            action = jnp.clip(action, min_action, max_action)
+            action = low + (high - low) * (
+                    (action - min_action) / (max_action - min_action)
+            )
+            action = jnp.clip(action, low, high)
         return action

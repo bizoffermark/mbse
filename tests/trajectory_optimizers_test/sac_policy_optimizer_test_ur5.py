@@ -2,24 +2,22 @@ import numpy as np
 
 import sys
 sys.path.append('/home/honam/workspace/ode/pyur5/include/mbse')
-
+sys.path.append('/home/honam/workspace/ode/pyur5/include/pyur5')
 from mbse.models.ur5_dynamics_model import Ur5PendulumDynamicsModel
 from mbse.optimizers.sac_based_optimizer import SACOptimizer
 import pickle
 import jax 
 import jax.numpy as jnp
 
-from gym.wrappers.time_limit import TimeLimit
-from gym.wrappers.rescale_action import RescaleAction
 from mbse.utils.replay_buffer import ReplayBuffer, Transition
-from mbse.utils.vec_env.env_util import make_vec_env
 import time
 import cloudpickle
+import wandb 
 
-def rollout_random_policy(train_horizon, rng):
+def rollout_random_policy(train_horizon, true_dynamics, rng):
     # model = true_dynamics.model
     rng, reset_rng = jax.random.split(rng, 2)
-    with open("data_pkl/data_{}.pkl".format(train_horizon), "rb") as f:
+    with open("/home/honam/workspace/ode/pyur5/data_pkl/data_{}.pkl".format(train_horizon), "rb") as f:
         data = pickle.load(f)
     data = data['train']
     obs_vec = data['x'][:,:-1]    
@@ -83,12 +81,6 @@ def rollout_random_policy(train_horizon, rng):
     return transitions
 
 
-true_dynamics = Ur5PendulumDynamicsModel()
-dynamics_model_list = [true_dynamics] # learnt dynamics model
-
-horizon = 5 
-
-
 sac_kwargs = {
     'discount': 0.99,
     'init_ent_coef': 1.0,
@@ -106,70 +98,118 @@ sac_kwargs = {
     'batch_size': 128,
     'train_steps': 350,
 }
+def train_sac_policy_optimizer(config):
+    sac_kwargs = config.sac_kwargs
+    train_horizon = config.train_horizon
+    n_model = config.n_model
+    #n_horizon = config.n_horizon
+    n_horizons = [5, 10, 20, 30, 40, 50, 100, 150, 200]
+
+    true_dynamics = Ur5PendulumDynamicsModel(train_horizon=train_horizon, n_model=n_model)
+    dynamics_model_list = [true_dynamics] # learnt dynamics model
+
+    buffer = ReplayBuffer(
+        obs_shape=true_dynamics.model.obs_space.shape,
+        action_shape=true_dynamics.model.action_space.shape,
+        max_size=100000,
+        normalize=False,
+        action_normalize=False,
+        learn_deltas=False
+    )
+    
+    rng = jax.random.PRNGKey(seed=0)
+    rollout_rng, rng = jax.random.split(rng, 2)
+    transitions = rollout_random_policy(train_horizon, true_dynamics, rng=rollout_rng)
+    buffer.add(transitions)
+    train_rng, rng = jax.random.split(rng, 2)
 
 
-print("action space dimension: ", true_dynamics.model.action_space.shape)
-policy_optimizer = SACOptimizer(
-    dynamics_model_list=dynamics_model_list,
-    horizon=horizon,
-    action_dim=true_dynamics.model.action_space.shape,
-    train_steps_per_model_update=50,
-    transitions_per_update=5000,
-    sac_kwargs=sac_kwargs,
-    reset_actor_params=False,
-)
+    # horizon = 5 
+    train_summaries = []
 
-# TODO: use the off-line dataset -> use train data
-buffer = ReplayBuffer(
-    obs_shape=true_dynamics.model.obs_space.shape,
-    action_shape=true_dynamics.model.action_space.shape,
-    max_size=100000,
-    normalize=False,
-    action_normalize=False,
-    learn_deltas=False
-)
+    print("action space dimension: ", true_dynamics.model.action_space.shape)
+    for n_horizon in n_horizons:
+        policy_optimizer = SACOptimizer(
+            dynamics_model_list=dynamics_model_list,
+            horizon=n_horizon,
+            action_dim=true_dynamics.model.action_space.shape,
+            train_steps_per_model_update=50,
+            transitions_per_update=5000,
+            sac_kwargs=sac_kwargs,
+            reset_actor_params=False,
+        )
 
-train_horizon = 1
+        # for run in range(5):
+        t = time.time()
+        train_summary = policy_optimizer.train(
+            rng=train_rng,
+            buffer=buffer,
+        )
 
-rng = jax.random.PRNGKey(seed=0)
-rollout_rng, rng = jax.random.split(rng, 2)
-transitions = rollout_random_policy(train_horizon, rng=rollout_rng)
+        print("time taken for optimization ", time.time() - t)
+        for j in range(len(dynamics_model_list)):
+            actor_rng, rng = jax.random.split(rng, 2)
+            obs = true_dynamics.model.obs_space.sample()
+            time_stamps = []
+            for i in range(200):
+                start_time = time.time()
+                action = policy_optimizer.get_action_for_eval(obs=obs, rng=rng, agent_idx=j)
+                time_taken = time.time() - start_time
+                if i == 0:
+                    print("Time taken", time_taken)
+                else:
+                    time_stamps.append(time_taken)
+                
+                # obs, reward, terminate, truncate, info = true_dynamics.model.predict(obs, action)
 
-buffer.add(transitions)
-train_rng, rng = jax.random.split(rng, 2)
+            time_stamps = np.asarray(time_taken)
+            print("avergage time taken", time_stamps.mean())
 
+        with open("/home/honam/workspace/ode/pyur5/metadata/sac_policy_{}_{}_{}.pkl".format(train_horizon, n_model, n_horizon), "wb") as f:
+            cloudpickle.dump(policy_optimizer, f)
+    # action = policy_optimizer.get_action_for_eval(obs=obs, rng=rng, agent_idx=0)
+        train_summaries.append(train_summary[0][0].dict())
+    return train_summaries
 
-# action = policy_optimizer.get_action_for_eval(obs=obs, rng=rng, agent_idx=0)
+def main():
+    config = wandb.config
+    
+n_horizons = [5, 10, 20, 30, 40, 50, 100, 150, 200]
+train_horizons = [1,2,3,4,5] #[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+n_models = [5]#[1, 5, 10]
 
-# with open("sac_policy.pkl", "wb") as f:
-#     pickle.dump(policy_optimizer, f)
+sweep_config = {
+    'method': 'grid',
+    "name": "sac_policy",
+    "parameters": {
+        "train_horizon": {
+            "values": train_horizons
+        },
+        "n_model": {
+            "values": n_models
+        },
+        # "n_horizon": {
+        #     "values": n_horizons
+        # },
+        "sac_kwargs": {
+            "values": [sac_kwargs]
+        }
+    }
+}
 
-# for run in range(5):
-t = time.time()
-train_summary = policy_optimizer.train(
-    rng=train_rng,
-    buffer=buffer,
-)
+def main():
+    wandb.init(project="sac_policy")
+    logs = train_sac_policy_optimizer(wandb.config)
+    log_final = {}
+    for i, n_horizon in enumerate(n_horizons):
+        for key in logs[i].keys():
+            key_name = "n_horizon_{}".format(n_horizon) + "_" + key
+            log_final[key_name] = logs[i][key]
+    wandb.log(log_final)
+    
+    # wandb.log(log)
+    
+sweep_id = wandb.sweep(sweep_config, project="sac_policy")
 
-print("time taken for optimization ", time.time() - t)
-for j in range(len(dynamics_model_list)):
-    actor_rng, rng = jax.random.split(rng, 2)
-    obs = true_dynamics.model.obs_space.sample()
-    time_stamps = []
-    for i in range(200):
-        start_time = time.time()
-        action = policy_optimizer.get_action_for_eval(obs=obs, rng=rng, agent_idx=j)
-        time_taken = time.time() - start_time
-        if i == 0:
-            print("Time taken", time_taken)
-        else:
-            time_stamps.append(time_taken)
-        
-        # obs, reward, terminate, truncate, info = true_dynamics.model.predict(obs, action)
-
-    time_stamps = np.asarray(time_taken)
-    print("avergage time taken", time_stamps.mean())
-
-with open("sac_policy.pkl", "wb") as f:
-    cloudpickle.dump(policy_optimizer, f)
-# action = policy_optimizer.get_action_for_eval(obs=obs, rng=rng, agent_idx=0)
+print("sweep_id is {}".format(sweep_id))
+wandb.agent(sweep_id, function=main, count=100)

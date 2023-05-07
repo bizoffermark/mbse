@@ -8,6 +8,8 @@ import jax
 from functools import partial
 from typing import Union, Optional, Any
 from mbse.utils.type_aliases import ModelProperties
+import sys
+sys.path.append('/home/honam/workspace/ode/pyur5/include/pyur5')
 from ens_model import EnsembleModel
 import math
 
@@ -29,8 +31,8 @@ import math
 #     def sample_obs(self, mask: Optional[Any] = None):
 #         high = np.array([np.pi, 1.0])
 #         low = -high
-#         theta, thetadot = self.np_random.uniform(low=low, high=high)
-#         obs = np.asarray([np.cos(theta), np.sin(theta), thetadot], dtype=np.float32)
+#         theta, theta_dot = self.np_random.uniform(low=low, high=high)
+#         obs = np.asarray([np.cos(theta), np.sin(theta), theta_dot], dtype=np.float32)
 #         return obs
     
 #     def step(self, u):
@@ -38,7 +40,7 @@ import math
 
 
 class Ur5PendulumDynamicsModel(DynamicsModel):
-    def __init__(self, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
+    def __init__(self, train_horizon=1, n_model=5, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # self.env = env
         # reward_model = PendulumReward(
@@ -46,13 +48,14 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
         #     ctrl_cost_weight=ctrl_cost_weight,
         #     sparse=sparse
         # )
-        self.max_action = 0.7
-        self.min_action = -0.7
-        self.model = EnsembleModel()
-        
+        self.model = EnsembleModel(train_horizon, n_model)
+        self.max_action = self.model.action_max
+        self.min_action = self.model.action_min
+
         # TODO: Maybe think of punishing v_ee to be zero as well
-        self.target_state = jnp.array([math.pi, 0]) # target state to be theta = pi/2, theta_dot = 0 
-        self.cost_weights = jnp.array([1, 0.1]) # weight for theta and theta_dot
+        self.target_state = self.model.target_state #jnp.array([math.pi, 0]) # target state to be theta = pi/2, theta_dot = 0 
+        self.cost_weights = self.model.cost_weights[:1] #jnp.array([1, 0.1]) # weight for theta and theta_dot
+        # self.ctrl_cost_weight = self.model.cost_weights[-1]
         
         self.reward_model = Ur5PendulumReward(
             action_space = self.model.action_space,
@@ -65,7 +68,7 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
         )
         
         self.pred_diff = False
-        self.obs_dim = 4 #observation
+        self.obs_dim = self.model.x_dim #observation
 
         
     @partial(jax.jit, static_argnums=0)
@@ -91,6 +94,8 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
                  sampling_idx=None,
                  model_props: ModelProperties = ModelProperties(),
                  ):
+        u = self.rescale_action(action) # rescale action to [-0.7, 0.7]
+        
         next_obs = self.predict(obs, action, rng)
         reward = self.reward_model.predict(obs, action, next_obs)
         return next_obs, reward
@@ -98,8 +103,8 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
     @staticmethod
     @jax.jit
     def _get_obs(state):
-        theta, thetadot, p_ee, v_ee = state[..., 0], state[..., 1], state[..., 2], state[..., 3]
-        return jnp.asarray([theta, thetadot, p_ee, v_ee], dtype=jnp.float32)
+        theta, theta_dot, p_ee, v_ee = state[..., 0], state[..., 1], state[..., 2], state[..., 3]
+        return jnp.asarray([theta, theta_dot, p_ee, v_ee], dtype=jnp.float32)
 
 
     @partial(jax.jit, static_argnums=0)
@@ -170,10 +175,13 @@ class Ur5PendulumReward(RewardModel):
 
     @staticmethod
     @jax.jit
-    def state_non_sparse_reward(theta, thetadot, p_ee, v_ee, target_state, cost_weights):
+    def state_non_sparse_reward(theta, theta_dot, p_ee, v_ee, target_state, cost_weights):
         """Get sparse reward."""
         theta = angle_normalize(theta)
-        cost = cost_weights[0] * (theta - target_state[0])**2 + cost_weights[1] * (thetadot - target_state[1])**2 
+        dtheta = theta - target_state[0]
+        dtheta = angle_normalize(dtheta)
+        dtheta_dot = theta_dot - target_state[1]
+        cost = cost_weights[0] * (dtheta)**2 + cost_weights[1] * (dtheta_dot)**2 
         return -cost 
 
     @staticmethod
@@ -185,9 +193,12 @@ class Ur5PendulumReward(RewardModel):
     @jax.jit
     def state_reward(state, target_state, cost_weights):
         """Compute reward associated with state dynamics."""
-        theta, thetadot, p_ee, v_ee = state[..., 0], state[..., 1], state[..., 2], state[..., 3]
+        theta, theta_dot, p_ee, v_ee = state[..., 0], state[..., 1], state[..., 2], state[..., 3]
         theta = angle_normalize(theta)
-        cost = cost_weights[0] * (theta - target_state[0])**2 + cost_weights[1] * (thetadot - target_state[1])**2 
+        dtheta = theta - target_state[0]
+        dtheta = angle_normalize(dtheta)
+        dtheta_dot = theta_dot - target_state[1]
+        cost = cost_weights[0] * (dtheta)**2 + cost_weights[1] * (dtheta_dot)**2 
 
         # the reward is to make sure that we are
         return -cost

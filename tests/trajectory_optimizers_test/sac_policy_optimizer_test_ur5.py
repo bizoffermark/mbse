@@ -1,8 +1,8 @@
 import numpy as np
 
 import sys
-sys.path.append('/home/honam/workspace/ode/pyur5/include/mbse')
-sys.path.append('/home/honam/workspace/ode/pyur5/include/pyur5')
+sys.path.append('/home/bizoffermark/workspace/ode/pyur5/include/mbse')
+sys.path.append('/home/bizoffermark/workspace/ode/pyur5/include/pyur5')
 from mbse.models.ur5_dynamics_model import Ur5PendulumDynamicsModel
 from mbse.optimizers.sac_based_optimizer import SACOptimizer
 import pickle
@@ -21,7 +21,7 @@ from gym.envs.classic_control.pendulum import angle_normalize
 def rollout_random_policy(train_horizon, true_dynamics, data, rng):
     # model = true_dynamics.model
     rng, reset_rng = jax.random.split(rng, 2)
-    # with open("/home/honam/workspace/ode/pyur5/data_pkl/data_{}.pkl".format(train_horizon), "rb") as f:
+    # with open("/home/bizoffermark/workspace/ode/pyur5/data_pkl/data_{}.pkl".format(train_horizon), "rb") as f:
     #     data = pickle.load(f)
     data_train = data['train']
     obs_vec = data_train['x'][:,:-1]    
@@ -81,7 +81,7 @@ def make_plot(train_horizon, n_model, n_horizon, solver, j_init, sac_policy):
     axs[-1].plot(u_test)
     axs[-1].set_title("u")
     
-    fig.savefig("/home/honam/workspace/ode/pyur5/figs/{}_{}_{}_{}_{}.png".format(train_horizon, n_model, n_horizon, solver, j_init))
+    fig.savefig("/home/bizoffermark/workspace/ode/pyur5/figs/{}_{}_{}_{}_{}.png".format(train_horizon, n_model, n_horizon, solver, j_init))
     log = {"plot_{}".format(n_horizon): wandb.Image(fig), "cost_{}".format(n_horizon): cost}
 
     return log
@@ -149,7 +149,7 @@ def train_sac_policy_optimizer(config, rng):
         #     time_stamps = np.asarray(time_taken)
         #     print("avergage time taken", time_stamps.mean())
 
-        with open("/home/honam/workspace/ode/pyur5/metadata/sac_policy_{}_{}_{}.pkl".format(train_horizon, n_model, roll_horizon), "wb") as f:
+        with open("/home/bizoffermark/workspace/ode/pyur5/metadata/sac_policy_{}_{}_{}.pkl".format(train_horizon, n_model, roll_horizon), "wb") as f:
             cloudpickle.dump(policy_optimizer, f)
             
     logs = {}
@@ -181,7 +181,7 @@ if __name__ == '__main__':
     n_horizons = [200]#, 300, 400, 500]#[5, 10, 20, 30, 40, 50, 100, 150, 200]
     roll_horizons = [5]
 
-    with open("/home/honam/workspace/ode/pyur5/data_pkl/data_{}.pkl".format(1), "rb") as f:
+    with open("/home/bizoffermark/workspace/ode/pyur5/data_pkl/data_{}.pkl".format(1), "rb") as f:
         data = pickle.load(f)
 
     train_horizon = train_horizons[0]

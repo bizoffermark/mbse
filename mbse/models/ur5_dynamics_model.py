@@ -9,7 +9,7 @@ from functools import partial
 from typing import Union, Optional, Any
 from mbse.utils.type_aliases import ModelProperties
 import sys
-sys.path.append('/home/honam/workspace/ode/pyur5/include/pyur5')
+sys.path.append('/home/bizoffermark/workspace/ode/pyur5/include/pyur5')
 from ens_model import EnsembleModel
 import math
 
@@ -42,25 +42,10 @@ import math
 class Ur5PendulumDynamicsModel(DynamicsModel):
     def __init__(self, train_horizon=1, n_model=5, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
-<<<<<<< HEAD
-        # self.env = env
-        # reward_model = PendulumReward(
-        #     action_space=self.env.action_space,
-        #     ctrl_cost_weight=ctrl_cost_weight,
-        #     sparse=sparse
-        # )
-        # self.max_action = 0.7
-        # self.min_action = -0.7
-        self.model = EnsembleModel()
-        self.min_action = self.model.action_min
-        self.max_action = self.model.action_max
-                
-=======
         self.model = EnsembleModel(train_horizon, n_model)
         self.max_action = 10#self.model.action_max
         self.min_action = -10#self.model.action_min
 
->>>>>>> ode_temporary
         # TODO: Maybe think of punishing v_ee to be zero as well
         self.target_state = self.model.target_state #jnp.array([math.pi, 0]) # target state to be theta = pi/2, theta_dot = 0 
         self.cost_weights = self.model.cost_weights[:1] #jnp.array([1, 0.1]) # weight for theta and theta_dot

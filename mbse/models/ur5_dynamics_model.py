@@ -42,15 +42,9 @@ import math
 class Ur5PendulumDynamicsModel(DynamicsModel):
     def __init__(self, train_horizon=1, n_model=5, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # self.env = env
-        # reward_model = PendulumReward(
-        #     action_space=self.env.action_space,
-        #     ctrl_cost_weight=ctrl_cost_weight,
-        #     sparse=sparse
-        # )
         self.model = EnsembleModel(train_horizon, n_model)
-        self.max_action = self.model.action_max
-        self.min_action = self.model.action_min
+        self.max_action = 10#self.model.action_max
+        self.min_action = -10#self.model.action_min
 
         # TODO: Maybe think of punishing v_ee to be zero as well
         self.target_state = self.model.target_state #jnp.array([math.pi, 0]) # target state to be theta = pi/2, theta_dot = 0 
@@ -70,6 +64,12 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
         self.pred_diff = False
         self.obs_dim = self.model.x_dim #observation
 
+    def set_bounds(self, max_action, min_action=None):
+        self.max_action = max_action
+        if min_action is None:
+            min_action = - max_action
+        self.min_action = min_action
+        self._init_fn()
         
     @partial(jax.jit, static_argnums=0)
     def predict(self,
@@ -79,9 +79,18 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
                 parameters=None,
                 model_props: ModelProperties = ModelProperties(),
                 sampling_idx: Optional[Union[jnp.ndarray, int]] = None,
+                rescaled: bool = False,
                 ):
-        
-        u = self.rescale_action(action)
+        '''
+            internal function to predict next state
+        '''
+        def identity(action):
+            return action
+        def scale(action):
+            return self.rescale_action(action)
+        u = jax.lax.cond(rescaled, identity, scale, action)
+        u = jnp.clip(u, self.min_action, self.max_action)
+        print("predicting u of shape {}: {}".format(u.shape, u))
         next_obs, terminate, truncate, output_dict = self.model.step(obs, u)
         
         return next_obs
@@ -93,10 +102,16 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
                  parameters=None,
                  sampling_idx=None,
                  model_props: ModelProperties = ModelProperties(),
+                 rescaled: bool = False,
                  ):
-        u = self.rescale_action(action) # rescale action to [-0.7, 0.7]
-        
-        next_obs = self.predict(obs, action, rng)
+        # u = self.rescale_action(action) # rescale action to [-0.7, 0.7]
+        '''
+            function to evaluate next state and reward
+        '''
+        # action here is assumed to be in the range of [-1, 1]
+        if not rescaled:
+            action = self.rescale_action(action)
+        next_obs = self.predict(obs, action, rng, rescaled=True)
         reward = self.reward_model.predict(obs, action, next_obs)
         return next_obs, reward
 
@@ -137,10 +152,12 @@ class Ur5PendulumReward(RewardModel):
         self.min_action = kwargs['min_action']
         self.max_action = kwargs['max_action']
         self.action_space = action_space 
-        self._init_fn()
         self.target_state = kwargs['target_state']
         self.cost_weights = kwargs['cost_weights']
-        
+        self._init_fn()
+        print("target state: {}".format(self.target_state))
+        print("cost weights: {}".format(kwargs['cost_weights']))
+
     def _init_fn(self):
         # rescale actions from [-1, 1] to [min_action, max_action]
         self.rescale_action = jax.jit(lambda action: self._rescale_action(action=action,
@@ -196,7 +213,7 @@ class Ur5PendulumReward(RewardModel):
         theta, theta_dot, p_ee, v_ee = state[..., 0], state[..., 1], state[..., 2], state[..., 3]
         theta = angle_normalize(theta)
         dtheta = theta - target_state[0]
-        dtheta = angle_normalize(dtheta)
+        dtheta = angle_normalize(dtheta) # normalize the angle to [-pi, pi]
         dtheta_dot = theta_dot - target_state[1]
         cost = cost_weights[0] * (dtheta)**2 + cost_weights[1] * (dtheta_dot)**2 
 

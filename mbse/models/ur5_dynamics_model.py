@@ -84,13 +84,16 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
         '''
             internal function to predict next state
         '''
-        def identity(action):
-            return action
-        def scale(action):
-            return self.rescale_action(action)
-        u = jax.lax.cond(rescaled, identity, scale, action)
-        u = jnp.clip(u, self.min_action, self.max_action)
-        print("predicting u of shape {}: {}".format(u.shape, u))
+        # def identity(action):
+        #     return action
+        # def scale(action):
+        #     return self.rescale_action(action)
+        # u = jax.lax.cond(rescaled, identity, scale, action)
+        # u = jnp.clip(u, self.min_action, self.max_action)
+        # print("predicting u of shape {}: {}".format(u.shape, u))
+        
+        # u = self.rescale_action(action)
+        u = jnp.clip(action, -1, 1)
         next_obs, terminate, truncate, output_dict = self.model.step(obs, u)
         
         return next_obs
@@ -122,24 +125,24 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
         return jnp.asarray([theta, theta_dot, p_ee, v_ee], dtype=jnp.float32)
 
 
-    @partial(jax.jit, static_argnums=0)
-    def rescale_action(self, action):
-        """Rescales the action affinely from  [:attr:`min_action`, :attr:`max_action`] to the action space of the base environment, :attr:`env`.
+    # @partial(jax.jit, static_argnums=0)
+    # def rescale_action(self, action):
+    #     """Rescales the action affinely from  [:attr:`min_action`, :attr:`max_action`] to the action space of the base environment, :attr:`env`.
 
-        Args:
-            action: The action to rescale
+    #     Args:
+    #         action: The action to rescale
 
-        Returns:
-            The rescaled action
-        """
-        action = jnp.clip(action, self.min_action, self.max_action)
-        low = self.model.action_space.low
-        high = self.model.action_space.high
-        action = low + (high - low) * (
-                (action - self.min_action) / (self.max_action - self.min_action)
-        )
-        action = jnp.clip(action, low, high)
-        return action
+    #     Returns:
+    #         The rescaled action
+    #     """
+    # #     action = jnp.clip(action, self.min_action, self.max_action)
+    #     low = self.model.action_space.low
+    #     high = self.model.action_space.high
+    #     action = low + (high - low) * (
+    #             (action - self.min_action) / (self.max_action - self.min_action)
+    #     )
+    #     action = jnp.clip(action, low, high)
+    #     return action
 
 class Ur5PendulumReward(RewardModel):
     """Get Pendulum Reward."""
@@ -222,7 +225,8 @@ class Ur5PendulumReward(RewardModel):
 
     @staticmethod
     def _predict(state_reward_fn, input_cost_fn, action_transform_fn, obs, action, target_state, cost_weights, next_obs=None, rng=None):
-        action = action_transform_fn(action) # transform the action to the normal range
+        # action = action_transform_fn(action) # transform the action to the normal range
+        action = jnp.clip(action, -1, 1) # clip to [-1, 1]
         return state_reward_fn(state=obs, target_state=target_state, cost_weights=cost_weights) - input_cost_fn(action)
 
     def evaluate(self,
@@ -247,10 +251,10 @@ class Ur5PendulumReward(RewardModel):
         Returns:
             The rescaled action
         """
-        if min_action is not None and max_action is not None:
-            action = jnp.clip(action, min_action, max_action)
-            action = low + (high - low) * (
-                    (action - min_action) / (max_action - min_action)
-            )
-            action = jnp.clip(action, low, high)
+        # if min_action is not None and max_action is not None:
+        #     action = jnp.clip(action, min_action, max_action)
+        #     action = low + (high - low) * (
+        #             (action - min_action) / (max_action - min_action)
+        #     )
+        #     action = jnp.clip(action, low, high)
         return action

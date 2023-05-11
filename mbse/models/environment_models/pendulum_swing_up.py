@@ -8,7 +8,6 @@ import jax
 from functools import partial
 from typing import Union, Optional, Any
 from mbse.utils.type_aliases import ModelProperties
-from ens_model import EnsembleModel
 import math
 from gym.spaces import Box
 

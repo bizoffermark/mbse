@@ -117,14 +117,23 @@ class CustomPendulumEnv(PendulumEnv):
         super().reset(seed=seed, options=options)
         self.state = np.array([np.pi, 0.0])
         return self._get_obs(), {}
-
+        # return self.reset_explore(seed=seed, options=options)
+    
     def sample_obs(self, mask: Optional[Any] = None):
         high = np.array([np.pi, 1.0])
         low = -high
         theta, thetadot = self.np_random.uniform(low=low, high=high)
         obs = np.asarray([np.cos(theta), np.sin(theta), thetadot], dtype=np.float32)
         return obs
-
+    
+    def reset_explore(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+        super().reset(seed=seed, options=options)
+        high = np.array([np.pi, 1.0])
+        low = -high
+        theta, thetadot = self.np_random.uniform(low=low, high=high)        
+        self.state = np.array([theta, thetadot])
+        return self._get_obs(), {}
+    
     def step(self, u):
         next_obs, reward, terminate, truncate, output_dict = super().step(u)
         action_reward = (-self.ctrl_cost + self.standard_ctrl_cost) * (u ** 2)

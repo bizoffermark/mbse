@@ -1,4 +1,5 @@
 """Pendulum Swing-up Environment with full observation."""
+import gym
 import numpy as np
 from mbse.models.reward_model import RewardModel
 from mbse.models.dynamics_model import DynamicsModel
@@ -8,19 +9,21 @@ import jax
 from functools import partial
 from typing import Union, Optional, Any
 from mbse.utils.type_aliases import ModelProperties
-import math
-from gym.spaces import Box
+
 
 class PendulumReward(RewardModel):
     """Get Pendulum Reward."""
 
-    def __init__(self, action_space, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
+    def __init__(self, action_space: gym.Space, ctrl_cost_weight: float = 0.001, target_angle: float = 0.0,
+                 sparse: bool = False,
+                 *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.ctrl_cost_weight = ctrl_cost_weight
         self.sparse = sparse
         self.min_action = None
         self.max_action = None
         self.action_space = action_space
+        self.target_angle = target_angle
         self._init_fn()
 
     def _init_fn(self):
@@ -32,9 +35,12 @@ class PendulumReward(RewardModel):
                                                                           ))
         self.input_cost = jax.jit(lambda u: self._input_cost(ctrl_cost_weight=self.ctrl_cost_weight, u=u))
 
+        def state_reward_fn(state):
+            return self.state_reward(state=state, target_angle=self.target_angle)
+
         def predict(obs, action, next_obs=None, rng=None):
             return self._predict(
-                state_reward_fn=self.state_reward,
+                state_reward_fn=state_reward_fn,
                 input_cost_fn=self.input_cost,
                 action_transform_fn=self.rescale_action,
                 obs=obs,
@@ -65,10 +71,10 @@ class PendulumReward(RewardModel):
 
     @staticmethod
     @jax.jit
-    def state_reward(state):
+    def state_reward(state, target_angle: float = 0.0):
         """Compute reward associated with state dynamics."""
         theta, omega = jnp.arctan2(state[..., 1], state[..., 0]), state[..., 2]
-        theta = angle_normalize(theta)
+        theta = angle_normalize(theta - target_angle)
         return -(theta ** 2 + 0.1 * omega ** 2)
 
     @staticmethod
@@ -106,41 +112,44 @@ class PendulumReward(RewardModel):
 
 
 class CustomPendulumEnv(PendulumEnv):
-    def __init__(self, ctrl_cost=0.001, render_mode='rgb_array', *args, **kwargs):
+    def __init__(self, ctrl_cost=0.001, render_mode='rgb_array', target_angle: float = 0.0, *args, **kwargs):
         self.state = None
         super(CustomPendulumEnv, self).__init__(render_mode=render_mode, *args, **kwargs)
         self.observation_space.sample = self.sample_obs
-        self.standard_ctrl_cost = 0.001
         self.ctrl_cost = ctrl_cost
+        self.target_angle = target_angle
+        self.min_action = -self.max_torque
+        self.max_action = self.max_torque
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed, options=options)
         self.state = np.array([np.pi, 0.0])
         return self._get_obs(), {}
-        # return self.reset_explore(seed=seed, options=options)
-    
+
     def sample_obs(self, mask: Optional[Any] = None):
         high = np.array([np.pi, 1.0])
         low = -high
         theta, thetadot = self.np_random.uniform(low=low, high=high)
         obs = np.asarray([np.cos(theta), np.sin(theta), thetadot], dtype=np.float32)
         return obs
-    
-    def reset_explore(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+
+    def reset_random(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed, options=options)
         high = np.array([np.pi, 1.0])
         low = -high
-        theta, thetadot = self.np_random.uniform(low=low, high=high)        
+        theta, thetadot = self.np_random.uniform(low=low, high=high)
         self.state = np.array([theta, thetadot])
         return self._get_obs(), {}
     
     def step(self, u):
+        th, thdot = self.state
+        diff = th - self.target_angle
+        costs = angle_normalize(diff) ** 2 + 0.1 * thdot ** 2 + self.ctrl_cost * (u ** 2)
         next_obs, reward, terminate, truncate, output_dict = super().step(u)
-        action_reward = (-self.ctrl_cost + self.standard_ctrl_cost) * (u ** 2)
-        reward = reward + action_reward
+        reward = -costs
         return next_obs, reward, terminate, truncate, output_dict
-
     
+
 class PendulumSwingUpEnv(PendulumEnv):
     """Pendulum Swing-up Environment."""
 
@@ -283,4 +292,3 @@ class PendulumDynamicsModel(DynamicsModel):
         )
         action = jnp.clip(action, low, high)
         return action
-

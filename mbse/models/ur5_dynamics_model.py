@@ -222,6 +222,7 @@ class Ur5PendulumReward(RewardModel):
     @staticmethod
     @jax.jit
     def state_reward(state, target_state, cost_weights):
+        # TODO: This is outdated. NEED MODIFICATION!!
         """Compute reward associated with state dynamics."""
         # print("state shape: {}".format(state.shape))
         # if state.shape[0] == 5:

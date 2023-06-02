@@ -6,7 +6,7 @@ required = [
     'jaxlib>=0.3.2',
     'matplotlib>=3.5.1',
     'numpy>=1.22.2',
-    'optax>=0.1.1',
+    'optax',
     'scipy>=1.8.0',
     'wandb>=0.12.11',
     'termcolor>=1.1.0',

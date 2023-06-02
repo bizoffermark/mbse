@@ -1,6 +1,4 @@
 import numpy as np
-import sys
-sys.path.append('/home/honam/workspace/ode/pyur5/include/mbse')
 from mbse.utils.vec_env.env_util import make_vec_env
 from gym.wrappers import RescaleAction, TimeLimit
 from mbse.models.environment_models.pendulum_swing_up import CustomPendulumEnv

@@ -1,7 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import sys
-sys.path.append('/home/honam/workspace/ode/pyur5/include/mbse')
 
 from mbse.utils.models import ProbabilisticEnsembleModel, FSVGDEnsemble, KDEfWGDEnsemble
 import seaborn as sns

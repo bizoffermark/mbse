@@ -8,35 +8,9 @@ import jax
 from functools import partial
 from typing import Union, Optional, Any
 from mbse.utils.type_aliases import ModelProperties
-import sys
-# sys.path.append('/home/bizoffermark/workspace/ode/pyur5/include/pyur5')
+
 from pyur5.models.ens_model import EnsembleModel
 import math
-
-# class Ur5PendulumEnv(PendulumEnv):
-#     def __init__(self, ctrl_cost=0.001, *args, **kwargs):
-#         self.state = None
-#         super(Ur5PendulumEnv, self).__init__(*args, **kwargs)
-#         self.observation_space.sample = self.sample_obs
-#         self.standard_ctrl_cost = 0.001
-#         self.ctrl_cost = ctrl_cost
-#         self.model = EnsembleModel()
-#         super().set_bounds(max_action=0.7, min_action=-0.7)
-                
-#     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-#         super().reset(seed=seed, options=options)
-#         self.state = np.array([0.0, 0.0])
-#         return self._get_obs(), {}
-    
-#     def sample_obs(self, mask: Optional[Any] = None):
-#         high = np.array([np.pi, 1.0])
-#         low = -high
-#         theta, theta_dot = self.np_random.uniform(low=low, high=high)
-#         obs = np.asarray([np.cos(theta), np.sin(theta), theta_dot], dtype=np.float32)
-#         return obs
-    
-#     def step(self, u):
-#         next_obs = self.model.predict(self._get_obs(), u)
 
 
 class Ur5PendulumDynamicsModel(DynamicsModel):

@@ -9,8 +9,8 @@ from functools import partial
 from typing import Union, Optional, Any
 from mbse.utils.type_aliases import ModelProperties
 import sys
-sys.path.append('/home/bizoffermark/workspace/ode/pyur5/include/pyur5')
-from models.ens_model import EnsembleModel
+# sys.path.append('/home/bizoffermark/workspace/ode/pyur5/include/pyur5')
+from pyur5.models.ens_model import EnsembleModel
 import math
 
 # class Ur5PendulumEnv(PendulumEnv):

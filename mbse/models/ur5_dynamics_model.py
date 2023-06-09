@@ -14,25 +14,28 @@ import math
 
 
 class Ur5PendulumDynamicsModel(DynamicsModel):
-    def __init__(self, task_typ='new', use_cos=True, train_horizon=1, n_model=5, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
+    def __init__(self, task_typ='new', use_cos=True, ctrl_cost_weight=0.001, sparse=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.use_cos = use_cos
         self.task_typ = task_typ
-        self.model = EnsembleModel(train_horizon=train_horizon, n_model=n_model, use_cos=use_cos, task_typ=task_typ)
+        self.model = EnsembleModel(use_cos=use_cos, task_typ=task_typ)
         self.max_action = self.model.action_max
         self.min_action = self.model.action_min
         self.n_action = self.model.n_action
+        self.n_obs = self.model.n_obs
+
         # TODO: Maybe think of punishing v_ee to be zero as well
         self.target_state = self.model.target_state #jnp.array([math.pi, 0]) # target state to be theta = pi/2, theta_dot = 0 
         self.cost_weights = self.model.cost_weights[:-self.n_action] #jnp.array([1, 0.1]) # weight for theta and theta_dot
 
-        self.reward_model = Ur5PendulumReward(self.action_space, self.target_state, self.cost_weights, sparse=sparse)
+        # self.reward_model = Ur5PendulumReward(self.action_space, self.target_state, self.cost_weights, sparse=sparse)
         
         self.pred_diff = False 
         self.obs_dim = self.model.x_dim #observation
         self.obs_space = self.model.obs_space
 
+        print("model: ", self.model)
     def set_bounds(self, max_action, min_action=None):
         self.max_action = max_action
         if min_action is None:
@@ -53,7 +56,7 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
         '''
             internal function to predict next state
         '''
-        u = jnp.clip(action, -1, 1) # action is assumed to be in the range of [-1, 1]
+        u = jnp.clip(action, self.min_action, self.max_action) # action is assumed to be in the range of [-1, 1]
         next_obs, reward, terminate, output_dict = self.model.step(obs, u)
         
         return next_obs
@@ -62,10 +65,14 @@ class Ur5PendulumDynamicsModel(DynamicsModel):
         '''
             return the initial observation
         '''
-        if self.use_cos:
-            obs = jnp.array([1.0, 0.0, 0.0] + [0.0, 0.0] * self.n_action)
-        else:
-            obs = jnp.array([0.0, 0.0] + [0.0, 0.0] * self.n_action)
+        if self.task_typ == 'new':
+            if self.use_cos:
+                obs = jnp.array([1.0, 0.0, 0.0] + [0.0, 0.0] * self.n_obs)
+            else:
+                obs = jnp.array([0.0, 0.0] + [0.0, 0.0] * self.n_obs)
+        elif self.task_typ == 'sim':
+            obs = jnp.array([1.0, 0.0, 0.0])
+
         return obs
 
     def evaluate(self,

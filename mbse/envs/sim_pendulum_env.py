@@ -24,7 +24,7 @@ class SimPendulumEnv(gym.Env):
 
         # --- Pendulum parameters ---
         self.dt = 1/30 # 30 Hz
-        self.dx = 0.05 # 0.01 m
+        self.dx = 0.01 # 0.01 m
         self.L = 0.3 # 0.3 m
         self.g = 9.81 # 9.81 m/s^2
         # ---------------------------
@@ -41,7 +41,7 @@ class SimPendulumEnv(gym.Env):
         obs[0] = angle_normalize(obs[0] + self.dt * obs[1]) # theta_{t+1} = theta_t + dt * theta_dot_t
 
         obs[2] = obs[2] + self.dx * action[0] # x_{t+1} = x_t + dx * action
-        obs[3] = (obs[3] - self.obs[3])/self.dt # x_dot_{t+1} = (x_{t+1} - x_t)/dt
+        obs[3] = (obs[2] - self.obs[2])/self.dt # x_dot_{t+1} = (x_{t+1} - x_t)/dt
         obs[4] = (obs[3] - self.obs[3])/self.dt # x_ddot_{t+1} = (x_dot_{t+1} - x_dot_t)/dt
 
         self.obs = obs
@@ -49,6 +49,8 @@ class SimPendulumEnv(gym.Env):
         reward = self._reward_fn(obs, action)
         truncate = False
         terminate = False
+
+        print("obs: ", obs)
         return obs, reward, terminate, truncate, {}
 
     def _reward_fn(self, state, action, t=0):
@@ -135,27 +137,31 @@ if __name__ == "__main__":
     
     n_horizon = 200
 
-    obss = []
-    rewards = []
-    actions = []
-    theta_ddots = []
+    obss = np.zeros((n_horizon, env.obs_dim))
+    rewards = np.zeros(n_horizon)
+    actions = np.zeros((n_horizon, env.action_dim))
+    theta_ddots = np.zeros(n_horizon)
+
 
     for i in range(n_horizon):
         action = np.array([0.0])
         theta_ddot = env.solve_dynamics(obs)
-        obss.append(obs)
-        actions.append(action)
-        rewards.append(reward)
-        theta_ddots.append(theta_ddot)
+        obss[i] = obs
+        actions[i] = action
+        rewards[i] = reward
+        theta_ddots[i] = theta_ddot
         obs, reward, terminate, truncate, _ = env.step(action)
-    theta = [obs[0] for obs in obss]
-    theta_dot = [obs[1] for obs in obss]
+
+    print("final obss: ", obss)
+    theta = [_obs[0] for _obs in obss]
+    theta_dot = [_obs[1] for _obs in obss]
     
-    x = [obs[2] for obs in obss]
-    x_dot = [obs[3] for obs in obss]
-    x_ddot = [obs[4] for obs in obss]
+    x = [_obs[2] for _obs in obss]
+    x_dot = [_obs[3] for _obs in obss]
+    x_ddot = [_obs[4] for _obs in obss]
     datas = [theta, theta_dot, theta_ddots, x, x_dot, x_ddot]
     headers = ['theta', 'theta_dot', 'theta_ddot', 'x', 'x_dot', 'x_ddot']
+    # print("theta: ", theta)
 
     fig, axs = plt.subplots(len(headers), 1, figsize=(30, 30))
     for i in range(len(headers)):
